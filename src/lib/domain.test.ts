@@ -1,0 +1,365 @@
+import { describe, expect, it } from "vitest";
+import {
+  BranchOptionSchema,
+  DEFAULT_SYSTEM_SKILLS,
+  DirectorOptionsOutputSchema,
+  DirectorOutputSchema,
+  RootPreferencesSchema,
+  SessionStateSchema,
+  SkillSchema,
+  SkillUpsertSchema,
+  requireThreeOptions
+} from "./domain";
+
+describe("RootPreferencesSchema", () => {
+  it("accepts a seed-driven first-run shape", () => {
+    const result = RootPreferencesSchema.parse({
+      seed: "我想写 AI 产品经理的真实困境",
+      domains: ["AI", "product"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+
+    expect(result.seed).toBe("我想写 AI 产品经理的真实困境");
+    expect(result.domains).toEqual(["AI", "product"]);
+  });
+
+  it("keeps old preference rows readable when seed is missing", () => {
+    const result = RootPreferencesSchema.parse({
+      domains: ["AI"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+
+    expect(result.seed).toBe("");
+    expect(result).not.toHaveProperty("initialOptionId");
+    expect(result).not.toHaveProperty("initialOptionMode");
+  });
+});
+
+describe("DirectorOptionsOutputSchema", () => {
+  it("accepts a first-round options-only director response", () => {
+    const parsed = DirectorOptionsOutputSchema.parse({
+      roundIntent: "生成下一步",
+      options: [
+        { id: "a", label: "补场景", description: "补一个真实场景。", impact: "让内容更具体。", kind: "explore" },
+        { id: "b", label: "深挖原因", description: "说清背后的原因。", impact: "让观点更可信。", kind: "deepen" },
+        { id: "c", label: "换角度", description: "从反面重看问题。", impact: "让表达更有张力。", kind: "reframe" }
+      ],
+      memoryObservation: "用户喜欢从真实工作困境切入。"
+    });
+
+    expect(parsed.options.map((option) => option.id)).toEqual(["a", "b", "c"]);
+    expect(parsed).not.toHaveProperty("draft");
+  });
+});
+
+describe("DirectorOutputSchema", () => {
+  it("accepts a structured AI director response", () => {
+    const option = {
+      id: "a",
+      label: "Turn it into a sharper opinion",
+      description: "Make the draft more memorable by adding contrast.",
+      impact: "The next draft will emphasize tension.",
+      kind: "reframe"
+    };
+
+    const parsed = DirectorOutputSchema.parse({
+      roundIntent: "Add tension",
+      options: [
+        option,
+        { ...option, id: "b", kind: "deepen" },
+        { ...option, id: "c", kind: "finish" }
+      ],
+      draft: {
+        title: "A working title",
+        body: "A short body.",
+        hashtags: ["#AI"],
+        imagePrompt: "A luminous tree on a writing desk."
+      },
+      memoryObservation: "The user prefers reflective product writing.",
+      finishAvailable: true,
+      publishPackage: null
+    });
+
+    expect(parsed.options).toHaveLength(3);
+  });
+
+  it("rejects responses with one option", () => {
+    const option = {
+      id: "a",
+      label: "Only option",
+      description: "Missing two choices.",
+      impact: "Cannot continue.",
+      kind: "explore"
+    };
+
+    expect(() =>
+      DirectorOutputSchema.parse({
+        roundIntent: "Add tension",
+        options: [option],
+        draft: {
+          title: "",
+          body: "",
+          hashtags: [],
+          imagePrompt: ""
+        },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      })
+    ).toThrow("AI Director must return exactly three options.");
+  });
+
+  it("rejects responses with four options", () => {
+    const option = {
+      id: "a",
+      label: "Turn it into a sharper opinion",
+      description: "Make the draft more memorable by adding contrast.",
+      impact: "The next draft will emphasize tension.",
+      kind: "reframe"
+    };
+
+    expect(() =>
+      DirectorOutputSchema.parse({
+        roundIntent: "Add tension",
+        options: [
+          option,
+          { ...option, id: "b", kind: "deepen" },
+          { ...option, id: "c", kind: "finish" },
+          { ...option, id: "a", label: "Try another angle" }
+        ],
+        draft: {
+          title: "",
+          body: "",
+          hashtags: [],
+          imagePrompt: ""
+        },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      })
+    ).toThrow("AI Director must return exactly three options.");
+  });
+
+  it("rejects duplicate option IDs", () => {
+    const option = {
+      id: "a",
+      label: "Turn it into a sharper opinion",
+      description: "Make the draft more memorable by adding contrast.",
+      impact: "The next draft will emphasize tension.",
+      kind: "reframe"
+    };
+
+    expect(() =>
+      DirectorOutputSchema.parse({
+        roundIntent: "Add tension",
+        options: [
+          option,
+          { ...option, label: "Deepen the proof" },
+          { ...option, label: "Try another angle" }
+        ],
+        draft: {
+          title: "",
+          body: "",
+          hashtags: [],
+          imagePrompt: ""
+        },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      })
+    ).toThrow("AI Director options must include IDs a, b, and c exactly once.");
+  });
+
+  it("keeps custom D branches out of AI director responses", () => {
+    const option = {
+      id: "a",
+      label: "Turn it into a sharper opinion",
+      description: "Make the draft more memorable by adding contrast.",
+      impact: "The next draft will emphasize tension.",
+      kind: "reframe"
+    };
+
+    expect(() =>
+      DirectorOutputSchema.parse({
+        roundIntent: "Add tension",
+        options: [
+          option,
+          { ...option, id: "b", kind: "deepen" },
+          { ...option, id: "d", label: "User custom branch" }
+        ],
+        draft: {
+          title: "",
+          body: "",
+          hashtags: [],
+          imagePrompt: ""
+        },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      })
+    ).toThrow("AI Director options must include IDs a, b, and c exactly once.");
+  });
+});
+
+describe("requireThreeOptions", () => {
+  it("rejects outputs that do not include exactly three choices", () => {
+    const option = BranchOptionSchema.parse({
+      id: "a",
+      label: "Only option",
+      description: "Missing two choices.",
+      impact: "Cannot continue.",
+      kind: "explore"
+    });
+
+    expect(() => requireThreeOptions([option])).toThrow("AI Director must return exactly three options.");
+  });
+});
+
+describe("SkillSchema", () => {
+  it("accepts a reusable prompt skill", () => {
+    const parsed = SkillSchema.parse({
+      id: "skill-analysis",
+      title: "分析",
+      category: "方向",
+      description: "拆解问题、结构和可写角度。",
+      prompt: "先分析写作动机、读者和表达目标。",
+      isSystem: true,
+      defaultEnabled: true,
+      isArchived: false,
+      createdAt: "2026-04-26T00:00:00.000Z",
+      updatedAt: "2026-04-26T00:00:00.000Z"
+    });
+
+    expect(parsed.title).toBe("分析");
+    expect(parsed.defaultEnabled).toBe(true);
+  });
+
+  it("rejects oversized skill prompts", () => {
+    expect(() =>
+      SkillUpsertSchema.parse({
+        title: "长提示词",
+        category: "约束",
+        description: "过长输入。",
+        prompt: "太长".repeat(5000)
+      })
+    ).toThrow();
+  });
+
+  it("ships default enabled direction skills", () => {
+    expect(DEFAULT_SYSTEM_SKILLS.filter((skill) => skill.defaultEnabled).map((skill) => skill.title)).toEqual([
+      "分析",
+      "扩写",
+      "改写",
+      "润色",
+      "纠错"
+    ]);
+    expect(
+      DEFAULT_SYSTEM_SKILLS.filter((skill) => skill.isArchived).map((skill) => skill.title)
+    ).toEqual(["换风格", "压缩", "重组结构", "定读者"]);
+    expect(DEFAULT_SYSTEM_SKILLS.find((skill) => skill.category === "约束")?.defaultEnabled).toBe(false);
+  });
+
+  it("keeps every default system skill valid for runtime parsing", () => {
+    DEFAULT_SYSTEM_SKILLS.forEach((skill) => {
+      expect(() => SkillUpsertSchema.parse(skill)).not.toThrow();
+    });
+  });
+});
+
+describe("SessionStateSchema", () => {
+  it("accepts a user-authored D branch in the runtime tree", () => {
+    const option = BranchOptionSchema.parse({
+      id: "d",
+      label: "自定义方向",
+      description: "用户临时补充的方向。",
+      impact: "按用户自定义方向继续。",
+      kind: "reframe"
+    });
+
+    expect(option.id).toBe("d");
+  });
+
+  it("accepts the runtime session tree shape", () => {
+    const option = BranchOptionSchema.parse({
+      id: "a",
+      label: "Explore",
+      description: "Open a fresh direction.",
+      impact: "The next draft will add range.",
+      kind: "explore"
+    });
+
+    const node = {
+      id: "node-1",
+      sessionId: "session-1",
+      parentId: null,
+      roundIndex: 0,
+      roundIntent: "Start",
+      options: [option],
+      selectedOptionId: null,
+      foldedOptions: [],
+      createdAt: "2026-04-24T00:00:00.000Z"
+    };
+
+    const parsed = SessionStateSchema.parse({
+      rootMemory: {
+        id: "root-1",
+        preferences: {
+          domains: ["AI"],
+          tones: ["calm"],
+          styles: ["opinion-driven"],
+          personas: ["practitioner"]
+        },
+        summary: "",
+        learnedSummary: "",
+        createdAt: "2026-04-24T00:00:00.000Z",
+        updatedAt: "2026-04-24T00:00:00.000Z"
+      },
+      session: {
+        id: "session-1",
+        title: "Treeable session",
+        status: "active",
+        currentNodeId: "node-1",
+        createdAt: "2026-04-24T00:00:00.000Z",
+        updatedAt: "2026-04-24T00:00:00.000Z"
+      },
+      currentNode: node,
+      currentDraft: {
+        title: "",
+        body: "",
+        hashtags: [],
+        imagePrompt: ""
+      },
+      selectedPath: [node],
+      enabledSkillIds: ["skill-analysis"],
+      enabledSkills: [
+        {
+          id: "skill-analysis",
+          title: "分析",
+          category: "方向",
+          description: "拆解问题、结构和可写角度。",
+          prompt: "先分析写作动机、读者和表达目标。",
+          isSystem: true,
+          defaultEnabled: true,
+          isArchived: false,
+          createdAt: "2026-04-26T00:00:00.000Z",
+          updatedAt: "2026-04-26T00:00:00.000Z"
+        }
+      ],
+      foldedBranches: [
+        {
+          id: "fold-1",
+          nodeId: "node-1",
+          option,
+          createdAt: "2026-04-24T00:00:00.000Z"
+        }
+      ],
+      publishPackage: null
+    });
+
+    expect(parsed.session.status).toBe("active");
+  });
+});

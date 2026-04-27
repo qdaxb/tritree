@@ -1,0 +1,71 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { badRequestResponse, isBadRequestError, publicServerErrorMessage } from "@/lib/api/errors";
+import { focusSessionStateForNode } from "@/lib/app-state";
+import { getRepository } from "@/lib/db/repository";
+import { BranchOptionSchema, OptionGenerationModeSchema } from "@/lib/domain";
+
+export const runtime = "nodejs";
+
+const BranchBodySchema = z.object({
+  nodeId: z.string().min(1),
+  optionId: BranchOptionSchema.shape.id,
+  note: z.string().max(1200).optional(),
+  optionMode: OptionGenerationModeSchema.default("balanced")
+});
+
+export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
+  const { sessionId } = await context.params;
+  let body: z.infer<typeof BranchBodySchema>;
+
+  try {
+    body = BranchBodySchema.parse(await request.json());
+  } catch (error) {
+    if (isBadRequestError(error)) {
+      return badRequestResponse(error);
+    }
+
+    return NextResponse.json({ error: "请求内容格式不正确。" }, { status: 400 });
+  }
+
+  const repository = getRepository();
+  const state = repository.getSessionState(sessionId);
+  if (!state) {
+    return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
+  }
+  if (state.session.status === "finished") {
+    return NextResponse.json({ error: "这次创作已经完成。" }, { status: 409 });
+  }
+
+  try {
+    const existingState = repository.activateHistoricalBranch({
+      sessionId,
+      nodeId: body.nodeId,
+      selectedOptionId: body.optionId
+    });
+    if (existingState) {
+      return NextResponse.json({ state: existingState, reused: true });
+    }
+
+    const focusedState = focusSessionStateForNode(state, body.nodeId);
+    if (!focusedState?.currentNode) {
+      return NextResponse.json({ error: "没有找到这个历史节点。" }, { status: 404 });
+    }
+
+    const selected = focusedState.currentNode.options.find((option) => option.id === body.optionId);
+    if (!selected) {
+      return NextResponse.json({ error: "没有找到这个历史分支。" }, { status: 400 });
+    }
+
+    const nextState = repository.createHistoricalDraftChild({
+      optionMode: body.optionMode,
+      sessionId,
+      nodeId: body.nodeId,
+      selectedOptionId: body.optionId
+    });
+    return NextResponse.json({ state: nextState, reused: false });
+  } catch (error) {
+    console.error("[treeable:branch-history]", error);
+    return NextResponse.json({ error: publicServerErrorMessage(error, "无法切换或生成历史分支。") }, { status: 500 });
+  }
+}

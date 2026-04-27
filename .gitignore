@@ -1,0 +1,11 @@
+.superpowers/
+.worktrees/
+.treeable/
+.env*.local
+node_modules/
+.next/
+next-env.d.ts
+dist/
+coverage/
+tsconfig.tsbuildinfo
+.codex
