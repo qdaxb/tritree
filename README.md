@@ -55,7 +55,7 @@ cp .env.example .env.local
 编辑 `.env.local`：
 
 ```env
-# Anthropic 兼容接口地址（默认接入 Kimi）
+# Anthropic 兼容接口地址
 ANTHROPIC_BASE_URL=https://api.moonshot.ai/anthropic
 
 # 你的 API 密钥
