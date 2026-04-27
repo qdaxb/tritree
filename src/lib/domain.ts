@@ -22,43 +22,52 @@ export const SkillSchema = SkillUpsertSchema.extend({
 
 export const DEFAULT_SYSTEM_SKILLS = [
   {
-    id: "system-analysis",
-    title: "分析",
+    id: "system-content-workflow",
+    title: "内容创作流程",
     category: "方向",
-    description: "拆解问题、结构、读者和可写角度。",
-    prompt: "当这个技能启用时，优先帮助用户分析写作动机、核心问题、目标读者、读者处境、结构路径和可写角度。输出要具体，不要停在抽象判断。",
+    description: "判断内容所处阶段，并控制改动幅度。",
+    prompt:
+      "帮助创作者判断当前内容处于哪种创作阶段，并据此控制 AI 介入强度。种子或零散想法阶段：只有概念、情绪、判断或材料清单，可以大幅组织材料、补上下文、生成初稿骨架。半成稿阶段：已有若干段落或素材，但主线、顺序、读者对象、开头结尾还不稳，可以中等调整，补主线、调顺序、增加过渡，但要保留主要素材和语气。结构成稿阶段：已经有开头、展开、解释或例子，但局部逻辑、转折、段落节奏仍可优化，优先做局部调整和小范围补齐。基本成稿阶段：有清楚主题、完整叙述链路、关键解释和自然收束，进入成稿保护，保留原有结构、段落和主要句子，只做必要的局部优化；下一步选项应至少包含一个轻量收尾方向，例如简单修改语病、校对错别字、整理标题话题、生成配图提示或发布检查，避免三项都给重构、换角度、重写、扩写这类大改方向。发布前阶段：只做标题、话题、配图提示、错别字、风险表达、结尾收束等轻量整理。用户手动编辑后：用户编辑内容优先，基于新稿判断下一步，保留用户刚确认过的表达。草稿越完整，改动越克制；用户表达越明确，保留越多；只有用户明确选择重构、换角度或大改方向时，才允许明显重写。",
+    defaultEnabled: true
+  },
+  {
+    id: "system-analysis",
+    title: "理清主线",
+    category: "方向",
+    description: "判断作品真正要表达什么。",
+    prompt: "帮助创作者判断这篇作品最重要的表达主线、写作动机和取舍边界。优先关注核心意思、内容重心和后续分叉方向。",
     defaultEnabled: true
   },
   {
     id: "system-expand",
-    title: "扩写",
+    title: "组织素材",
     category: "方向",
-    description: "把 seed 或草稿扩成更完整的内容。",
-    prompt: "当这个技能启用时，可以把零散念头扩成完整段落，补充例子、上下文、论证层次和自然过渡。扩写时保持用户原意，不要擅自换主题。",
+    description: "梳理可用材料和展开顺序。",
+    prompt: "帮助创作者判断哪些素材应该保留、补足、合并或前置。优先关注例子、上下文、原因链路、对比关系和过渡位置。",
     defaultEnabled: true
   },
   {
     id: "system-rewrite",
-    title: "改写",
+    title: "选择角度",
     category: "方向",
-    description: "换表达方式、风格或结构重写当前内容。",
-    prompt: "当这个技能启用时，可以在保留核心观点的前提下改写表达方式、叙述顺序、内容结构和风格取向，例如更口语、更克制、更故事化、更锋利或更适合社交媒体。改写必须服务内容目的。",
+    description: "选择最适合当前作品的表达角度。",
+    prompt: "帮助创作者判断这篇作品适合从故事、观点、产品理念、个人动机或读者问题中的哪个角度推进。优先关注表达目标和读者进入方式。",
     defaultEnabled: true
   },
   {
     id: "system-polish",
-    title: "润色",
+    title: "发布准备",
     category: "方向",
-    description: "优化语言质感、节奏、标题开头，并压缩冗余。",
-    prompt: "当这个技能启用时，可以优化标题、开头、句子节奏、语气和收束方式，也可以删去重复、弱表达和绕远内容，让草稿更准确、自然、紧凑。润色不要只堆砌漂亮词。",
+    description: "判断作品是否接近发布，以及还缺什么包装。",
+    prompt: "帮助创作者判断标题、开头、结尾、话题、配图提示和轻量校对是否已经足够支撑发布。优先关注作品进入发布前还需要补齐的关键一步。",
     defaultEnabled: true
   },
   {
     id: "system-correct",
-    title: "纠错",
-    category: "检查",
-    description: "检查事实、逻辑、风险和表达漏洞。",
-    prompt: "当这个技能启用时，要主动检查事实不确定性、逻辑跳跃、表达风险、过度断言和自相矛盾之处，并给出可执行的修正方向。",
+    title: "明确读者",
+    category: "方向",
+    description: "判断作品主要写给谁、读者为什么在意。",
+    prompt: "帮助创作者判断目标读者、读者处境、读者关心的问题和表达边界。优先关注作品是否有对象感，以及读者为什么愿意继续看。",
     defaultEnabled: true
   },
   {
@@ -66,7 +75,7 @@ export const DEFAULT_SYSTEM_SKILLS = [
     title: "换风格",
     category: "风格",
     description: "把内容调整到更合适的表达风格。",
-    prompt: "当这个技能启用时，可以根据内容状态建议切换风格，例如更口语、更克制、更故事化、更锋利或更适合社交媒体。风格变化必须服务内容目的。",
+    prompt: "帮助创作者判断当前内容适合采用哪种表达质感，例如更口语、更克制、更故事化、更锋利或更像社交媒体短文。风格选择要服务内容目的。",
     defaultEnabled: false,
     isArchived: true
   },
@@ -75,7 +84,7 @@ export const DEFAULT_SYSTEM_SKILLS = [
     title: "压缩",
     category: "方向",
     description: "压缩冗余，让内容更短更有力。",
-    prompt: "当这个技能启用时，可以删去重复、弱表达和绕远内容，保留核心信息和有辨识度的句子，让草稿更紧凑。",
+    prompt: "帮助创作者判断当前作品需要保留哪些核心信息、合并哪些相近表达，以及哪些内容会稀释重点。压缩要保留核心信息和有辨识度的句子。",
     defaultEnabled: false,
     isArchived: true
   },
@@ -84,7 +93,7 @@ export const DEFAULT_SYSTEM_SKILLS = [
     title: "重组结构",
     category: "方向",
     description: "调整文章顺序和论证结构。",
-    prompt: "当这个技能启用时，可以重排内容结构，明确开头、展开、例子、转折和结尾，让读者更容易跟上。",
+    prompt: "帮助创作者判断当前作品的进入顺序、展开路径、转折位置和收束方式。结构选择要让读者更容易跟上。",
     defaultEnabled: false,
     isArchived: true
   },
@@ -93,7 +102,7 @@ export const DEFAULT_SYSTEM_SKILLS = [
     title: "定读者",
     category: "方向",
     description: "明确内容写给谁、解决什么问题。",
-    prompt: "当这个技能启用时，可以帮助内容明确目标读者、读者处境、读者关心的问题和表达边界，让写作更有对象感。",
+    prompt: "帮助创作者判断目标读者、读者处境、读者担心的问题和读者真正关心的信息。输出要让写作更有对象感。",
     defaultEnabled: false,
     isArchived: true
   },
@@ -102,7 +111,7 @@ export const DEFAULT_SYSTEM_SKILLS = [
     title: "必须给具体例子",
     category: "约束",
     description: "要求输出优先使用具体场景和例子。",
-    prompt: "当这个技能启用时，输出必须尽量包含具体场景、真实动作、可感知细节或例子，避免只给抽象观点。",
+    prompt: "帮助创作者判断当前作品是否需要更多可感知的场景、动作、细节或例子。所有输出都要尽量包含具体场景、真实动作、可感知细节或例子，避免只给抽象观点。",
     defaultEnabled: false
   },
   {
@@ -110,7 +119,7 @@ export const DEFAULT_SYSTEM_SKILLS = [
     title: "标题不要夸张",
     category: "约束",
     description: "避免夸张、惊悚、标题党表达。",
-    prompt: "当这个技能启用时，标题和正文都要避免夸张承诺、惊悚措辞和标题党表达，保持可信、克制、清楚。",
+    prompt: "帮助创作者判断标题、开头或正文的表达边界。标题和正文都要保持可信、克制、清楚。",
     defaultEnabled: false
   }
 ] satisfies Array<z.input<typeof SkillUpsertSchema> & { id: string }>;
@@ -177,8 +186,8 @@ export const DirectorOutputSchema = z.object({
   options: z.array(BranchOptionSchema).length(3, "AI Director must return exactly three options."),
   draft: DraftSchema,
   memoryObservation: z.string(),
-  finishAvailable: z.boolean(),
-  publishPackage: PublishPackageSchema.nullable()
+  finishAvailable: z.boolean().optional(),
+  publishPackage: PublishPackageSchema.nullable().optional()
 }).superRefine((output, context) => {
   if (!includesDirectorOptionIdsOnce(output.options)) {
     context.addIssue({
@@ -206,9 +215,7 @@ export const DirectorOptionsOutputSchema = z.object({
 export const DirectorDraftOutputSchema = z.object({
   roundIntent: z.string().min(1),
   draft: DraftSchema,
-  memoryObservation: z.string(),
-  finishAvailable: z.boolean(),
-  publishPackage: PublishPackageSchema.nullable()
+  memoryObservation: z.string()
 });
 
 export const SessionStatusSchema = z.enum(["active", "finished"]);

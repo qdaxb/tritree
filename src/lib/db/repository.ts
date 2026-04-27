@@ -16,7 +16,6 @@ import {
   CUSTOM_EDIT_OPTION,
   DEFAULT_SYSTEM_SKILLS,
   DraftSchema,
-  PublishPackageSchema,
   RootPreferencesSchema,
   SessionStateSchema,
   SessionStatusSchema,
@@ -76,17 +75,6 @@ type BranchHistoryRow = {
   session_id: string;
   node_id: string;
   option_json: string;
-  created_at: string;
-};
-
-type PublishPackageRow = {
-  id: string;
-  session_id: string;
-  node_id: string;
-  title: string;
-  body: string;
-  hashtags_json: string;
-  image_prompt: string;
   created_at: string;
 };
 
@@ -520,9 +508,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     if (!session) {
       throw new Error("Session was not found.");
     }
-    if (session.status === "finished") {
-      throw new Error("Session is already finished.");
-    }
 
     const current = db.prepare("SELECT * FROM tree_nodes WHERE id = ?").get(nodeId) as TreeNodeRow | undefined;
     if (!current || current.session_id !== sessionId) {
@@ -666,9 +651,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     if (!session) {
       throw new Error("Session was not found.");
     }
-    if (session.status === "finished") {
-      throw new Error("Session is already finished.");
-    }
     if (session.current_node_id !== nodeId) {
       throw new Error("Edited node is not the active node.");
     }
@@ -697,9 +679,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
-    }
-    if (session.status === "finished") {
-      throw new Error("Session is already finished.");
     }
     const target = db.prepare("SELECT * FROM tree_nodes WHERE id = ?").get(nodeId) as TreeNodeRow | undefined;
     if (!target || target.session_id !== sessionId) {
@@ -735,32 +714,13 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         timestamp
       );
 
-      if (output.publishPackage) {
-        const publishPackage = PublishPackageSchema.parse(output.publishPackage);
-        db.prepare(
-          `
-            INSERT INTO publish_packages (id, session_id, node_id, title, body, hashtags_json, image_prompt, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `
-        ).run(
-          nanoid(),
-          sessionId,
-          nodeId,
-          publishPackage.title,
-          publishPackage.body,
-          JSON.stringify(publishPackage.hashtags),
-          publishPackage.imagePrompt,
-          timestamp
-        );
-      }
-
       db.prepare(
         `
           UPDATE sessions
           SET title = ?, status = ?, updated_at = ?
           WHERE id = ?
         `
-      ).run(parsedDraft.title || session.title || "Untitled Tree", output.publishPackage ? "finished" : "active", timestamp, sessionId);
+      ).run(parsedDraft.title || session.title || "Untitled Tree", "active", timestamp, sessionId);
 
       const state = getSessionState(sessionId);
       if (!state) {
@@ -783,9 +743,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
-    }
-    if (session.status === "finished") {
-      throw new Error("Session is already finished.");
     }
     const target = db.prepare("SELECT * FROM tree_nodes WHERE id = ?").get(nodeId) as TreeNodeRow | undefined;
     if (!target || target.session_id !== sessionId) {
@@ -831,9 +788,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
-    }
-    if (session.status === "finished") {
-      throw new Error("Session is already finished.");
     }
     const parent = getNodeForSelection(sessionId, nodeId);
 
@@ -881,9 +835,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
-    }
-    if (session.status === "finished") {
-      throw new Error("Session is already finished.");
     }
 
     const parent = getNodeForSelection(sessionId, nodeId);
@@ -1028,9 +979,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const currentNode = session.current_node_id ? nodes.find((node) => node.id === session.current_node_id) ?? null : null;
     const currentDraft = latestDraftForNode(latestDraftByNode, currentNode?.id ?? null);
     const historyRows = db.prepare("SELECT * FROM branch_history WHERE session_id = ?").all(sessionId) as BranchHistoryRow[];
-    const packageRow = db.prepare("SELECT * FROM publish_packages WHERE session_id = ? LIMIT 1").get(sessionId) as
-      | PublishPackageRow
-      | undefined;
     const selectedPath = activePathFor(nodes, currentNode);
     const enabledSkills = enabledSkillsForSession(sessionId);
 
@@ -1039,7 +987,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       session: {
         id: session.id,
         title: session.title,
-        status: SessionStatusSchema.parse(session.status),
+        status: SessionStatusSchema.parse(session.status === "finished" ? "active" : session.status),
         currentNodeId: session.current_node_id,
         createdAt: session.created_at,
         updatedAt: session.updated_at
@@ -1057,14 +1005,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         option: BranchOptionSchema.parse(parseJson(row.option_json)),
         createdAt: row.created_at
       })),
-      publishPackage: packageRow
-        ? PublishPackageSchema.parse({
-            title: packageRow.title,
-            body: packageRow.body,
-            hashtags: parseJson<string[]>(packageRow.hashtags_json),
-            imagePrompt: packageRow.image_prompt
-          })
-        : null
+      publishPackage: null
     });
   }
 

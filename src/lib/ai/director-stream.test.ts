@@ -210,6 +210,51 @@ describe("streamDirectorDraft", () => {
     expect(onText).toHaveBeenCalledWith(expect.objectContaining({ accumulatedText: expect.stringContaining("新正文") }));
     expect(output.draft.body).toBe("新正文");
   });
+
+  it("logs the director prompt before sending the draft request", async () => {
+    const encoder = new TextEncoder();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              [
+                "event: content_block_delta",
+                'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\\"roundIntent\\":\\"扩写\\",\\"draft\\":{\\"title\\":\\"新标题\\",\\"body\\":\\"新正文\\",\\"hashtags\\":[],\\"imagePrompt\\":\\"\\"},\\"memoryObservation\\":\\"观察\\",\\"finishAvailable\\":false,\\"publishPackage\\":null}"}}',
+                "",
+                "event: message_stop",
+                'data: {"type":"message_stop"}',
+                ""
+              ].join("\n")
+            )
+          );
+          controller.close();
+        }
+      }),
+      { status: 200, headers: { "Content-Type": "text/event-stream" } }
+    );
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    try {
+      await streamDirectorDraft(directorInput, {
+        env: { ANTHROPIC_AUTH_TOKEN: "token" },
+        fetcher: fetchMock
+      });
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        "[treeable:director-prompt:draft]",
+        expect.stringContaining('"system"')
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        "[treeable:director-prompt:draft]",
+        expect.stringContaining('"messages"')
+      );
+      expect(infoSpy.mock.calls.map((call) => call.join("\n")).join("\n")).not.toContain("token");
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
 });
 
 describe("streamDirectorOptions", () => {

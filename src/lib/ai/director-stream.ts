@@ -29,6 +29,7 @@ export async function streamDirectorDraft(
   options: DirectorDraftStreamOptions = {}
 ): Promise<DirectorDraftOutput> {
   const request = buildDirectorDraftStreamRequest(parts, options.env);
+  logDirectorPrompt("draft", request.body);
   const fetcher = options.fetcher ?? fetch;
   const response = await fetcher(request.url, {
     method: "POST",
@@ -75,6 +76,7 @@ export async function streamDirectorOptions(
   options: DirectorOptionsStreamOptions = {}
 ): Promise<DirectorOptionsOutput> {
   const request = buildDirectorOptionsStreamRequest(parts, options.env);
+  logDirectorPrompt("options", request.body);
   const accumulatedText = await streamDirectorText(request, {
     fetcher: options.fetcher,
     signal: options.signal,
@@ -87,6 +89,22 @@ export async function streamDirectorOptions(
   });
 
   return parseDirectorOptionsText(accumulatedText);
+}
+
+function logDirectorPrompt(kind: "draft" | "options", body: ReturnType<typeof buildDirectorDraftStreamRequest>["body"]) {
+  console.info(
+    `[treeable:director-prompt:${kind}]`,
+    JSON.stringify(
+      {
+        model: body.model,
+        stream: body.stream ?? false,
+        system: body.system,
+        messages: body.messages
+      },
+      null,
+      2
+    )
+  );
 }
 
 async function streamDirectorText(

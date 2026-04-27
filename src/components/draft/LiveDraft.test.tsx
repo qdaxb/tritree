@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { LiveDraft } from "./LiveDraft";
 
 describe("LiveDraft", () => {
-  it("renders the final publishing package when available", () => {
+  it("renders the draft even if legacy publish package data is present", () => {
     render(
       <LiveDraft
         draft={{ title: "Draft", body: "Draft body", hashtags: ["#draft"], imagePrompt: "draft image" }}
@@ -15,9 +15,11 @@ describe("LiveDraft", () => {
       />
     );
 
-    expect(screen.getByText("Final")).toBeInTheDocument();
-    expect(screen.getByText("#AI")).toBeInTheDocument();
-    expect(screen.getByText("glowing tree")).toBeInTheDocument();
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(screen.getByText("Draft body")).toBeInTheDocument();
+    expect(screen.getByText("#draft")).toBeInTheDocument();
+    expect(screen.queryByText("Final")).not.toBeInTheDocument();
+    expect(screen.queryByText("发布包")).not.toBeInTheDocument();
   });
 
   it("renders draft body line breaks as separate paragraphs", () => {
@@ -394,7 +396,7 @@ describe("LiveDraft", () => {
     expect(screen.getByRole("status")).toHaveTextContent("已选终点，选择起点");
   });
 
-  it("does not show the parent diff toggle for final packages", () => {
+  it("shows the parent diff toggle even if legacy publish package data is present", () => {
     render(
       <LiveDraft
         draft={{ title: "Draft", body: "Draft body", hashtags: ["#draft"], imagePrompt: "draft image" }}
@@ -404,7 +406,7 @@ describe("LiveDraft", () => {
       />
     );
 
-    expect(screen.queryByRole("button", { name: "对比" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "对比" })).toBeInTheDocument();
   });
 
   it("replaces old seed placeholder titles with a title from the draft body", () => {

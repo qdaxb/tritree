@@ -41,10 +41,6 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
   }
 
-  if (state.session.status === "finished") {
-    return NextResponse.json({ error: "这次创作已经完成。" }, { status: 409 });
-  }
-
   const targetNode = findTreeNode(state, body.nodeId);
   if (!targetNode) {
     return NextResponse.json({ error: "没有找到要生成草稿的节点。" }, { status: 404 });

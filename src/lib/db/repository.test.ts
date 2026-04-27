@@ -39,19 +39,7 @@ function createSessionDraftWithOptions(
       memoryObservation: output.memoryObservation
     }
   });
-  if (!output.publishPackage) return optionsState;
-
-  return repo.updateNodeDraft({
-    sessionId: optionsState.session.id,
-    nodeId: optionsState.currentNode!.id,
-    output: {
-      roundIntent: output.roundIntent,
-      draft: output.draft,
-      memoryObservation: output.memoryObservation,
-      finishAvailable: output.finishAvailable,
-      publishPackage: output.publishPackage
-    }
-  });
+  return optionsState;
 }
 
 function appendGeneratedChild(
@@ -90,12 +78,9 @@ function appendGeneratedChild(
     output: {
       roundIntent: output.roundIntent,
       draft: output.draft,
-      memoryObservation: output.memoryObservation,
-      finishAvailable: output.finishAvailable,
-      publishPackage: output.publishPackage
+      memoryObservation: output.memoryObservation
     }
   });
-  if (output.publishPackage) return draftState;
 
   return repo.updateNodeOptions({
     sessionId,
@@ -137,12 +122,9 @@ function createHistoricalGeneratedChild(
     output: {
       roundIntent: output.roundIntent,
       draft: output.draft,
-      memoryObservation: output.memoryObservation,
-      finishAvailable: output.finishAvailable,
-      publishPackage: output.publishPackage
+      memoryObservation: output.memoryObservation
     }
   });
-  if (output.publishPackage) return draftState;
 
   return repo.updateNodeOptions({
     sessionId,
@@ -175,11 +157,12 @@ describe("Treeable repository", () => {
     expect(repo.listSkills().map((skill) => skill.id)).not.toContain("system-compress");
     expect(repo.listSkills({ includeArchived: true }).find((skill) => skill.id === "system-compress")?.isArchived).toBe(true);
     expect(repo.defaultEnabledSkillIds()).toEqual([
+      "system-content-workflow",
+      "system-polish",
+      "system-correct",
       "system-analysis",
       "system-expand",
-      "system-rewrite",
-      "system-polish",
-      "system-correct"
+      "system-rewrite"
     ]);
   });
 
@@ -273,7 +256,7 @@ describe("Treeable repository", () => {
     const updated = repo.replaceSessionEnabledSkills(state.session.id, ["system-polish", "system-no-hype-title"]);
 
     expect(updated?.enabledSkillIds).toEqual(["system-polish", "system-no-hype-title"]);
-    expect(updated?.enabledSkills!.map((skill) => skill.title)).toEqual(["润色", "标题不要夸张"]);
+    expect(updated?.enabledSkills!.map((skill) => skill.title)).toEqual(["发布准备", "标题不要夸张"]);
   });
 
   it("rejects direct edits to system skills", () => {
@@ -333,7 +316,7 @@ describe("Treeable repository", () => {
     expect(state.currentDraft?.body).toBe("Pick a starting point.");
   });
 
-  it("persists and reads a publish package", () => {
+  it("keeps finishing output as an active draft instead of a publish package", () => {
     const repo = createTreeableRepository(testDbPath());
     const root = repo.saveRootMemory({
       domains: ["AI"],
@@ -363,14 +346,15 @@ describe("Treeable repository", () => {
       }
     });
 
-    expect(state.session.status).toBe("finished");
-    expect(state.publishPackage).toEqual({
+    expect(state.session.status).toBe("active");
+    expect(state.currentDraft).toEqual({
       title: "Treeable",
       body: "A finished draft.",
-      hashtags: ["#AI", "#Writing"],
+      hashtags: ["#AI"],
       imagePrompt: "A bright tree"
     });
-    expect(repo.getSessionState(state.session.id)?.publishPackage?.hashtags).toEqual(["#AI", "#Writing"]);
+    expect(state.publishPackage).toBeNull();
+    expect(repo.getSessionState(state.session.id)?.publishPackage).toBeNull();
   });
 
   it("rejects sessions for missing root memory", () => {
@@ -1002,7 +986,7 @@ describe("Treeable repository", () => {
     ).toThrow("Selected option is not part of the parent node.");
   });
 
-  it("rejects choices after a session has been finished", () => {
+  it("continues from finish directions because every generated result stays a draft", () => {
     const repo = createTreeableRepository(testDbPath());
     const root = repo.saveRootMemory({
       domains: ["AI"],
@@ -1049,25 +1033,28 @@ describe("Treeable repository", () => {
       }
     });
 
-    expect(finished.session.status).toBe("finished");
-    expect(() =>
-      appendGeneratedChild(repo, {
-        sessionId: finished.session.id,
-        nodeId: finished.currentNode!.id,
-        selectedOptionId: "a",
-        output: {
-          roundIntent: "Should not continue",
-          options: [
-            { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
-            { id: "b", label: "B", description: "B", impact: "B", kind: "deepen" },
-            { id: "c", label: "C", description: "C", impact: "C", kind: "finish" }
-          ],
-          draft: { title: "Unexpected", body: "Unexpected", hashtags: ["#AI"], imagePrompt: "Tree" },
-          memoryObservation: "",
-          finishAvailable: false,
-          publishPackage: null
-        }
-      })
-    ).toThrow("Session is already finished.");
+    expect(finished.session.status).toBe("active");
+    expect(finished.publishPackage).toBeNull();
+
+    const continued = appendGeneratedChild(repo, {
+      sessionId: finished.session.id,
+      nodeId: finished.currentNode!.id,
+      selectedOptionId: "a",
+      output: {
+        roundIntent: "继续小修",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "deepen" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "finish" }
+        ],
+        draft: { title: "Still draft", body: "Still editable.", hashtags: ["#AI"], imagePrompt: "Tree" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+
+    expect(continued.currentDraft?.title).toBe("Still draft");
+    expect(continued.session.status).toBe("active");
   });
 });

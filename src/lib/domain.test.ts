@@ -249,18 +249,43 @@ describe("SkillSchema", () => {
     ).toThrow();
   });
 
-  it("ships default enabled direction skills", () => {
+  it("ships default enabled creator decision skills", () => {
     expect(DEFAULT_SYSTEM_SKILLS.filter((skill) => skill.defaultEnabled).map((skill) => skill.title)).toEqual([
-      "分析",
-      "扩写",
-      "改写",
-      "润色",
-      "纠错"
+      "内容创作流程",
+      "理清主线",
+      "组织素材",
+      "选择角度",
+      "发布准备",
+      "明确读者"
     ]);
     expect(
       DEFAULT_SYSTEM_SKILLS.filter((skill) => skill.isArchived).map((skill) => skill.title)
     ).toEqual(["换风格", "压缩", "重组结构", "定读者"]);
     expect(DEFAULT_SYSTEM_SKILLS.find((skill) => skill.category === "约束")?.defaultEnabled).toBe(false);
+  });
+
+  it("keeps default enabled skill prompts as creator decision guidance", () => {
+    DEFAULT_SYSTEM_SKILLS.filter((skill) => skill.defaultEnabled).forEach((skill) => {
+      expect(skill.prompt).toContain("帮助创作者判断");
+      expect(skill.prompt).not.toContain("用于三选一");
+      expect(skill.prompt).not.toContain("不是");
+    });
+  });
+
+  it("puts content workflow and change intensity in a default skill", () => {
+    const workflowSkill = DEFAULT_SYSTEM_SKILLS.find((skill) => skill.id === "system-content-workflow");
+
+    expect(workflowSkill?.defaultEnabled).toBe(true);
+    expect(workflowSkill?.prompt).toContain("种子或零散想法");
+    expect(workflowSkill?.prompt).toContain("半成稿");
+    expect(workflowSkill?.prompt).toContain("结构成稿");
+    expect(workflowSkill?.prompt).toContain("基本成稿");
+    expect(workflowSkill?.prompt).toContain("发布前");
+    expect(workflowSkill?.prompt).toContain("用户手动编辑后");
+    expect(workflowSkill?.prompt).toContain("草稿越完整，改动越克制");
+    expect(workflowSkill?.prompt).toContain("有清楚主题、完整叙述链路、关键解释和自然收束");
+    expect(workflowSkill?.prompt).toContain("简单修改语病");
+    expect(workflowSkill?.prompt).toContain("避免三项都给重构、换角度、重写、扩写这类大改方向");
   });
 
   it("keeps every default system skill valid for runtime parsing", () => {

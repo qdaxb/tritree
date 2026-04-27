@@ -36,7 +36,7 @@ export function summarizeSessionForDirector(
     enabledSkills: enabledSkillsForDirector(state),
     messages: buildConversationMessages(
       state,
-      formatFinalUserRequest({
+      formatDraftUserRequest({
         currentDraft: state.currentDraft,
         foldedSummary: formatCurrentPathFoldedOptionsForDirector(state),
         modeHint,
@@ -54,7 +54,7 @@ function formatOptionModeHint(optionMode: OptionGenerationMode) {
   }
 
   if (optionMode === "focused") {
-    return "选项生成倾向：专注。下一组三个方向要围绕当前草稿收窄，但仍然保持在创作步骤层级，不要拆成同一处素材的局部细节。";
+    return "选项生成倾向：专注。下一组三个方向围绕当前草稿收窄，同时保持在创作决策或方向层级。";
   }
 
   return "";
@@ -62,7 +62,7 @@ function formatOptionModeHint(optionMode: OptionGenerationMode) {
 
 export function summarizeEditedDraftForDirector(state: SessionState, draft: Draft): DirectorInputParts {
   const selectedOptionLabel =
-    "用户刚刚手动编辑并保存了当前草稿。请保留这个草稿内容，只基于它重新生成下一步三个创作方向；保持在创作步骤层级，避免重复已有方向。";
+    "用户刚刚手动编辑并保存了当前草稿。请保留这个草稿内容，只基于它重新生成下一步三个创作方向；保持在创作决策或方向层级，避免重复已有方向。";
 
   return {
     rootSummary: state.rootMemory.summary,
@@ -74,7 +74,7 @@ export function summarizeEditedDraftForDirector(state: SessionState, draft: Draf
     enabledSkills: enabledSkillsForDirector(state),
     messages: buildConversationMessages(
       state,
-      formatFinalUserRequest({
+      formatOptionsUserRequest({
         currentDraft: draft,
         foldedSummary: formatCurrentPathFoldedOptionsForDirector(state),
         state,
@@ -86,7 +86,13 @@ export function summarizeEditedDraftForDirector(state: SessionState, draft: Draf
 
 export function summarizeCurrentDraftOptionsForDirector(state: SessionState): DirectorInputParts {
   const selectedOptionLabel =
-    "当前草稿已经展示给用户。请只基于这个草稿生成下一步三个创作方向；保持在创作步骤层级，避免重复已有方向。";
+    "当前草稿已经展示给用户。请只基于这个草稿生成下一步三个创作方向；保持在创作决策或方向层级，避免重复已有方向。";
+  const finalUserRequest = formatOptionsUserRequest({
+    currentDraft: state.currentDraft,
+    foldedSummary: formatCurrentPathFoldedOptionsForDirector(state),
+    state,
+    task: selectedOptionLabel
+  });
 
   return {
     rootSummary: state.rootMemory.summary,
@@ -96,15 +102,9 @@ export function summarizeCurrentDraftOptionsForDirector(state: SessionState): Di
     foldedSummary: formatCurrentPathFoldedOptionsForDirector(state),
     selectedOptionLabel,
     enabledSkills: enabledSkillsForDirector(state),
-    messages: buildConversationMessages(
-      state,
-      formatFinalUserRequest({
-        currentDraft: state.currentDraft,
-        foldedSummary: formatCurrentPathFoldedOptionsForDirector(state),
-        state,
-        task: selectedOptionLabel
-      })
-    )
+    messages: isFirstRoundOptionsRequest(state)
+      ? buildFirstRoundOptionsMessages(state, finalUserRequest)
+      : buildConversationMessages(state, finalUserRequest)
   };
 }
 
@@ -170,7 +170,7 @@ function formatPathForDirector(state: SessionState) {
 
   return [
     pathSummary,
-    seenLabels.length > 0 ? `已出现过的选项标题（不要复用）：${seenLabels.join("、")}` : ""
+    seenLabels.length > 0 ? `已出现过的选项标题（用于避开复用）：${seenLabels.join("、")}` : ""
   ]
     .filter(Boolean)
     .join("\n");
@@ -202,6 +202,28 @@ function buildConversationMessages(state: SessionState, finalUserRequest: string
   return mergeConsecutiveUserMessages(messages);
 }
 
+function isFirstRoundOptionsRequest(state: SessionState) {
+  return (
+    state.selectedPath.length === 1 &&
+    state.selectedPath[0].roundIndex === 1 &&
+    state.selectedPath[0].options.length === 0 &&
+    state.selectedPath[0].selectedOptionId === null
+  );
+}
+
+function buildFirstRoundOptionsMessages(state: SessionState, finalUserRequest: string): DirectorMessage[] {
+  return [
+    {
+      role: "user",
+      content: [
+        `创作 seed：\n${state.rootMemory.summary}`,
+        `已学习偏好：\n${state.rootMemory.learnedSummary || "暂无已学习偏好。"}`,
+        finalUserRequest
+      ].join("\n\n")
+    }
+  ];
+}
+
 function mergeConsecutiveUserMessages(messages: DirectorMessage[]) {
   const merged: DirectorMessage[] = [];
 
@@ -229,7 +251,45 @@ function formatAssistantRoundForDirector(state: SessionState, node: SessionState
     .join("\n");
 }
 
-function formatFinalUserRequest({
+function formatDraftUserRequest({
+  currentDraft,
+  foldedSummary,
+  modeHint,
+  selectedOption,
+  selectedOptionNote,
+  state
+}: {
+  currentDraft: Draft | null;
+  foldedSummary: string;
+  modeHint?: string;
+  selectedOption?: BranchOption;
+  selectedOptionNote?: string;
+  state: SessionState;
+}) {
+  const selectedLines = selectedOption
+    ? [
+        `用户刚刚选择：${formatDetailedOptionForDirector(selectedOption)}`,
+        selectedOptionNote ? `用户补充备注：${selectedOptionNote}` : "",
+        modeHint
+      ].filter(Boolean)
+    : ["请基于 seed 和当前草稿生成本轮 draft。"];
+
+  return [
+    ...selectedLines,
+    `当前草稿：\n${currentDraft ? formatDraftForDirector(currentDraft) : "暂无草稿。"}`,
+    `当前路径未选方向：\n${foldedSummary}`,
+    "请把用户刚刚选择的方向落实到当前草稿，生成本轮更新后的 draft。",
+    "先按已选技能判断当前草稿状态和改动幅度。",
+    "保留当前草稿中已经成立的内容，只更新对本轮方向有帮助的部分。",
+    "标题、正文、话题和配图提示按实际需要更新，同时延续用户原意和已学习偏好。",
+    "已选技能是创作判断镜头，按当前作品需要落实到本轮写作。",
+    "所有面向用户的字段都必须使用简体中文，使用清楚、自然、有作品感的中文标题、正文、话题和配图提示。"
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function formatOptionsUserRequest({
   currentDraft,
   foldedSummary,
   modeHint,
@@ -259,13 +319,13 @@ function formatFinalUserRequest({
     ...selectedLines,
     `当前草稿：\n${currentDraft ? formatDraftForDirector(currentDraft) : "暂无草稿。"}`,
     `当前路径未选方向：\n${foldedSummary}`,
-    seenLabels.length > 0 ? `已出现过的选项标题（不要复用）：${seenLabels.join("、")}` : "",
-    "返回下一轮 AI Director 输出。选项要贴合当前 seed 和草稿进展；写成可执行、普通人一眼能懂的内容创作方向。",
-    "启用技能仍然可用：方向类技能用于决定下一步创作方向；约束、风格、平台、检查类技能必须持续影响输出。",
-    "不要复用已出现过的选项标题，也不要换个说法继续提供同一语义的方向。",
-    "每组选项要覆盖不同创作意图，避免三个选项都只是同一种操作的细节变化。",
-    "选项保持在创作步骤或方向层级，不要细拆到同一段落里的某个局部细节。",
-    "所有面向用户的字段都必须使用简体中文，不要输出英文选项标题、英文草稿或英文配图提示，也不要输出抽象选项名。"
+    seenLabels.length > 0 ? `已出现过的选项标题（用于避开复用）：${seenLabels.join("、")}` : "",
+    "返回下一轮 AI Director 输出。先判断当前作品最需要创作者澄清、选择或推进什么，再提出三选一建议；选项要贴合当前 seed 和草稿进展，写成创作者一眼能判断的创作决策或方向。",
+    "已选技能是创作判断镜头，按当前作品需要使用相关技能。",
+    "优先避开已出现过的选项标题和同义重复方向。",
+    "每组选项覆盖不同创作意图，避免三个选项都只是同一种操作的细节变化。",
+    "选项以创作决策或方向为主；当草稿接近完成时，可以包含轻量收尾项。",
+    "所有面向用户的字段都必须使用简体中文，使用清楚、具体、可选择的中文选项标题、中文草稿和中文配图提示。"
   ]
     .filter(Boolean)
     .join("\n\n");

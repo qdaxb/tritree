@@ -86,7 +86,7 @@ describe("summarizeSessionForDirector", () => {
     expect(summary.selectedOptionLabel).toContain("职场黑话");
     expect(summary.selectedOptionLabel).toContain("用户补充备注：请保留一点讽刺感。");
     expect(summary.selectedOptionLabel).toContain("选项生成倾向：专注");
-    expect(summary.selectedOptionLabel).toContain("仍然保持在创作步骤层级");
+    expect(summary.selectedOptionLabel).toContain("保持在创作决策或方向层级");
     expect(summary.selectedOptionLabel).not.toContain("细节深化");
   });
 
@@ -123,7 +123,7 @@ describe("summarizeSessionForDirector", () => {
     expect(summary.pathSummary).toContain("已选择：B 锁定写给谁看");
     expect(summary.pathSummary).toContain("进入本轮：B 锁定写给谁看");
     expect(summary.pathSummary).toContain("本轮选项：A 展开值班全过程；B 锁定写给谁看；C 重组为问题-解决结构");
-    expect(summary.pathSummary).toContain("已出现过的选项标题（不要复用）");
+    expect(summary.pathSummary).toContain("已出现过的选项标题（用于避开复用）");
     expect(summary.pathSummary).toContain("展开值班全过程");
     expect(summary.foldedSummary).toContain("扩写成完整草稿");
     expect(summary.selectedOptionLabel).toContain("重组为问题-解决结构");
@@ -166,8 +166,43 @@ describe("summarizeSessionForDirector", () => {
     expect(messages[3].content).toContain("第 2 轮 AI 输出");
     expect(messages[3].content).toContain("选项：A 扩写完整故事线；B 分析做这个的动机；C 明确写给谁看");
     expect(messages[4].content).toContain("用户刚刚选择：B 分析做这个的动机");
-    expect(messages[4].content).toContain("已出现过的选项标题（不要复用）：扩写完整经历、分析为什么写、确定写给谁看、扩写完整故事线、分析做这个的动机、明确写给谁看");
+    expect(messages[4].content).toContain("生成本轮更新后的 draft");
+    expect(messages[4].content).toContain("先按已选技能判断当前草稿状态和改动幅度");
+    expect(messages[4].content).toContain("保留当前草稿中已经成立的内容");
+    expect(messages[4].content).not.toContain("实质变化");
+    expect(messages[4].content).toContain("已选技能是创作判断镜头");
+    expect(messages[4].content).not.toContain("会怎么改");
+    expect(messages[4].content).toContain("配图提示");
     expect(messages[4].content).not.toContain("已选择：未选择");
+  });
+
+  it("asks draft generation to apply the selected direction to the draft", () => {
+    const state = createStateWithPath([
+      createNode({
+        id: "root",
+        roundIndex: 1,
+        options: [
+          option("a", "确定表达主线"),
+          option("b", "选择读者视角"),
+          option("c", "整理故事推进")
+        ],
+        selectedOptionId: "b",
+        foldedOptions: [option("a", "确定表达主线"), option("c", "整理故事推进")]
+      })
+    ]);
+
+    const summary = summarizeSessionForDirector(state, option("b", "选择读者视角"), "写给独立开发者");
+    const messages = (summary as any).messages as Array<{ role: string; content: string }>;
+    const finalMessage = messages.at(-1)?.content ?? "";
+
+    expect(finalMessage).toContain("请把用户刚刚选择的方向落实到当前草稿");
+    expect(finalMessage).toContain("生成本轮更新后的 draft");
+    expect(finalMessage).toContain("先按已选技能判断当前草稿状态和改动幅度");
+    expect(finalMessage).toContain("保留当前草稿中已经成立的内容");
+    expect(finalMessage).not.toContain("实质变化");
+    expect(finalMessage).toContain("用户补充备注：写给独立开发者");
+    expect(finalMessage).not.toContain("提出三选一建议");
+    expect(finalMessage).not.toContain("生成下一步三个创作方向");
   });
 
   it("includes current node option labels when regenerating options for an existing draft", () => {
@@ -183,8 +218,28 @@ describe("summarizeSessionForDirector", () => {
     const summary = summarizeCurrentDraftOptionsForDirector(state);
 
     expect(summary.pathSummary).toContain("本轮选项：A 展开值班全过程；B 锁定写给谁看；C 重组为问题-解决结构");
-    expect(summary.pathSummary).toContain("已出现过的选项标题（不要复用）");
+    expect(summary.pathSummary).toContain("已出现过的选项标题（用于避开复用）");
     expect(summary.selectedOptionLabel).toContain("避免重复已有方向");
+  });
+
+  it("uses a single user message for first-round options after the initial draft", () => {
+    const state = createStateWithPath([
+      createNode({
+        id: "current",
+        roundIndex: 1,
+        options: [],
+        selectedOptionId: null
+      })
+    ]);
+
+    const summary = summarizeCurrentDraftOptionsForDirector(state);
+    const messages = (summary as any).messages as Array<{ role: string; content: string }>;
+
+    expect(messages.map((message) => message.role)).toEqual(["user"]);
+    expect(messages[0].content).toContain("创作 seed：");
+    expect(messages[0].content).toContain("当前草稿：");
+    expect(messages[0].content).toContain("请只基于这个草稿生成下一步三个创作方向");
+    expect(messages[0].content).not.toContain("第 1 轮 AI 输出");
   });
 
   it("excludes folded branches that are outside the current path", () => {

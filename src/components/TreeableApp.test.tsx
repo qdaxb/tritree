@@ -289,7 +289,7 @@ describe("TreeableApp", () => {
     render(<TreeableApp />);
 
     expect(await screen.findByText("Seed：我想写 AI 产品经理的真实困境")).toBeInTheDocument();
-    expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices disabled");
+    expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions");
     expect(screen.queryByLabelText("历史路径地图")).not.toBeInTheDocument();
   });
@@ -323,7 +323,7 @@ describe("TreeableApp", () => {
     await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
 
     expect(await screen.findByText("Seed：我想写 AI 产品经理的真实困境")).toBeInTheDocument();
-    expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices disabled");
+    expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
     expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("idle");
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/root-memory", expect.objectContaining({ method: "POST" }));
     expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).not.toHaveProperty("initialOptionId");

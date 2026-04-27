@@ -35,10 +35,6 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "没有找到当前创作方向。" }, { status: 404 });
   }
 
-  if (state.session.status === "finished") {
-    return NextResponse.json({ error: "这次创作已经完成。" }, { status: 409 });
-  }
-
   if (state.currentNode.id !== body.nodeId) {
     return NextResponse.json({ error: "你选择的不是当前方向。" }, { status: 409 });
   }

@@ -25,8 +25,7 @@ export function LiveDraft({
   onDismissLiveDiff,
   onSave,
   onStartComparison,
-  previousDraft = null,
-  publishPackage
+  previousDraft = null
 }: {
   canCompareDrafts?: boolean;
   comparisonDrafts?: { from: Draft; to: Draft } | null;
@@ -49,7 +48,7 @@ export function LiveDraft({
   previousDraft?: Draft | null;
   publishPackage: PublishPackage | null;
 }) {
-  const content = publishPackage ?? draft;
+  const content = draft;
   const [diffEditDraft, setDiffEditDraft] = useState<Draft | null>(null);
   const [selectedDiffAction, setSelectedDiffAction] = useState<SelectedDiffAction | null>(null);
   const [editingMode, setEditingMode] = useState<"normal" | null>(null);
@@ -77,12 +76,11 @@ export function LiveDraft({
   const hasActiveStreamingLine = Boolean(
     isLiveDiffStreaming && (liveStreamingField === "body" || liveStreamingField === "imagePrompt")
   );
-  const canShowParentDiff = Boolean(content && previousDraft && !publishPackage && !isEditing);
+  const canShowParentDiff = Boolean(content && previousDraft && !isEditing);
   const canUseTreeComparison = Boolean(onStartComparison || onCancelComparison || isComparisonMode);
   const canDismissLiveDiff = Boolean(content && isLiveDiff && !isLiveDiffStreaming && onDismissLiveDiff);
   const canShowDiffControl = Boolean(
     content &&
-      !publishPackage &&
       !isEditing &&
       (canDismissLiveDiff || (!isLiveDiff && (canCompareDrafts || canShowParentDiff || isComparisonMode)))
   );
@@ -96,10 +94,10 @@ export function LiveDraft({
     [comparisonDrafts, content, diffEditDraft, liveStreamingField, previousDraft]
   );
   const shouldShowInlineDiff = Boolean(
-    draftDiff && !publishPackage && !isEditing && (comparisonDrafts || (showDiff && canShowParentDiff) || isLiveDiff)
+    draftDiff && !isEditing && (comparisonDrafts || (showDiff && canShowParentDiff) || isLiveDiff)
   );
-  const canEditCurrentDraft = Boolean(content && isEditable && !publishPackage && !isComparisonMode && !isLiveDiff);
-  const canUseInlineDiffEditing = Boolean(shouldShowInlineDiff && isEditable && !publishPackage && !isLiveDiff && onSave);
+  const canEditCurrentDraft = Boolean(content && isEditable && !isComparisonMode && !isLiveDiff);
+  const canUseInlineDiffEditing = Boolean(shouldShowInlineDiff && isEditable && !isLiveDiff && onSave);
   const selectedDiffToken =
     selectedDiffAction && draftDiff ? draftDiff[selectedDiffAction.field][selectedDiffAction.tokenIndex] : null;
   const selectedDiffPopoverPosition = selectedDiffAction ? diffPopoverPosition(selectedDiffAction.anchorRect) : null;
@@ -245,7 +243,7 @@ export function LiveDraft({
     <aside className="draft-panel">
       <div className="panel-heading">
         <Sparkles size={16} />
-        <span>{publishPackage ? "发布包" : mode === "history" ? "历史草稿" : "实时草稿"}</span>
+        <span>{mode === "history" ? "历史草稿" : "实时草稿"}</span>
         <div className="draft-panel__actions">
           {headerActions}
           {canShowDiffControl ? (

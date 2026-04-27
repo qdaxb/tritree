@@ -33,10 +33,6 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "没有找到当前创作方向。" }, { status: 404 });
   }
 
-  if (state.session.status === "finished") {
-    return NextResponse.json({ error: "这次创作已经完成。" }, { status: 409 });
-  }
-
   const focusedState = focusSessionStateForNode(state, body.nodeId);
   if (!focusedState?.currentNode) {
     return NextResponse.json({ error: "没有找到要编辑的草稿节点。" }, { status: 404 });

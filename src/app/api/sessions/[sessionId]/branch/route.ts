@@ -33,10 +33,6 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   if (!state) {
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
   }
-  if (state.session.status === "finished") {
-    return NextResponse.json({ error: "这次创作已经完成。" }, { status: 409 });
-  }
-
   try {
     const existingState = repository.activateHistoricalBranch({
       sessionId,

@@ -194,7 +194,7 @@ function withStreamingOptions(node: TreeNode, streamingOptions: StreamingOptions
 
 function needsNodeOptions(state: SessionState, nodeId: string | null) {
   const node = findTreeNode(state, nodeId);
-  return Boolean(node && draftForNode(state, nodeId) && state.session.status !== "finished" && node.options.length < 3);
+  return Boolean(node && draftForNode(state, nodeId) && node.options.length < 3);
 }
 
 async function allowDraftRender() {
@@ -939,7 +939,7 @@ export function TreeableApp() {
   }
   if (loadState === "error") return <main className="loading-screen">{message}</main>;
 
-  const treeChoicesDisabled = isBusy || sessionState?.session.status === "finished";
+  const treeChoicesDisabled = isBusy;
   const startButtonLabel = isBusy && !sessionState ? "生成方向中" : sessionState ? "重新开始" : "开始创作";
   const activeViewNodeId = viewNodeId ?? sessionState?.currentNode?.id ?? null;
   const activeViewNode = sessionState ? findTreeNode(sessionState, activeViewNodeId) : null;
@@ -969,8 +969,7 @@ export function TreeableApp() {
       isViewingCurrentNode &&
       previousDraft &&
       !persistedDraftForView &&
-      !isBusy &&
-      sessionState.session.status !== "finished"
+      !isBusy
   );
   const streamedActiveViewNode = activeViewNode ? withStreamingOptions(activeViewNode, streamingOptions) : null;
   const currentNodeForCanvas =
@@ -1171,7 +1170,7 @@ export function TreeableApp() {
         }
         isBusy={isBusy}
         isComparisonMode={Boolean(draftComparison)}
-        isEditable={Boolean(activeViewNodeId && sessionState?.session.status !== "finished")}
+        isEditable={Boolean(activeViewNodeId)}
         isLiveDiff={shouldShowGeneratedDiff}
         isLiveDiffStreaming={isLiveDraftStreaming}
         liveDiffStreamingField={liveDiffStreamingField}
@@ -1181,7 +1180,7 @@ export function TreeableApp() {
         onSave={saveDraft}
         onStartComparison={startDraftComparison}
         previousDraft={previousDraft}
-        publishPackage={isViewingCurrentNode ? sessionState?.publishPackage ?? null : null}
+        publishPackage={null}
       />
       {message ? (
         <div className="toast" role="status">
