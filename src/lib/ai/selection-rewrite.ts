@@ -3,7 +3,8 @@ import {
   createDirectorStreamHttpError,
   getDirectorAuthToken,
   getDirectorBaseUrl,
-  getDirectorModel
+  getDirectorModel,
+  parseDirectorJsonObject
 } from "./director";
 import { formatEnabledSkills, type DirectorMessage } from "./prompts";
 
@@ -143,17 +144,16 @@ export async function rewriteSelectedDraftText(
 }
 
 export function parseSelectionRewriteText(text: string): SelectionRewriteOutput {
-  const parsed = parseJsonObject(text);
+  const parsed = parseDirectorJsonObject(text);
   if (!isRecord(parsed) || typeof parsed.replacementText !== "string") {
     throw new Error("AI rewrite returned invalid replacement text.");
   }
 
-  const replacementText = parsed.replacementText.trim();
-  if (!replacementText) {
+  if (!parsed.replacementText.trim()) {
     throw new Error("AI rewrite returned empty replacement text.");
   }
 
-  return { replacementText };
+  return { replacementText: parsed.replacementText };
 }
 
 function readAnthropicTextContent(payload: unknown) {
@@ -165,21 +165,6 @@ function readAnthropicTextContent(payload: unknown) {
     .filter((part): part is { text: string; type?: unknown } => isRecord(part) && typeof part.text === "string")
     .map((part) => part.text)
     .join("");
-}
-
-function parseJsonObject(text: string) {
-  const withoutFence = text
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "");
-  const jsonStart = withoutFence.indexOf("{");
-  const jsonEnd = withoutFence.lastIndexOf("}");
-
-  if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
-    throw new Error("AI rewrite returned text that is not JSON.");
-  }
-
-  return JSON.parse(withoutFence.slice(jsonStart, jsonEnd + 1)) as unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

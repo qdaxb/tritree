@@ -61,6 +61,18 @@ describe("parseSelectionRewriteText", () => {
       "AI rewrite returned empty replacement text."
     );
   });
+
+  it("preserves leading and trailing whitespace in replacement text", () => {
+    expect(parseSelectionRewriteText('{"replacementText":"  第二句加入排期会细节。\\n"}')).toEqual({
+      replacementText: "  第二句加入排期会细节。\n"
+    });
+  });
+
+  it("repairs raw newlines inside replacement JSON strings", () => {
+    expect(parseSelectionRewriteText('{"replacementText":"第一行\n第二行"}')).toEqual({
+      replacementText: "第一行\n第二行"
+    });
+  });
 });
 
 describe("buildSelectionRewriteRequest", () => {

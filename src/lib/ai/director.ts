@@ -90,11 +90,11 @@ export function buildDirectorInput(parts: DirectorInputParts) {
 }
 
 export function parseDirectorDraftText(text: string): DirectorDraftOutput {
-  return parseDirectorDraftOutput(parseJsonObject(text));
+  return parseDirectorDraftOutput(parseDirectorJsonObject(text));
 }
 
 export function parseDirectorOptionsText(text: string): DirectorOptionsOutput {
-  return parseDirectorOptionsOutput(parseJsonObject(text));
+  return parseDirectorOptionsOutput(parseDirectorJsonObject(text));
 }
 
 export function getDirectorModel(env: Record<string, string | undefined> = process.env) {
@@ -236,7 +236,7 @@ function findLatestUserMessageIndex(messages: DirectorMessage[]) {
   return -1;
 }
 
-function parseJsonObject(text: string) {
+export function parseDirectorJsonObject(text: string) {
   const withoutFence = text
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
