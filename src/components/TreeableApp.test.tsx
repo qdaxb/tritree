@@ -98,6 +98,7 @@ vi.mock("@/components/draft/LiveDraft", () => ({
     comparisonLabels?: { from: string; to: string } | null;
     comparisonSelectionCount?: number;
     draft?: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string } | null;
+    emptyStateActions?: ReactNode;
     headerActions?: ReactNode;
     headerPanel?: ReactNode;
     isLiveDiff?: boolean;
@@ -114,6 +115,9 @@ vi.mock("@/components/draft/LiveDraft", () => ({
       <div data-testid="live-draft">
         <div className="draft-panel__actions" data-testid="mock-draft-actions">
           {props.headerActions}
+        </div>
+        <div className="draft-empty-state" data-testid="mock-draft-empty-actions">
+          {props.emptyStateActions}
         </div>
         {props.headerPanel}
         <button onClick={props.onStartComparison} type="button">
@@ -1510,7 +1514,9 @@ describe("TreeableApp", () => {
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("流式生成失败");
-    await userEvent.click(screen.getByRole("button", { name: "重试生成" }));
+    expect(within(screen.getByTestId("mock-draft-actions")).queryByRole("button", { name: "重试生成" })).not.toBeInTheDocument();
+    const retryActionArea = screen.getByTestId("mock-draft-empty-actions");
+    await userEvent.click(within(retryActionArea).getByRole("button", { name: "重试生成" }));
 
     await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenNthCalledWith(

@@ -1,6 +1,10 @@
 "use client";
 
-import { type ReactNode, type Ref, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { history, historyKeymap, defaultKeymap } from "@codemirror/commands";
+import { unifiedMergeView } from "@codemirror/merge";
+import { EditorState } from "@codemirror/state";
+import { Decoration, EditorView, keymap } from "@codemirror/view";
 import { createPortal } from "react-dom";
 import { ImagePlus, Sparkles } from "lucide-react";
 import type { Draft, PublishPackage } from "@/lib/domain";
@@ -12,6 +16,7 @@ export function LiveDraft({
   comparisonLabels = null,
   comparisonSelectionCount = 0,
   draft,
+  emptyStateActions,
   headerActions,
   headerPanel,
   isEditable = false,
@@ -32,6 +37,7 @@ export function LiveDraft({
   comparisonLabels?: { from: string; to: string } | null;
   comparisonSelectionCount?: number;
   draft: Draft | null;
+  emptyStateActions?: ReactNode;
   headerActions?: ReactNode;
   headerPanel?: ReactNode;
   isEditable?: boolean;
@@ -49,19 +55,16 @@ export function LiveDraft({
   publishPackage: PublishPackage | null;
 }) {
   const content = draft;
+  const initialEditableDraft = comparisonDrafts?.to ?? content;
   const [diffEditDraft, setDiffEditDraft] = useState<Draft | null>(null);
   const [selectedDiffAction, setSelectedDiffAction] = useState<SelectedDiffAction | null>(null);
   const [editingMode, setEditingMode] = useState<"normal" | null>(null);
   const [showDiff, setShowDiff] = useState(false);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [hashtags, setHashtags] = useState("");
-  const [imagePrompt, setImagePrompt] = useState("");
-  const activeStreamingLineRef = useRef<HTMLSpanElement | null>(null);
-  const displayContent = diffEditDraft ?? comparisonDrafts?.to ?? content;
-  const displayTitle = resolveDraftTitle(displayContent?.title, displayContent?.body);
-  const bodyParagraphs = splitDraftParagraphs(displayContent?.body);
-  const isEditing = editingMode !== null && !isLiveDiff;
+  const [title, setTitle] = useState(() => resolveDraftTitle(initialEditableDraft?.title, initialEditableDraft?.body));
+  const [body, setBody] = useState(() => initialEditableDraft?.body ?? "");
+  const [hashtags, setHashtags] = useState(() => initialEditableDraft?.hashtags.join(" ") ?? "");
+  const [imagePrompt, setImagePrompt] = useState(() => initialEditableDraft?.imagePrompt ?? "");
+  const baseEditableDraft = comparisonDrafts?.to ?? content;
   const hasVisibleStreamingImagePrompt = Boolean(
     content?.imagePrompt.trim() && previousDraft && content.imagePrompt !== previousDraft.imagePrompt
   );
@@ -73,9 +76,33 @@ export function LiveDraft({
   const liveStreamingField: LiveDiffStreamingField | null = isLiveDiffStreaming
     ? (liveDiffStreamingField ?? inferredLiveStreamingField)
     : null;
-  const hasActiveStreamingLine = Boolean(
-    isLiveDiffStreaming && (liveStreamingField === "body" || liveStreamingField === "imagePrompt")
+  const editedDraft = useMemo(
+    () => ({
+      title,
+      body,
+      hashtags: parseHashtags(hashtags),
+      imagePrompt
+    }),
+    [body, hashtags, imagePrompt, title]
   );
+  const streamingDisplayDraft = useMemo(
+    () =>
+      baseEditableDraft && previousDraft && isLiveDiffStreaming
+        ? draftWithStreamingDisplayText(baseEditableDraft, previousDraft, liveStreamingField)
+        : baseEditableDraft,
+    [baseEditableDraft, isLiveDiffStreaming, liveStreamingField, previousDraft]
+  );
+  const isPotentialMergeDiff = Boolean(comparisonDrafts || (showDiff && content && previousDraft) || isLiveDiff);
+  const canUseInlineDiffEditing = Boolean(!isLiveDiffStreaming && isPotentialMergeDiff && baseEditableDraft && isEditable && onSave);
+  const canUseStreamingMergeDiff = Boolean(isLiveDiffStreaming && isPotentialMergeDiff && streamingDisplayDraft && previousDraft);
+  const displayContent = canUseInlineDiffEditing
+    ? editedDraft
+    : canUseStreamingMergeDiff
+      ? streamingDisplayDraft
+      : diffEditDraft ?? baseEditableDraft;
+  const displayTitle = resolveDraftTitle(displayContent?.title, displayContent?.body);
+  const bodyParagraphs = splitDraftParagraphs(displayContent?.body);
+  const isEditing = editingMode !== null && !isLiveDiff;
   const canShowParentDiff = Boolean(content && previousDraft && !isEditing);
   const canUseTreeComparison = Boolean(onStartComparison || onCancelComparison || isComparisonMode);
   const canDismissLiveDiff = Boolean(content && isLiveDiff && !isLiveDiffStreaming && onDismissLiveDiff);
@@ -86,18 +113,26 @@ export function LiveDraft({
   );
   const draftDiff = useMemo(
     () => {
-      if (comparisonDrafts) return buildDraftDiff(comparisonDrafts.from, diffEditDraft ?? comparisonDrafts.to);
-      return content && previousDraft
-        ? buildDraftDiff(previousDraft, content, { streamingField: liveStreamingField })
-        : null;
+      if (comparisonDrafts && displayContent) return buildDraftDiff(comparisonDrafts.from, displayContent);
+      return displayContent && previousDraft ? buildDraftDiff(previousDraft, displayContent) : null;
     },
-    [comparisonDrafts, content, diffEditDraft, liveStreamingField, previousDraft]
+    [comparisonDrafts, displayContent, previousDraft]
   );
   const shouldShowInlineDiff = Boolean(
     draftDiff && !isEditing && (comparisonDrafts || (showDiff && canShowParentDiff) || isLiveDiff)
   );
-  const canEditCurrentDraft = Boolean(content && isEditable && !isComparisonMode && !isLiveDiff);
-  const canUseInlineDiffEditing = Boolean(shouldShowInlineDiff && isEditable && !isLiveDiff && onSave);
+  const canEditCurrentDraft = Boolean(content && isEditable && !isComparisonMode && !isLiveDiff && !showDiff);
+  const isMergeDiffView = Boolean(shouldShowInlineDiff && (canUseInlineDiffEditing || canUseStreamingMergeDiff));
+  const isInlineDiffEditor = Boolean(shouldShowInlineDiff && canUseInlineDiffEditing);
+  const inlineDiffOriginalDraft = comparisonDrafts?.from ?? previousDraft;
+  const bodyStreamingLinePosition =
+    canUseStreamingMergeDiff && liveStreamingField === "body" && baseEditableDraft && previousDraft
+      ? streamingCurrentLinePosition(previousDraft.body, baseEditableDraft.body)
+      : null;
+  const imagePromptStreamingLinePosition =
+    canUseStreamingMergeDiff && liveStreamingField === "imagePrompt" && baseEditableDraft && previousDraft
+      ? streamingCurrentLinePosition(previousDraft.imagePrompt || "还没有配图方向。", baseEditableDraft.imagePrompt)
+      : null;
   const selectedDiffToken =
     selectedDiffAction && draftDiff ? draftDiff[selectedDiffAction.field][selectedDiffAction.tokenIndex] : null;
   const selectedDiffPopoverPosition = selectedDiffAction ? diffPopoverPosition(selectedDiffAction.anchorRect) : null;
@@ -107,11 +142,8 @@ export function LiveDraft({
     setDiffEditDraft(null);
     setSelectedDiffAction(null);
     setShowDiff(false);
-    setTitle(resolveDraftTitle(content?.title, content?.body));
-    setBody(content?.body ?? "");
-    setHashtags(content?.hashtags.join(" ") ?? "");
-    setImagePrompt(content?.imagePrompt ?? "");
-  }, [content?.title, content?.body, content?.imagePrompt, content?.hashtags]);
+    setEditorFieldsFromDraft(baseEditableDraft);
+  }, [baseEditableDraft?.title, baseEditableDraft?.body, baseEditableDraft?.imagePrompt, baseEditableDraft?.hashtags]);
 
   useEffect(() => {
     if (!selectedDiffAction) return;
@@ -144,20 +176,10 @@ export function LiveDraft({
     };
   }, [selectedDiffAction]);
 
-  useEffect(() => {
-    if (!hasActiveStreamingLine) return;
-    const activeLine = activeStreamingLineRef.current;
-    if (typeof activeLine?.scrollIntoView !== "function") return;
-    activeLine.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [content?.body, content?.hashtags, content?.imagePrompt, content?.title, hasActiveStreamingLine, liveStreamingField]);
-
   function startEditing() {
     if (!content) return;
 
-    setTitle(resolveDraftTitle(content.title, content.body));
-    setBody(content.body);
-    setHashtags(content.hashtags.join(" "));
-    setImagePrompt(content.imagePrompt);
+    setEditorFieldsFromDraft(content);
     setEditingMode("normal");
   }
 
@@ -183,49 +205,61 @@ export function LiveDraft({
   async function saveDraft() {
     if (!onSave) return;
 
-    await onSave({
-      title,
-      body,
-      hashtags: hashtags
-        .split(/[\s,，]+/)
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-      imagePrompt
-    });
+    await onSave(editedDraft);
     setEditingMode(null);
   }
 
   function cancelEditing() {
+    setEditorFieldsFromDraft(baseEditableDraft);
     setEditingMode(null);
   }
 
   async function saveInlineDiffDraft() {
-    if (!onSave || !diffEditDraft) return;
+    if (!onSave || !baseEditableDraft) return;
 
-    await onSave(diffEditDraft);
-    setDiffEditDraft(null);
-    setSelectedDiffAction(null);
+    await onSave(editedDraft);
+    finishInlineDiffDraft({ resetFields: false });
   }
 
-  function cancelInlineDiffDraft() {
+  function exitInlineDiffDraft() {
+    finishInlineDiffDraft({ resetFields: true });
+  }
+
+  function finishInlineDiffDraft({ resetFields }: { resetFields: boolean }) {
+    if (resetFields) setEditorFieldsFromDraft(baseEditableDraft);
     setDiffEditDraft(null);
     setSelectedDiffAction(null);
+    if (isComparisonMode) {
+      onCancelComparison?.();
+      return;
+    }
+
+    if (isLiveDiff && !isLiveDiffStreaming) {
+      onDismissLiveDiff?.();
+      return;
+    }
+
+    setShowDiff(false);
   }
 
   function applyInlineDiffAction(field: DiffField, tokenIndex: number) {
     if (!displayContent || !draftDiff) return;
     const tokens = draftDiff[field];
     if (field === "hashtags") {
-      setDiffEditDraft({
+      const nextDraft = {
         ...displayContent,
         hashtags: revertHashtagDiffToken(tokens, tokenIndex)
-      });
+      };
+      setDiffEditDraft(nextDraft);
+      setEditorFieldsFromDraft(nextDraft);
       setSelectedDiffAction(null);
       return;
     }
 
     const nextValue = revertDiffToken(diffFieldValue(displayContent, field), tokens, tokenIndex);
-    setDiffEditDraft(updateDiffDraftField(displayContent, field, nextValue));
+    const nextDraft = updateDiffDraftField(displayContent, field, nextValue);
+    setDiffEditDraft(nextDraft);
+    setEditorFieldsFromDraft(nextDraft);
     setSelectedDiffAction(null);
   }
 
@@ -238,6 +272,13 @@ export function LiveDraft({
   }
 
   function generateImage() {}
+
+  function setEditorFieldsFromDraft(nextDraft: Draft | null) {
+    setTitle(resolveDraftTitle(nextDraft?.title, nextDraft?.body));
+    setBody(nextDraft?.body ?? "");
+    setHashtags(nextDraft?.hashtags.join(" ") ?? "");
+    setImagePrompt(nextDraft?.imagePrompt ?? "");
+  }
 
   return (
     <aside className="draft-panel">
@@ -296,90 +337,144 @@ export function LiveDraft({
             </label>
             <div className="draft-editor__actions">
               <button className="secondary-button" disabled={isBusy} onClick={cancelEditing} type="button">
-                取消
+                退出草稿
               </button>
               <button className="start-button" disabled={isBusy} onClick={() => void saveDraft()} type="button">
-                保存为自定义编辑
+                保存草稿
               </button>
             </div>
           </div>
         ) : content ? (
           <div className="draft-content">
-            <h2>
-              {shouldShowInlineDiff && draftDiff ? (
-                <DiffTokens
-                  field="title"
-                  isInteractive={canUseInlineDiffEditing}
-                  onSelect={selectDiffAction}
-                  selectedAction={selectedDiffAction}
-                  tokens={draftDiff.title}
-                />
-              ) : (
-                displayTitle
-              )}
-            </h2>
-            <div className="draft-body">
-              {shouldShowInlineDiff && draftDiff ? (
-                <p className="draft-inline-diff">
+            {isMergeDiffView && draftDiff ? (
+              <>
+                <h2>
+                  <DraftDiffMergeField
+                    className="draft-cm-diff-field--title"
+                    disabled={isBusy || canUseStreamingMergeDiff}
+                    label="标题"
+                    onChange={canUseStreamingMergeDiff ? undefined : setTitle}
+                    original={resolveDraftTitle(inlineDiffOriginalDraft?.title, inlineDiffOriginalDraft?.body)}
+                    rows={1}
+                    value={resolveDraftTitle(displayContent?.title, displayContent?.body)}
+                  />
+                </h2>
+                <div className="draft-body">
+                  <DraftDiffMergeField
+                    disabled={isBusy || canUseStreamingMergeDiff}
+                    label="正文"
+                    onChange={canUseStreamingMergeDiff ? undefined : setBody}
+                    original={inlineDiffOriginalDraft?.body ?? ""}
+                    rows={10}
+                    streamingLinePosition={bodyStreamingLinePosition}
+                    value={displayContent?.body ?? ""}
+                  />
+                </div>
+                <div className="tag-row">
                   <DiffTokens
-                    activeLineRef={liveStreamingField === "body" ? activeStreamingLineRef : undefined}
-                    field="body"
-                    isInteractive={canUseInlineDiffEditing}
+                    field="hashtags"
+                    isInteractive={false}
                     onSelect={selectDiffAction}
                     selectedAction={selectedDiffAction}
-                    tokens={draftDiff.body}
+                    tokens={draftDiff.hashtags}
                   />
-                </p>
-              ) : (
-                bodyParagraphs.map((paragraph, index) => <p key={`${index}-${paragraph}`}>{paragraph}</p>)
-              )}
-            </div>
-            <div className="tag-row">
-              {shouldShowInlineDiff && draftDiff ? (
-                <DiffTokens
-                  field="hashtags"
-                  isInteractive={canUseInlineDiffEditing}
-                  onSelect={selectDiffAction}
-                  selectedAction={selectedDiffAction}
-                  tokens={draftDiff.hashtags}
-                />
-              ) : (
-                (displayContent?.hashtags ?? []).map((tag) => <span key={tag}>{tag}</span>)
-              )}
-            </div>
-            <section className="image-prompt">
-              <div className="image-prompt__heading">
-                <h3>配图提示</h3>
-                <button className="image-prompt__generate-button" disabled={isBusy} onClick={generateImage} type="button">
-                  <ImagePlus aria-hidden="true" size={14} />
-                  <span>生成图片</span>
-                </button>
-              </div>
-              <p className={shouldShowInlineDiff ? "draft-inline-diff" : undefined}>
-                {shouldShowInlineDiff && draftDiff ? (
-                  <DiffTokens
-                    activeLineRef={liveStreamingField === "imagePrompt" ? activeStreamingLineRef : undefined}
-                    field="imagePrompt"
-                    isInteractive={canUseInlineDiffEditing}
-                    onSelect={selectDiffAction}
-                    selectedAction={selectedDiffAction}
-                    tokens={draftDiff.imagePrompt}
+                </div>
+                <section className="image-prompt">
+                  <div className="image-prompt__heading">
+                    <h3>配图提示</h3>
+                    <button className="image-prompt__generate-button" disabled={isBusy} onClick={generateImage} type="button">
+                      <ImagePlus aria-hidden="true" size={14} />
+                      <span>生成图片</span>
+                    </button>
+                  </div>
+                  <DraftDiffMergeField
+                    disabled={isBusy || canUseStreamingMergeDiff}
+                    label="配图提示"
+                    onChange={canUseStreamingMergeDiff ? undefined : setImagePrompt}
+                    original={inlineDiffOriginalDraft?.imagePrompt ?? ""}
+                    rows={4}
+                    streamingLinePosition={imagePromptStreamingLinePosition}
+                    value={displayContent?.imagePrompt ?? ""}
                   />
-                ) : (
-                  displayContent?.imagePrompt || "还没有配图方向。"
-                )}
-              </p>
-            </section>
-            {diffEditDraft ? (
-              <div className="draft-diff-inline-actions">
-                <button className="secondary-button" disabled={isBusy} onClick={cancelInlineDiffDraft} type="button">
-                  取消修改
-                </button>
-                <button className="start-button" disabled={isBusy} onClick={() => void saveInlineDiffDraft()} type="button">
-                  保存为自定义编辑
-                </button>
-              </div>
-            ) : null}
+                </section>
+                {isInlineDiffEditor ? (
+                  <div className="draft-diff-inline-actions">
+                    <button className="secondary-button" disabled={isBusy} onClick={exitInlineDiffDraft} type="button">
+                      退出草稿
+                    </button>
+                    <button className="start-button" disabled={isBusy} onClick={() => void saveInlineDiffDraft()} type="button">
+                      保存草稿
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <h2>
+                  {shouldShowInlineDiff && draftDiff ? (
+                    <DiffTokens
+                      field="title"
+                      isInteractive={canUseInlineDiffEditing}
+                      onSelect={selectDiffAction}
+                      selectedAction={selectedDiffAction}
+                      tokens={draftDiff.title}
+                    />
+                  ) : (
+                    displayTitle
+                  )}
+                </h2>
+                <div className="draft-body">
+                  {shouldShowInlineDiff && draftDiff ? (
+                    <p className="draft-inline-diff">
+                      <DiffTokens
+                        field="body"
+                        isInteractive={canUseInlineDiffEditing}
+                        onSelect={selectDiffAction}
+                        selectedAction={selectedDiffAction}
+                        tokens={draftDiff.body}
+                      />
+                    </p>
+                  ) : (
+                    bodyParagraphs.map((paragraph, index) => <p key={`${index}-${paragraph}`}>{paragraph}</p>)
+                  )}
+                </div>
+                <div className="tag-row">
+                  {shouldShowInlineDiff && draftDiff ? (
+                    <DiffTokens
+                      field="hashtags"
+                      isInteractive={canUseInlineDiffEditing}
+                      onSelect={selectDiffAction}
+                      selectedAction={selectedDiffAction}
+                      tokens={draftDiff.hashtags}
+                    />
+                  ) : (
+                    (displayContent?.hashtags ?? []).map((tag) => <span key={tag}>{tag}</span>)
+                  )}
+                </div>
+                <section className="image-prompt">
+                  <div className="image-prompt__heading">
+                    <h3>配图提示</h3>
+                    <button className="image-prompt__generate-button" disabled={isBusy} onClick={generateImage} type="button">
+                      <ImagePlus aria-hidden="true" size={14} />
+                      <span>生成图片</span>
+                    </button>
+                  </div>
+                  <p className={shouldShowInlineDiff ? "draft-inline-diff" : undefined}>
+                    {shouldShowInlineDiff && draftDiff ? (
+                      <DiffTokens
+                        field="imagePrompt"
+                        isInteractive={canUseInlineDiffEditing}
+                        onSelect={selectDiffAction}
+                        selectedAction={selectedDiffAction}
+                        tokens={draftDiff.imagePrompt}
+                      />
+                    ) : (
+                      displayContent?.imagePrompt || "还没有配图方向。"
+                    )}
+                  </p>
+                </section>
+              </>
+            )}
             {selectedDiffAction && selectedDiffToken && selectedDiffPopoverPosition && typeof document !== "undefined"
               ? createPortal(
                   <div
@@ -410,7 +505,10 @@ export function LiveDraft({
               : null}
           </div>
         ) : (
-          <p className="empty-copy">开始创作后，草稿会在这里同步更新。</p>
+          <div className="draft-empty-state">
+            <p className="empty-copy">开始创作后，草稿会在这里同步更新。</p>
+            {emptyStateActions ? <div className="draft-empty-state__actions">{emptyStateActions}</div> : null}
+          </div>
         )}
       </div>
     </aside>
@@ -426,8 +524,15 @@ function splitDraftParagraphs(body?: string) {
   return paragraphs?.length ? paragraphs : ["第一次选择后，草稿会在这里更新。"];
 }
 
+function parseHashtags(value: string) {
+  return value
+    .split(/[\s,，]+/)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
 type DiffToken = {
-  type: "same" | "added" | "removed" | "active";
+  type: "same" | "added" | "removed";
   value: string;
 };
 
@@ -449,14 +554,12 @@ type DiffActionAnchor = {
 };
 
 function DiffTokens({
-  activeLineRef,
   field,
   isInteractive = false,
   onSelect,
   selectedAction,
   tokens
 }: {
-  activeLineRef?: Ref<HTMLSpanElement>;
   field?: DiffField;
   isInteractive?: boolean;
   onSelect?: (action: Omit<SelectedDiffAction, "anchorElement" | "anchorRect">, element: Element) => void;
@@ -466,15 +569,6 @@ function DiffTokens({
   return (
     <>
       {tokens.map((token, index) => {
-        if (token.type === "active") {
-          return (
-            <span className="draft-stream-current-line" key={`${index}-active-${token.value}`} ref={activeLineRef}>
-              {token.value ? <span className="draft-diff-token draft-diff-token--added">{token.value}</span> : null}
-              <span aria-label="正在生成到这里" className="draft-stream-cursor" />
-            </span>
-          );
-        }
-
         const canSelect = Boolean(isInteractive && field && onSelect && token.type !== "same" && token.value.length > 0);
         const isSelected = Boolean(selectedAction && selectedAction.field === field && selectedAction.tokenIndex === index);
         const preview = previewDiffValue(token.value);
@@ -512,55 +606,235 @@ function DiffTokens({
   );
 }
 
-function buildDraftDiff(previousDraft: Draft, currentDraft: Draft, options: { streamingField?: LiveDiffStreamingField | null } = {}) {
+function DraftDiffMergeField({
+  className,
+  disabled = false,
+  label,
+  onChange,
+  original,
+  rows,
+  streamingLinePosition = null,
+  value
+}: {
+  className?: string;
+  disabled?: boolean;
+  label: string;
+  onChange?: (value: string) => void;
+  original: string;
+  rows: number;
+  streamingLinePosition?: number | null;
+  value: string;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const onChangeRef = useRef(onChange);
+  const streamingLinePositionRef = useRef(streamingLinePosition);
+  const originalRef = useRef(original);
+  const stableMergeOriginalRef = useRef(mergeViewOriginalText(original, value));
+  if (originalRef.current !== original) {
+    originalRef.current = original;
+    stableMergeOriginalRef.current = mergeViewOriginalText(original, value);
+  }
+  const liveMergeOriginal = useMemo(() => mergeViewOriginalText(original, value), [original, value]);
+  const mergeOriginal = disabled ? liveMergeOriginal : stableMergeOriginalRef.current;
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    streamingLinePositionRef.current = streamingLinePosition;
+    viewRef.current?.dispatch({});
+  }, [streamingLinePosition]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const view = new EditorView({
+      parent: container,
+      state: EditorState.create({
+        doc: value,
+        extensions: [
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          EditorView.lineWrapping,
+          EditorView.contentAttributes.of({
+            "aria-label": label
+          }),
+          EditorState.readOnly.of(disabled),
+          EditorView.editable.of(!disabled),
+          unifiedMergeView({
+            allowInlineDiffs: rows <= 1,
+            diffConfig: draftMergeDiffConfig,
+            gutter: false,
+            highlightChanges: true,
+            mergeControls: false,
+            original: mergeOriginal
+          }),
+          streamingCurrentLineExtension(() => streamingLinePositionRef.current),
+          draftMergeEditorTheme,
+          EditorView.updateListener.of((update) => {
+            if (!update.docChanged || !onChangeRef.current) return;
+            onChangeRef.current(update.state.doc.toString());
+          })
+        ]
+      })
+    });
+
+    viewRef.current = view;
+    return () => {
+      view.destroy();
+      viewRef.current = null;
+    };
+  }, [disabled, label, mergeOriginal]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const currentValue = view.state.doc.toString();
+    if (currentValue === value) return;
+
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: value }
+    });
+  }, [value]);
+
+  return (
+    <section
+      className={`draft-cm-diff-field${className ? ` ${className}` : ""}`}
+      style={{ "--draft-cm-min-lines": rows } as CSSProperties}
+    >
+      <span className="draft-cm-diff-field__label">{label}</span>
+      <div className="draft-cm-diff-field__editor" data-diff-editor-label={label} ref={containerRef} />
+    </section>
+  );
+}
+
+const draftMergeDiffConfig = { scanLimit: 10000 };
+
+function streamingCurrentLineExtension(getPosition: () => number | null) {
+  return EditorView.decorations.of((view) => {
+    const position = getPosition();
+    if (position === null || view.state.doc.length === 0) return Decoration.none;
+
+    const line = view.state.doc.lineAt(Math.min(Math.max(position, 0), view.state.doc.length));
+    return Decoration.set([Decoration.line({ class: "cm-stream-current-line" }).range(line.from)]);
+  });
+}
+
+const draftMergeEditorTheme = EditorView.theme({
+  "&": {
+    backgroundColor: "#fbfcfc",
+    border: "1px solid rgba(148, 163, 184, 0.42)",
+    borderRadius: "8px",
+    color: "#102033",
+    fontSize: "0.95rem"
+  },
+  "&.cm-focused": {
+    borderColor: "rgba(37, 99, 235, 0.54)",
+    outline: "none",
+    boxShadow: "0 0 0 3px rgba(37, 99, 235, 0.1)"
+  },
+  ".cm-scroller": {
+    fontFamily: "inherit",
+    lineHeight: "1.6",
+    minHeight: "calc(var(--draft-cm-min-lines, 4) * 1.6em + 20px)"
+  },
+  ".cm-content": {
+    padding: "10px 11px",
+    caretColor: "#0f172a"
+  },
+  ".cm-line": {
+    padding: "0"
+  },
+  ".cm-stream-current-line": {
+    backgroundColor: "rgba(14, 165, 233, 0.16)",
+    boxShadow: "inset 3px 0 0 rgba(2, 132, 199, 0.72)"
+  },
+  ".cm-stream-current-line .cm-changedText": {
+    backgroundColor: "rgba(125, 211, 252, 0.82)",
+    color: "#075985"
+  },
+  ".cm-deletedChunk": {
+    backgroundColor: "rgba(254, 202, 202, 0.35)",
+    border: "0",
+    color: "#991b1b",
+    margin: "2px 0"
+  },
+  ".cm-deletedLine": {
+    backgroundColor: "rgba(254, 202, 202, 0.78)",
+    borderRadius: "4px",
+    color: "#991b1b",
+    textDecoration: "line-through"
+  },
+  ".cm-insertedLine, .cm-changedLine": {
+    backgroundColor: "rgba(187, 247, 208, 0.44)"
+  },
+  ".cm-changedText": {
+    backgroundColor: "rgba(187, 247, 208, 0.82)",
+    borderRadius: "4px",
+    color: "#166534"
+  },
+  ".cm-deletedText": {
+    backgroundColor: "rgba(254, 202, 202, 0.82)",
+    borderRadius: "4px",
+    color: "#991b1b",
+    textDecoration: "line-through"
+  }
+});
+
+function mergeViewOriginalText(original: string, value: string) {
+  if (!original || original.endsWith("\n") || !value.startsWith(original)) return original;
+
+  const appendedText = value.slice(original.length);
+  const leadingParagraphBreak = appendedText.match(/^(?:\r?\n)+/)?.[0];
+  return leadingParagraphBreak ? `${original}${leadingParagraphBreak}` : original;
+}
+
+function buildDraftDiff(previousDraft: Draft, currentDraft: Draft) {
   const previousImagePrompt = previousDraft.imagePrompt || "还没有配图方向。";
   const currentImagePrompt = currentDraft.imagePrompt || "还没有配图方向。";
-  const streamingImagePrompt = currentDraft.imagePrompt || previousImagePrompt;
 
   return {
     title: diffText(resolveDraftTitle(previousDraft.title, previousDraft.body), resolveDraftTitle(currentDraft.title, currentDraft.body)),
-    body: options.streamingField === "body" ? diffStreamingText(previousDraft.body, currentDraft.body) : diffText(previousDraft.body, currentDraft.body),
+    body: diffText(previousDraft.body, currentDraft.body),
     hashtags: diffHashtags(previousDraft.hashtags, currentDraft.hashtags),
-    imagePrompt:
-      options.streamingField === "imagePrompt"
-        ? diffStreamingText(previousImagePrompt, streamingImagePrompt)
-        : diffText(previousImagePrompt, currentImagePrompt)
+    imagePrompt: diffText(previousImagePrompt, currentImagePrompt)
   };
 }
 
-function diffStreamingText(previousText: string, currentPartialText: string): DiffToken[] {
-  if (!currentPartialText || currentPartialText === previousText) {
-    const tokens: DiffToken[] = [{ type: "active", value: "" }];
-    pushDiffToken(tokens, "same", previousText, true);
-    return tokens;
+function draftWithStreamingDisplayText(currentDraft: Draft, previousDraft: Draft, streamingField: LiveDiffStreamingField | null): Draft {
+  if (streamingField === "body") {
+    return {
+      ...currentDraft,
+      body: streamingDisplayText(previousDraft.body, currentDraft.body)
+    };
   }
+
+  if (streamingField === "imagePrompt") {
+    const previousImagePrompt = previousDraft.imagePrompt || "还没有配图方向。";
+    const currentImagePrompt = currentDraft.imagePrompt || previousImagePrompt;
+    return {
+      ...currentDraft,
+      imagePrompt: streamingDisplayText(previousImagePrompt, currentImagePrompt)
+    };
+  }
+
+  return currentDraft;
+}
+
+function streamingDisplayText(previousText: string, currentPartialText: string) {
+  if (!currentPartialText || currentPartialText === previousText) return previousText;
 
   const prefixLength = commonPrefixLength(previousText, currentPartialText);
   const coveredPreviousLength = Math.min(previousText.length, Math.max(prefixLength, currentPartialText.length));
-  const samePrefix = previousText.slice(0, prefixLength);
-  const generatedText = currentPartialText.slice(prefixLength);
-  const unchangedTail = previousText.slice(coveredPreviousLength);
-  const { activeLine, generatedBeforeActiveLine } = splitStreamingActiveLine(generatedText);
-  const tokens: DiffToken[] = [];
-
-  pushDiffToken(tokens, "same", samePrefix, true);
-  pushDiffToken(tokens, "added", generatedBeforeActiveLine, true);
-  tokens.push({ type: "active", value: activeLine });
-  pushDiffToken(tokens, "same", unchangedTail, true);
-
-  return tokens;
+  return `${previousText.slice(0, prefixLength)}${currentPartialText.slice(prefixLength)}${previousText.slice(coveredPreviousLength)}`;
 }
 
-function splitStreamingActiveLine(generatedText: string) {
-  const lastLineBreakIndex = Math.max(generatedText.lastIndexOf("\n"), generatedText.lastIndexOf("\r"));
-  if (lastLineBreakIndex < 0) {
-    return { activeLine: generatedText, generatedBeforeActiveLine: "" };
-  }
-
-  return {
-    activeLine: generatedText.slice(lastLineBreakIndex + 1),
-    generatedBeforeActiveLine: generatedText.slice(0, lastLineBreakIndex + 1)
-  };
+function streamingCurrentLinePosition(previousText: string, currentPartialText: string) {
+  if (!currentPartialText || currentPartialText === previousText) return null;
+  return currentPartialText.length;
 }
 
 function revertDiffToken(value: string, tokens: DiffToken[], tokenIndex: number) {

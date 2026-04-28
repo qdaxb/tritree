@@ -1134,13 +1134,15 @@ export function TreeableApp() {
         comparisonLabels={comparisonLabels}
         comparisonSelectionCount={comparisonSelectionCount}
         draft={viewedDraft}
+        emptyStateActions={
+          canRetryDraftGeneration ? (
+            <button className="secondary-button" onClick={() => void retryDraftGeneration()} type="button">
+              重试生成
+            </button>
+          ) : null
+        }
         headerActions={
           <>
-            {canRetryDraftGeneration ? (
-              <button className="secondary-button" onClick={() => void retryDraftGeneration()} type="button">
-                重试生成
-              </button>
-            ) : null}
             <button
               aria-expanded={isSkillPanelOpen}
               className="draft-skill-button"

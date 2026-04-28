@@ -1,9 +1,31 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
+import { EditorView } from "@codemirror/view";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { LiveDraft } from "./LiveDraft";
+
+function setCodeMirrorText(textbox: HTMLElement, value: string) {
+  const view = EditorView.findFromDOM(textbox);
+  expect(view).not.toBeNull();
+
+  act(() => {
+    view?.dispatch({
+      changes: {
+        from: 0,
+        insert: value,
+        to: view.state.doc.length
+      }
+    });
+  });
+}
+
+function getCodeMirrorText(textbox: HTMLElement) {
+  const view = EditorView.findFromDOM(textbox);
+  expect(view).not.toBeNull();
+  return view?.state.doc.toString() ?? "";
+}
 
 describe("LiveDraft", () => {
   it("renders the draft even if legacy publish package data is present", () => {
@@ -73,10 +95,74 @@ describe("LiveDraft", () => {
     expect(screen.getByText("保留一句。新增一句。")).toBeInTheDocument();
   });
 
-  it("automatically renders parent-to-streaming draft diff in live diff mode", () => {
+  it("lets the current parent diff be edited directly while the diff stays visible", async () => {
     const onSave = vi.fn();
 
     render(
+      <LiveDraft
+        draft={{ title: "标题", body: "保留一句。新增一句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onSave={onSave}
+        previousDraft={{ title: "标题", body: "保留一句。删掉一句。", hashtags: ["#上级"], imagePrompt: "上级画面" }}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "对比" }));
+
+    const bodyDiffEditor = screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field");
+    expect(bodyDiffEditor).not.toBeNull();
+    const bodyTextbox = within(bodyDiffEditor as HTMLElement).getByRole("textbox", { name: "正文" });
+    expect(bodyTextbox).toHaveAttribute("contenteditable", "true");
+    expect(bodyTextbox.closest(".cm-editor")).toHaveClass("cm-merge-b");
+    expect(within(bodyDiffEditor as HTMLElement).getByText(/新增/)).toBeInTheDocument();
+    expect(within(bodyDiffEditor as HTMLElement).getByText(/删掉/)).toBeInTheDocument();
+    expect((bodyDiffEditor as HTMLElement).querySelector(".cm-deletedText, .cm-deletedLine")).not.toBeNull();
+    expect((bodyDiffEditor as HTMLElement).querySelector(".cm-changedText, .cm-insertedLine, .cm-changedLine")).not.toBeNull();
+
+    setCodeMirrorText(bodyTextbox, "保留一句。我直接改。");
+
+    await userEvent.click(screen.getByRole("button", { name: "保存草稿" }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      title: "标题",
+      body: "保留一句。我直接改。",
+      hashtags: ["#当前"],
+      imagePrompt: "当前画面"
+    });
+    expect(screen.queryByRole("textbox", { name: "正文" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "对比" })).toBeInTheDocument();
+  });
+
+  it("exits the current parent diff draft without saving local edits", async () => {
+    const onSave = vi.fn();
+
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "保留一句。新增一句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onSave={onSave}
+        previousDraft={{ title: "标题", body: "保留一句。删掉一句。", hashtags: ["#上级"], imagePrompt: "上级画面" }}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "对比" }));
+    setCodeMirrorText(screen.getByRole("textbox", { name: "正文" }), "我只是临时看看。");
+
+    await userEvent.click(screen.getByRole("button", { name: "退出草稿" }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "正文" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "对比" })).toBeInTheDocument();
+    expect(screen.getByText("保留一句。新增一句。")).toBeInTheDocument();
+  });
+
+  it("automatically renders parent-to-streaming draft diff in live diff mode", () => {
+    const onSave = vi.fn();
+    const { container } = render(
       <LiveDraft
         draft={{ title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
         isBusy
@@ -89,35 +175,18 @@ describe("LiveDraft", () => {
       />
     );
 
+    const bodyTextbox = screen.getByRole("textbox", { name: "正文" });
     expect(screen.getByText("AI 正在生成下一版草稿...")).toBeInTheDocument();
-    expect(screen.getByText("新增句")).toHaveClass("draft-diff-token--added");
-    expect(screen.getByText("#旧")).toHaveClass("draft-diff-token--removed");
+    expect(bodyTextbox).toHaveAttribute("contenteditable", "false");
+    expect(bodyTextbox.closest(".cm-editor")).toHaveClass("cm-merge-b");
+    expect(container.querySelector(".draft-body .draft-diff-token")).toBeNull();
+    expect(container.querySelector(".cm-changedText, .cm-insertedLine, .cm-changedLine")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "对比" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "编辑" })).not.toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: /选择差异/ })).toHaveLength(0);
   });
 
-  it("marks the current writing point with a cursor while live text is streaming", () => {
-    render(
-      <LiveDraft
-        draft={{ title: "旧标题", body: "旧正文新增句", hashtags: ["#旧"], imagePrompt: "旧图" }}
-        isBusy
-        isLiveDiff
-        isLiveDiffStreaming
-        previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
-        publishPackage={null}
-      />
-    );
-
-    const cursor = screen.getByLabelText("正在生成到这里");
-    const currentLine = cursor.closest(".draft-stream-current-line");
-    expect(cursor).toHaveClass("draft-stream-cursor");
-    expect(cursor.closest(".draft-body")).not.toBeNull();
-    expect(currentLine).not.toBeNull();
-    expect(currentLine).toHaveTextContent("新增句");
-  });
-
-  it("keeps ungenerated parent body text unchanged during streaming", () => {
+  it("keeps ungenerated parent body text in the read-only merge editor during streaming", () => {
     render(
       <LiveDraft
         draft={{ title: "旧标题", body: "已经生成的开头。", hashtags: ["#旧"], imagePrompt: "旧图" }}
@@ -134,15 +203,13 @@ describe("LiveDraft", () => {
       />
     );
 
-    expect(screen.getByText("已经生成的开头。")).toHaveClass("draft-diff-token--same");
-    expect(screen.getByText("还没有生成到的旧内容。")).toHaveClass("draft-diff-token--same");
-    expect(screen.getByLabelText("正在生成到这里").closest(".draft-stream-current-line")?.nextElementSibling).toHaveTextContent(
-      "还没有生成到的旧内容。"
-    );
-    expect(screen.getByText("还没有生成到的旧内容。")).not.toHaveClass("draft-diff-token--removed");
+    const bodyTextbox = screen.getByRole("textbox", { name: "正文" });
+    expect(bodyTextbox).toHaveAttribute("contenteditable", "false");
+    expect(getCodeMirrorText(bodyTextbox)).toBe("已经生成的开头。还没有生成到的旧内容。");
+    expect(screen.queryByLabelText("正在生成到这里")).not.toBeInTheDocument();
   });
 
-  it("places the streaming cursor before parent text before any new body text arrives", () => {
+  it("shows the parent body in the merge editor before any new body text arrives", () => {
     render(
       <LiveDraft
         draft={{ title: "旧标题", body: "还没有开始生成的父稿。", hashtags: ["#旧"], imagePrompt: "旧图" }}
@@ -154,13 +221,11 @@ describe("LiveDraft", () => {
       />
     );
 
-    const cursorLine = screen.getByLabelText("正在生成到这里").closest(".draft-stream-current-line");
-    expect(cursorLine).not.toBeNull();
-    expect(cursorLine?.nextElementSibling).toHaveTextContent("还没有开始生成的父稿。");
-    expect(screen.getByText("还没有开始生成的父稿。")).toHaveClass("draft-diff-token--same");
+    expect(getCodeMirrorText(screen.getByRole("textbox", { name: "正文" }))).toBe("还没有开始生成的父稿。");
+    expect(screen.queryByLabelText("正在生成到这里")).not.toBeInTheDocument();
   });
 
-  it("shows only generated body changes before the unchanged parent tail while streaming", () => {
+  it("shows generated body changes before the unchanged parent tail in the merge editor", () => {
     render(
       <LiveDraft
         draft={{ title: "旧标题", body: "已经生成的开头。新写出来的一句", hashtags: ["#旧"], imagePrompt: "旧图" }}
@@ -177,17 +242,81 @@ describe("LiveDraft", () => {
       />
     );
 
-    expect(screen.getByText("新写出来的一句")).toHaveClass("draft-diff-token--added");
-    expect(screen.getByText("新写出来的一句").closest(".draft-stream-current-line")).not.toBeNull();
-    expect(screen.getByText("旧内容。")).toHaveClass("draft-diff-token--same");
-    expect(screen.getByLabelText("正在生成到这里").closest(".draft-stream-current-line")?.nextElementSibling).toHaveTextContent(
-      "旧内容。"
-    );
-    expect(screen.getByText("旧内容。")).not.toHaveClass("draft-diff-token--removed");
-    expect(screen.queryByText("还没有生成到的")).not.toBeInTheDocument();
+    const bodyTextbox = screen.getByRole("textbox", { name: "正文" });
+    expect(getCodeMirrorText(bodyTextbox)).toBe("已经生成的开头。新写出来的一句旧内容。");
+    expect(screen.getByText("新写出来的一句")).toHaveClass("cm-changedText");
+    expect(getCodeMirrorText(bodyTextbox)).not.toContain("还没有生成到的");
   });
 
-  it("progressively consumes the old body placeholder when the new stream starts from different text", () => {
+  it("highlights the current body line while text is streaming", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "旧标题", body: "第一行。\n第二行正在生成", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        isBusy
+        isLiveDiff
+        isLiveDiffStreaming
+        previousDraft={{ title: "旧标题", body: "第一行。\n第二行旧内容。", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    const bodyDiffEditor = screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field");
+    expect(bodyDiffEditor).not.toBeNull();
+    const currentLine = [...(bodyDiffEditor as HTMLElement).querySelectorAll(".cm-line")].find((line) =>
+      line.textContent?.includes("第二行正在生成")
+    );
+    expect(currentLine).toHaveClass("cm-stream-current-line");
+  });
+
+  it("does not show the previous final paragraph as deleted when streaming appends a new paragraph", () => {
+    const unchangedFinalParagraph =
+      "太阳斜下来，浅金色的浪一层一层推过来。光脚踩进去，凉得缩了一下，又踩进去。沙滩上有人放风筝，线很长，风筝很小。";
+    const previousBody = `海水是下午四点才开始变金的。\n\n${unchangedFinalParagraph}`;
+    const currentBody = `${previousBody}\n\n风把沙子吹进脚趾缝，我没抖掉。`;
+
+    render(
+      <LiveDraft
+        draft={{ title: "旧标题", body: currentBody, hashtags: ["#旧"], imagePrompt: "旧图" }}
+        isBusy
+        isLiveDiff
+        isLiveDiffStreaming
+        previousDraft={{ title: "旧标题", body: previousBody, hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    const bodyDiffEditor = screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field");
+    expect(bodyDiffEditor).not.toBeNull();
+    expect(getCodeMirrorText(screen.getByRole("textbox", { name: "正文" }))).toBe(currentBody);
+    expect((bodyDiffEditor as HTMLElement).querySelector(".cm-deletedChunk")?.textContent).not.toContain(
+      unchangedFinalParagraph
+    );
+    expect(within(bodyDiffEditor as HTMLElement).getByText("风把沙子吹进脚趾缝，我没抖掉。")).toHaveClass("cm-changedText");
+  });
+
+  it("does not mix deleted and inserted body text inside the same editor line", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "旧标题", body: "第一句。新句。第三句。", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        isBusy={false}
+        isEditable
+        isLiveDiff
+        onSave={vi.fn()}
+        previousDraft={{ title: "旧标题", body: "第一句。旧句。第三句。", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    const bodyDiffEditor = screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field");
+    expect(bodyDiffEditor).not.toBeNull();
+    const mixedLines = [...(bodyDiffEditor as HTMLElement).querySelectorAll(".cm-line")].filter((line) => {
+      const text = line.textContent ?? "";
+      return text.includes("旧句") && text.includes("新句");
+    });
+    expect(mixedLines).toHaveLength(0);
+  });
+
+  it("progressively consumes the old body placeholder inside the merge editor when the new stream starts from different text", () => {
     render(
       <LiveDraft
         draft={{ title: "新标题", body: "新的第一句。新的第二句。", hashtags: ["#旧"], imagePrompt: "旧图" }}
@@ -199,13 +328,13 @@ describe("LiveDraft", () => {
       />
     );
 
-    expect(screen.getByText("新的第一句。新的第二句。")).toHaveClass("draft-diff-token--added");
-    expect(screen.getByText("新的第一句。新的第二句。").closest(".draft-stream-current-line")).not.toBeNull();
+    const bodyTextbox = screen.getByRole("textbox", { name: "正文" });
+    expect(getCodeMirrorText(bodyTextbox)).toBe("新的第一句。新的第二句。旧的第三句。");
+    expect(screen.getByText("新的第一句。新的第二句")).toHaveClass("cm-changedText");
     expect(screen.queryByText("旧的第一句。旧的第二句。旧的第三句。")).not.toBeInTheDocument();
-    expect(screen.getByText("旧的第三句。")).toHaveClass("draft-diff-token--same");
   });
 
-  it("moves the active streaming highlight to the image prompt once image text is arriving", () => {
+  it("uses the image prompt merge editor once image text is arriving", () => {
     render(
       <LiveDraft
         draft={{ title: "旧标题", body: "旧正文新增句", hashtags: ["#旧"], imagePrompt: "正在生成的配图提示" }}
@@ -217,13 +346,33 @@ describe("LiveDraft", () => {
       />
     );
 
-    expect(screen.getByText("新增句")).toHaveClass("draft-diff-token--added");
-    expect(screen.getByText("新增句").closest(".draft-stream-current-line")).toBeNull();
-    expect(screen.getByText("正在生成的配图提示").closest(".draft-stream-current-line")).not.toBeNull();
-    expect(screen.getByLabelText("正在生成到这里").closest(".image-prompt")).not.toBeNull();
+    const bodyTextbox = screen.getByRole("textbox", { name: "正文" });
+    const imagePromptTextbox = screen.getByRole("textbox", { name: "配图提示" });
+    expect(getCodeMirrorText(bodyTextbox)).toBe("旧正文新增句");
+    expect(getCodeMirrorText(imagePromptTextbox)).toBe("正在生成的配图提示");
+    expect(screen.getByText("新增句")).toHaveClass("cm-changedText");
+    expect(screen.getByText("正在生成的配图提示")).toHaveClass("cm-changedText");
+    expect(screen.queryByLabelText("正在生成到这里")).not.toBeInTheDocument();
   });
 
-  it("keeps completed body diff stable when the image prompt stream has started", () => {
+  it("does not render hashtags with a CodeMirror diff field during streaming", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "旧标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
+        isBusy
+        isLiveDiff
+        isLiveDiffStreaming
+        previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    expect(screen.queryByRole("textbox", { name: "话题" })).not.toBeInTheDocument();
+    expect(screen.getByText("#旧")).toHaveClass("draft-diff-token--removed");
+    expect(screen.getByText("#新")).toHaveClass("draft-diff-token--added");
+  });
+
+  it("keeps completed body diff stable in CodeMirror when the image prompt stream has started", () => {
     render(
       <LiveDraft
         draft={{ title: "旧标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "" }}
@@ -236,61 +385,57 @@ describe("LiveDraft", () => {
       />
     );
 
-    expect(screen.getByText("新增句")).toHaveClass("draft-diff-token--added");
-    expect(screen.getByText("新增句").closest(".draft-stream-current-line")).toBeNull();
-    expect(screen.getByText("旧尾巴")).toHaveClass("draft-diff-token--removed");
-    expect(screen.getByLabelText("正在生成到这里").closest(".image-prompt")).not.toBeNull();
-    expect(screen.getByText("旧图")).toHaveClass("draft-diff-token--same");
+    expect(getCodeMirrorText(screen.getByRole("textbox", { name: "正文" }))).toBe("旧正文新增句");
+    expect(getCodeMirrorText(screen.getByRole("textbox", { name: "配图提示" }))).toBe("旧图");
+    expect(screen.getByText("旧正文新增句")).toHaveClass("cm-changedText");
+    expect(screen.queryByLabelText("正在生成到这里")).not.toBeInTheDocument();
   });
 
-  it("scrolls the active streaming line into view as text arrives", () => {
-    const originalScrollIntoView = Element.prototype.scrollIntoView;
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
+  it("updates the read-only merge editor as streaming text changes", () => {
+    const previousDraft = {
+      title: "旧标题",
+      body: "已经生成的开头。还没有生成到的旧内容。",
+      hashtags: ["#旧"],
+      imagePrompt: "旧图"
+    };
+    const { rerender } = render(
+      <LiveDraft
+        draft={{ title: "旧标题", body: "已经生成的开头。", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        isBusy
+        isLiveDiff
+        isLiveDiffStreaming
+        previousDraft={previousDraft}
+        publishPackage={null}
+      />
+    );
 
-    try {
-      render(
-        <LiveDraft
-          draft={{ title: "旧标题", body: "已经生成的开头。新写出来的一句", hashtags: ["#旧"], imagePrompt: "旧图" }}
-          isBusy
-          isLiveDiff
-          isLiveDiffStreaming
-          previousDraft={{
-            title: "旧标题",
-            body: "已经生成的开头。还没有生成到的旧内容。",
-            hashtags: ["#旧"],
-            imagePrompt: "旧图"
-          }}
-          publishPackage={null}
-        />
-      );
+    const bodyTextbox = screen.getByRole("textbox", { name: "正文" });
+    expect(getCodeMirrorText(bodyTextbox)).toBe("已经生成的开头。还没有生成到的旧内容。");
 
-      expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
-    } finally {
-      Element.prototype.scrollIntoView = originalScrollIntoView;
-    }
+    rerender(
+      <LiveDraft
+        draft={{ title: "旧标题", body: "已经生成的开头。新写出来的一句", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        isBusy
+        isLiveDiff
+        isLiveDiffStreaming
+        previousDraft={previousDraft}
+        publishPackage={null}
+      />
+    );
+
+    expect(getCodeMirrorText(bodyTextbox)).toBe("已经生成的开头。新写出来的一句旧内容。");
   });
 
-  it("uses a prominent streaming cursor style", () => {
+  it("uses CodeMirror diff field layout for streaming diffs", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
-    const cursorRule = css.match(/\.draft-stream-cursor\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const lineRule = css.match(/\.draft-stream-current-line\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const fullLineRule = css.match(/\.draft-stream-current-line::before\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const lineAddedRule =
-      css.match(/\.draft-stream-current-line \.draft-diff-token--added\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const fieldRule = css.match(/\.draft-cm-diff-field\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const labelRule = css.match(/\.draft-cm-diff-field__label\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const titleRule = css.match(/\.draft-cm-diff-field--title \.cm-editor\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
-    expect(cursorRule).toContain("width: 6px");
-    expect(cursorRule).toContain("box-shadow: 0 0 0 3px");
-    expect(lineRule).toContain("position: relative");
-    expect(lineRule).toContain("background:");
-    expect(lineRule).toContain("box-shadow:");
-    expect(lineRule).toContain("outline:");
-    expect(lineRule).toContain("box-decoration-break: clone");
-    expect(fullLineRule).toContain("left: -100vmax");
-    expect(fullLineRule).toContain("right: -100vmax");
-    expect(fullLineRule).toContain("background:");
-    expect(lineAddedRule).toContain("background:");
-    expect(lineAddedRule).not.toContain("transparent");
+    expect(fieldRule).toContain("display: grid");
+    expect(fieldRule).toContain("gap: 6px");
+    expect(labelRule).toContain("font-weight: 850");
+    expect(titleRule).toContain("font-weight: 850");
   });
 
   it("lets generated diff review be dismissed after streaming completes", async () => {
@@ -314,6 +459,45 @@ describe("LiveDraft", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "关闭对比" }));
 
+    expect(onDismissLiveDiff).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets completed generated diff review be edited directly without opening another editor", async () => {
+    const onDismissLiveDiff = vi.fn();
+    const onSave = vi.fn();
+
+    render(
+      <LiveDraft
+        draft={{ title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
+        isBusy={false}
+        isEditable
+        isLiveDiff
+        onDismissLiveDiff={onDismissLiveDiff}
+        onSave={onSave}
+        previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: "编辑" })).not.toBeInTheDocument();
+    const bodyDiffEditor = screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field");
+    expect(bodyDiffEditor).not.toBeNull();
+    const bodyTextbox = within(bodyDiffEditor as HTMLElement).getByRole("textbox", { name: "正文" });
+    expect(bodyTextbox).toHaveAttribute("contenteditable", "true");
+    expect(bodyTextbox.closest(".cm-editor")).toHaveClass("cm-merge-b");
+    expect(within(bodyDiffEditor as HTMLElement).getByText(/新增句/)).toBeInTheDocument();
+    expect((bodyDiffEditor as HTMLElement).querySelector(".cm-changedText, .cm-insertedLine, .cm-changedLine")).not.toBeNull();
+
+    setCodeMirrorText(screen.getByRole("textbox", { name: "标题" }), "我改后的标题");
+    setCodeMirrorText(bodyTextbox, "旧正文新增句，我又改了一刀。");
+    await userEvent.click(screen.getByRole("button", { name: "保存草稿" }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      title: "我改后的标题",
+      body: "旧正文新增句，我又改了一刀。",
+      hashtags: ["#新"],
+      imagePrompt: "新图"
+    });
     expect(onDismissLiveDiff).toHaveBeenCalledTimes(1);
   });
 
@@ -346,9 +530,10 @@ describe("LiveDraft", () => {
       />
     );
 
-    expect(screen.queryByLabelText("正文")).not.toBeInTheDocument();
+    expect(document.querySelector(".draft-editor textarea")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "正文" })).toHaveAttribute("contenteditable", "false");
     expect(screen.queryByRole("button", { name: "编辑" })).not.toBeInTheDocument();
-    expect(screen.getByText("新增句")).toHaveClass("draft-diff-token--added");
+    expect(screen.getByText("新增句")).toHaveClass("cm-changedText");
   });
 
   it("renders an arbitrary node-to-node comparison when the app provides one", async () => {
@@ -463,6 +648,24 @@ describe("LiveDraft", () => {
     expect(scrollArea).not.toContainElement(screen.getByText("技能弹层"));
   });
 
+  it("renders empty-state actions in the middle of the draft area instead of the header", () => {
+    const { container } = render(
+      <LiveDraft
+        draft={null}
+        emptyStateActions={<button type="button">重试生成</button>}
+        headerActions={<button type="button">技能</button>}
+        isBusy={false}
+        publishPackage={null}
+      />
+    );
+
+    const headerActions = container.querySelector(".draft-panel__actions");
+    const emptyState = container.querySelector(".draft-empty-state");
+    expect(headerActions).not.toContainElement(screen.getByRole("button", { name: "重试生成" }));
+    expect(emptyState).toContainElement(screen.getByRole("button", { name: "重试生成" }));
+    expect(emptyState).toHaveTextContent("开始创作后，草稿会在这里同步更新。");
+  });
+
   it("lets the current draft be edited and saved", async () => {
     const onSave = vi.fn();
 
@@ -479,7 +682,7 @@ describe("LiveDraft", () => {
     await userEvent.click(screen.getByRole("button", { name: "编辑" }));
     await userEvent.clear(screen.getByLabelText("正文"));
     await userEvent.type(screen.getByLabelText("正文"), "Edited body");
-    await userEvent.click(screen.getByRole("button", { name: "保存为自定义编辑" }));
+    await userEvent.click(screen.getByRole("button", { name: "保存草稿" }));
 
     expect(onSave).toHaveBeenCalledWith({
       title: "Draft",
@@ -489,7 +692,31 @@ describe("LiveDraft", () => {
     });
   });
 
-  it("lets a comparison diff token be reverted and saved without entering a separate editor", async () => {
+  it("exits the current draft editor without saving local edits", async () => {
+    const onSave = vi.fn();
+
+    render(
+      <LiveDraft
+        draft={{ title: "Draft", body: "Draft body", hashtags: ["#draft"], imagePrompt: "draft image" }}
+        isBusy={false}
+        isEditable
+        onSave={onSave}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+    await userEvent.clear(screen.getByLabelText("正文"));
+    await userEvent.type(screen.getByLabelText("正文"), "Unsaved body");
+    await userEvent.click(screen.getByRole("button", { name: "退出草稿" }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("正文")).not.toBeInTheDocument();
+    expect(screen.getByText("Draft body")).toBeInTheDocument();
+  });
+
+  it("lets a comparison diff editor be changed and saved without entering a separate editor", async () => {
+    const onCancelComparison = vi.fn();
     const onSave = vi.fn();
 
     render(
@@ -503,30 +730,21 @@ describe("LiveDraft", () => {
         isBusy={false}
         isComparisonMode
         isEditable
-        onCancelComparison={vi.fn()}
+        onCancelComparison={onCancelComparison}
         onSave={onSave}
         publishPackage={null}
       />
     );
 
     expect(screen.queryByRole("button", { name: "编辑对比" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "撤销新增：新增" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /选择差异/ })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "选择差异：新增" }));
-    const actionPopover = screen.getByRole("button", { name: "撤销新增：新增" }).closest(".draft-diff-token-popover");
-    expect(actionPopover).toBeInTheDocument();
-    expect(actionPopover?.parentElement).toBe(document.body);
-    await userEvent.click(screen.getByRole("button", { name: "关闭差异操作" }));
-    expect(screen.queryByRole("button", { name: "撤销新增：新增" })).not.toBeInTheDocument();
+    const bodyTextbox = screen.getByRole("textbox", { name: "正文" });
+    expect(bodyTextbox.closest(".cm-editor")).toHaveClass("cm-merge-b");
+    expect(screen.getByText("新增")).toHaveClass("cm-changedText");
 
-    await userEvent.click(screen.getByRole("button", { name: "选择差异：新增" }));
-    expect(screen.getByRole("button", { name: "撤销新增：新增" })).toBeInTheDocument();
-    await userEvent.click(document.body);
-    expect(screen.queryByRole("button", { name: "撤销新增：新增" })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "选择差异：新增" }));
-    await userEvent.click(screen.getByRole("button", { name: "撤销新增：新增" }));
-    await userEvent.click(screen.getByRole("button", { name: "保存为自定义编辑" }));
+    setCodeMirrorText(bodyTextbox, "保留");
+    await userEvent.click(screen.getByRole("button", { name: "保存草稿" }));
 
     expect(onSave).toHaveBeenCalledWith({
       title: "新标题",
@@ -534,9 +752,40 @@ describe("LiveDraft", () => {
       hashtags: ["#新"],
       imagePrompt: "新图"
     });
+    expect(onCancelComparison).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the diff action popover anchored while the draft scrolls", async () => {
+  it("exits a comparison draft editor without saving local edits", async () => {
+    const onCancelComparison = vi.fn();
+    const onSave = vi.fn();
+
+    render(
+      <LiveDraft
+        comparisonDrafts={{
+          from: { title: "旧标题", body: "保留", hashtags: ["#旧"], imagePrompt: "旧图" },
+          to: { title: "新标题", body: "保留新增", hashtags: ["#新"], imagePrompt: "新图" }
+        }}
+        comparisonLabels={{ from: "第 1 轮 · 旧", to: "第 2 轮 · 新" }}
+        draft={{ title: "新标题", body: "保留新增", hashtags: ["#新"], imagePrompt: "新图" }}
+        isBusy={false}
+        isComparisonMode
+        isEditable
+        onCancelComparison={onCancelComparison}
+        onSave={onSave}
+        publishPackage={null}
+      />
+    );
+
+    const bodyTextbox = screen.getByRole("textbox", { name: "正文" });
+    setCodeMirrorText(bodyTextbox, "我临时改了一版");
+
+    await userEvent.click(screen.getByRole("button", { name: "退出草稿" }));
+
+    expect(onCancelComparison).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("keeps editable comparisons inside CodeMirror instead of opening token popovers", () => {
     render(
       <LiveDraft
         comparisonDrafts={{
@@ -554,20 +803,8 @@ describe("LiveDraft", () => {
       />
     );
 
-    const diffToken = screen.getByRole("button", { name: "选择差异：新增" });
-    const rect = vi
-      .spyOn(diffToken, "getBoundingClientRect")
-      .mockReturnValueOnce({ bottom: 100, left: 24, right: 64, top: 80 } as DOMRect)
-      .mockReturnValueOnce({ bottom: 56, left: 24, right: 64, top: 36 } as DOMRect);
-
-    await userEvent.click(diffToken);
-
-    const actionPopover = screen.getByRole("button", { name: "撤销新增：新增" }).closest(".draft-diff-token-popover");
-    expect(actionPopover).toHaveStyle({ left: "24px", top: "106px" });
-
-    fireEvent.scroll(document.querySelector(".draft-panel__scroll") as Element);
-
-    expect(actionPopover).toHaveStyle({ left: "24px", top: "62px" });
-    rect.mockRestore();
+    expect(screen.getByRole("textbox", { name: "正文" }).closest(".cm-editor")).toHaveClass("cm-merge-b");
+    expect(screen.queryByRole("button", { name: /选择差异/ })).not.toBeInTheDocument();
+    expect(document.querySelector(".draft-diff-token-popover")).not.toBeInTheDocument();
   });
 });
