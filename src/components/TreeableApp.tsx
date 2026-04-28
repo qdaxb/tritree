@@ -281,6 +281,16 @@ function replaceDraftSelection(draft: Draft, selectionStart: number, selectionEn
   };
 }
 
+function isValidDraftSelectionRewriteRequest(request: DraftSelectionRewriteRequest) {
+  const { body } = request.draft;
+  return (
+    request.selectionStart >= 0 &&
+    request.selectionEnd >= request.selectionStart &&
+    request.selectionEnd <= body.length &&
+    body.slice(request.selectionStart, request.selectionEnd) === request.selectedText
+  );
+}
+
 function formatComparisonNodeLabel(node: TreeNode, nodesById: Map<string, TreeNode>) {
   const incomingLabel = incomingOptionLabelForNode(node, nodesById) ?? node.roundIntent;
   return `第 ${node.roundIndex} 轮 · ${incomingLabel}`;
@@ -951,6 +961,11 @@ export function TreeableApp() {
     setIsBusy(true);
     setMessage("");
     try {
+      if (!isValidDraftSelectionRewriteRequest(request)) {
+        setMessage("选中文本已经变化，请重新选择。");
+        return;
+      }
+
       const response = await fetch(`/api/sessions/${sessionState.session.id}/draft/rewrite-selection`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

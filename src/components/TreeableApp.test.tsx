@@ -156,6 +156,26 @@ vi.mock("@/components/draft/LiveDraft", () => ({
         </button>
         <button
           onClick={() =>
+            props.onRewriteSelection?.({
+              draft: {
+                title: props.draft?.title ?? "Draft",
+                body: "重复句。目标句已经变了。重复句。",
+                hashtags: props.draft?.hashtags ?? [],
+                imagePrompt: props.draft?.imagePrompt ?? ""
+              },
+              field: "body",
+              selectedText: "目标句。",
+              selectionStart: 4,
+              selectionEnd: 8,
+              instruction: "补一个细节"
+            })
+          }
+          type="button"
+        >
+          rewrite stale selection
+        </button>
+        <button
+          onClick={() =>
             props.onSave?.({
               title: props.draft?.title ?? "Edited",
               body: "Edited from mock",
@@ -1987,5 +2007,32 @@ describe("TreeableApp", () => {
       expect(fetchMock).toHaveBeenNthCalledWith(5, "/api/sessions/session-1/draft", expect.objectContaining({ method: "POST" }));
       expect(JSON.parse(fetchMock.mock.calls[4][1].body as string).draft.body).toBe("重复句。目标句加入细节。重复句。");
     });
+  });
+
+  it("rejects stale selected text before rewriting or saving", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("live-draft");
+    await userEvent.click(screen.getByRole("button", { name: "rewrite stale selection" }));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("选中文本已经变化，请重新选择。");
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/sessions/session-1/draft/rewrite-selection",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/sessions/session-1/draft",
+      expect.objectContaining({ method: "POST" })
+    );
   });
 });
