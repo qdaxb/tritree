@@ -8,6 +8,10 @@ import { DraftSchema } from "@/lib/domain";
 
 export const runtime = "nodejs";
 
+const ParamsSchema = z.object({
+  sessionId: z.string().min(1)
+});
+
 const RewriteSelectionBodySchema = z.object({
   nodeId: z.string().min(1),
   draft: DraftSchema,
@@ -17,8 +21,18 @@ const RewriteSelectionBodySchema = z.object({
 });
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
-  const { sessionId } = await context.params;
+  let params: z.infer<typeof ParamsSchema>;
   let body: z.infer<typeof RewriteSelectionBodySchema>;
+
+  try {
+    params = ParamsSchema.parse(await context.params);
+  } catch (error) {
+    if (isBadRequestError(error)) {
+      return badRequestResponse(error);
+    }
+
+    return NextResponse.json({ error: "请求内容格式不正确。" }, { status: 400 });
+  }
 
   try {
     body = RewriteSelectionBodySchema.parse(await request.json());
@@ -31,7 +45,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   }
 
   const repository = getRepository();
-  const state = repository.getSessionState(sessionId);
+  const state = repository.getSessionState(params.sessionId);
   if (!state) {
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
   }

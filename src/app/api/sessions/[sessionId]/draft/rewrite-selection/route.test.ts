@@ -113,6 +113,26 @@ describe("POST /api/sessions/:sessionId/draft/rewrite-selection", () => {
     expect(rewriteSelectedDraftTextMock).not.toHaveBeenCalled();
   });
 
+  it("rejects empty session params before reading the repository", async () => {
+    const response = await POST(
+      new Request("http://test.local/api/sessions//draft/rewrite-selection", {
+        method: "POST",
+        body: JSON.stringify({
+          nodeId: "node-1",
+          draft: state.currentDraft,
+          field: "body",
+          selectedText: "第二句。",
+          instruction: "补真实细节"
+        })
+      }),
+      { params: Promise.resolve({ sessionId: "" }) }
+    );
+
+    expect(response.status).toBe(400);
+    expect(getRepositoryMock).not.toHaveBeenCalled();
+    expect(rewriteSelectedDraftTextMock).not.toHaveBeenCalled();
+  });
+
   it("returns 404 for a missing target node", async () => {
     getRepositoryMock.mockReturnValue({ getSessionState: vi.fn().mockReturnValue(state) });
 
