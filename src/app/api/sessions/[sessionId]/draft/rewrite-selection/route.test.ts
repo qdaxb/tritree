@@ -92,6 +92,33 @@ describe("POST /api/sessions/:sessionId/draft/rewrite-selection", () => {
     );
   });
 
+  it("preserves selected body text exactly while validating trimmed content", async () => {
+    getRepositoryMock.mockReturnValue({ getSessionState: vi.fn().mockReturnValue(state) });
+    rewriteSelectedDraftTextMock.mockResolvedValue({ replacementText: " 第二句加入一个排期会细节。 " });
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/draft/rewrite-selection", {
+        method: "POST",
+        body: JSON.stringify({
+          nodeId: "node-1",
+          draft: state.currentDraft,
+          field: "body",
+          selectedText: " 第二句。 ",
+          instruction: "补真实细节"
+        })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(rewriteSelectedDraftTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedText: " 第二句。 "
+      }),
+      expect.any(Object)
+    );
+  });
+
   it("rejects unsupported fields", async () => {
     getRepositoryMock.mockReturnValue({ getSessionState: vi.fn().mockReturnValue(state) });
 
@@ -151,5 +178,32 @@ describe("POST /api/sessions/:sessionId/draft/rewrite-selection", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it("returns a public 500 error when the provider rewrite fails", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    getRepositoryMock.mockReturnValue({ getSessionState: vi.fn().mockReturnValue(state) });
+    rewriteSelectedDraftTextMock.mockRejectedValue(new Error("provider secret stack detail"));
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/draft/rewrite-selection", {
+        method: "POST",
+        body: JSON.stringify({
+          nodeId: "node-1",
+          draft: state.currentDraft,
+          field: "body",
+          selectedText: "第二句。",
+          instruction: "补真实细节"
+        })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data).toEqual({ error: "无法修改选中文本。" });
+    expect(JSON.stringify(data)).not.toContain("provider secret stack detail");
+
+    consoleErrorSpy.mockRestore();
   });
 });

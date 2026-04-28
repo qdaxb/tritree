@@ -16,7 +16,10 @@ const RewriteSelectionBodySchema = z.object({
   nodeId: z.string().min(1),
   draft: DraftSchema,
   field: z.literal("body"),
-  selectedText: z.string().trim().min(1).max(6000),
+  selectedText: z
+    .string()
+    .max(6000)
+    .refine((value) => value.trim().length > 0),
   instruction: z.string().trim().min(1).max(1200)
 });
 
