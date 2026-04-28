@@ -27,6 +27,18 @@ function getCodeMirrorText(textbox: HTMLElement) {
   return view?.state.doc.toString() ?? "";
 }
 
+function selectTextInside(element: HTMLElement, text: string) {
+  const textNode = [...element.childNodes].find((node) => node.textContent?.includes(text));
+  expect(textNode).toBeDefined();
+  const start = textNode!.textContent!.indexOf(text);
+  const range = document.createRange();
+  range.setStart(textNode!, start);
+  range.setEnd(textNode!, start + text.length);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
 describe("LiveDraft", () => {
   it("renders the draft even if legacy publish package data is present", () => {
     render(
@@ -55,6 +67,63 @@ describe("LiveDraft", () => {
 
     expect(screen.getByText("第一段").tagName.toLowerCase()).toBe("p");
     expect(screen.getByText("第二段").tagName.toLowerCase()).toBe("p");
+  });
+
+  it("opens an AI edit popover for selected body text in display mode and submits the captured range", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("重复句。目标句。重复句。"), "目标句。");
+    await userEvent.click(screen.getByText("重复句。目标句。重复句。"));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" },
+      field: "body",
+      instruction: "补一个细节",
+      selectedText: "目标句。",
+      selectionStart: 4,
+      selectionEnd: 8
+    });
+  });
+
+  it("opens an AI edit popover for selected body text in the normal editor", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "第一句。第二句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        onSave={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const bodyTextbox = screen.getByLabelText("正文") as HTMLTextAreaElement;
+    bodyTextbox.setSelectionRange(4, 8);
+    await userEvent.click(bodyTextbox);
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "更具体");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "标题", body: "第一句。第二句。", hashtags: ["#当前"], imagePrompt: "当前画面" },
+      field: "body",
+      instruction: "更具体",
+      selectedText: "第二句。",
+      selectionStart: 4,
+      selectionEnd: 8
+    });
   });
 
   it("shows a no-op generate image button with the image prompt", async () => {

@@ -1,6 +1,15 @@
 "use client";
 
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type SyntheticEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { history, historyKeymap, defaultKeymap } from "@codemirror/commands";
 import { unifiedMergeView } from "@codemirror/merge";
 import { EditorState } from "@codemirror/state";
@@ -28,6 +37,7 @@ export function LiveDraft({
   mode = "current",
   onCancelComparison,
   onDismissLiveDiff,
+  onRewriteSelection,
   onSave,
   onStartComparison,
   previousDraft = null
@@ -66,6 +76,8 @@ export function LiveDraft({
   const initialEditableDraft = comparisonDrafts?.to ?? content;
   const [diffEditDraft, setDiffEditDraft] = useState<Draft | null>(null);
   const [selectedDiffAction, setSelectedDiffAction] = useState<SelectedDiffAction | null>(null);
+  const [selectionEdit, setSelectionEdit] = useState<SelectionEditState | null>(null);
+  const [selectionInstruction, setSelectionInstruction] = useState("");
   const [editingMode, setEditingMode] = useState<"normal" | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [title, setTitle] = useState(() => resolveDraftTitle(initialEditableDraft?.title, initialEditableDraft?.body));
@@ -109,7 +121,7 @@ export function LiveDraft({
       ? streamingDisplayDraft
       : diffEditDraft ?? baseEditableDraft;
   const displayTitle = resolveDraftTitle(displayContent?.title, displayContent?.body);
-  const bodyParagraphs = splitDraftParagraphs(displayContent?.body);
+  const bodyParagraphs = splitDraftParagraphsWithOffsets(displayContent?.body);
   const isEditing = editingMode !== null && !isLiveDiff;
   const canShowParentDiff = Boolean(content && previousDraft && !isEditing);
   const canUseTreeComparison = Boolean(onStartComparison || onCancelComparison || isComparisonMode);
@@ -128,6 +140,9 @@ export function LiveDraft({
   );
   const shouldShowInlineDiff = Boolean(
     draftDiff && !isEditing && (comparisonDrafts || (showDiff && canShowParentDiff) || isLiveDiff)
+  );
+  const canUseSelectionRewrite = Boolean(
+    content && isEditable && onRewriteSelection && !isBusy && !isComparisonMode && !isLiveDiff && !shouldShowInlineDiff
   );
   const canEditCurrentDraft = Boolean(content && isEditable && !isComparisonMode && !isLiveDiff && !showDiff);
   const isMergeDiffView = Boolean(shouldShowInlineDiff && (canUseInlineDiffEditing || canUseStreamingMergeDiff));
@@ -281,6 +296,71 @@ export function LiveDraft({
 
   function generateImage() {}
 
+  function captureDisplayBodySelection(event: ReactMouseEvent<HTMLElement>) {
+    if (!canUseSelectionRewrite || !displayContent) return;
+    const selection = window.getSelection();
+    const selectedText = selection?.toString() ?? "";
+    const target = event.currentTarget;
+    const bodyStart = Number(target.dataset.bodyStart);
+    if (!selectedText.trim() || Number.isNaN(bodyStart)) return;
+    const paragraphText = target.textContent ?? "";
+    const localStart = paragraphText.indexOf(selectedText);
+    if (localStart < 0) return;
+    openSelectionEdit({
+      anchor: selectionPopoverAnchor(selection),
+      draft: displayContent,
+      selectedText,
+      selectionStart: bodyStart + localStart,
+      selectionEnd: bodyStart + localStart + selectedText.length
+    });
+  }
+
+  function preserveDisplayBodySelection(event: ReactMouseEvent<HTMLElement>) {
+    if (!canUseSelectionRewrite) return;
+    const selectedText = window.getSelection()?.toString() ?? "";
+    if (selectedText.trim()) event.preventDefault();
+  }
+
+  function captureTextareaSelection(event: SyntheticEvent<HTMLTextAreaElement>) {
+    if (!canUseSelectionRewrite) return;
+    const target = event.currentTarget;
+    if (target.selectionStart === target.selectionEnd) return;
+    const selectedText = target.value.slice(target.selectionStart, target.selectionEnd);
+    if (!selectedText.trim()) return;
+    openSelectionEdit({
+      anchor: textareaSelectionAnchor(target),
+      draft: editedDraft,
+      selectedText,
+      selectionStart: target.selectionStart,
+      selectionEnd: target.selectionEnd
+    });
+  }
+
+  function preserveTextareaSelection(event: ReactMouseEvent<HTMLTextAreaElement>) {
+    if (!canUseSelectionRewrite) return;
+    const target = event.currentTarget;
+    if (target.selectionStart !== target.selectionEnd) event.preventDefault();
+  }
+
+  function openSelectionEdit(nextSelection: SelectionEditState) {
+    setSelectionEdit(nextSelection);
+    setSelectionInstruction("");
+  }
+
+  async function submitSelectionRewrite() {
+    if (!selectionEdit || !onRewriteSelection || !selectionInstruction.trim()) return;
+    await onRewriteSelection({
+      draft: selectionEdit.draft,
+      field: "body",
+      instruction: selectionInstruction.trim(),
+      selectedText: selectionEdit.selectedText,
+      selectionStart: selectionEdit.selectionStart,
+      selectionEnd: selectionEdit.selectionEnd
+    });
+    setSelectionEdit(null);
+    setSelectionInstruction("");
+  }
+
   function setEditorFieldsFromDraft(nextDraft: Draft | null) {
     setTitle(resolveDraftTitle(nextDraft?.title, nextDraft?.body));
     setBody(nextDraft?.body ?? "");
@@ -333,7 +413,14 @@ export function LiveDraft({
             </label>
             <label>
               <span>正文</span>
-              <textarea onChange={(event) => setBody(event.target.value)} rows={10} value={body} />
+              <textarea
+                onChange={(event) => setBody(event.target.value)}
+                onMouseDown={preserveTextareaSelection}
+                onMouseUp={captureTextareaSelection}
+                onSelect={captureTextareaSelection}
+                rows={10}
+                value={body}
+              />
             </label>
             <label>
               <span>话题</span>
@@ -443,7 +530,17 @@ export function LiveDraft({
                       />
                     </p>
                   ) : (
-                    bodyParagraphs.map((paragraph, index) => <p key={`${index}-${paragraph}`}>{paragraph}</p>)
+                    bodyParagraphs.map((paragraph) => (
+                      <p
+                        data-body-end={paragraph.end}
+                        data-body-start={paragraph.start}
+                        key={`${paragraph.start}-${paragraph.text}`}
+                        onMouseDown={preserveDisplayBodySelection}
+                        onMouseUp={captureDisplayBodySelection}
+                      >
+                        {paragraph.text}
+                      </p>
+                    ))
                   )}
                 </div>
                 <div className="tag-row">
@@ -519,17 +616,72 @@ export function LiveDraft({
           </div>
         )}
       </div>
+      {selectionEdit ? (
+        <div className="draft-selection-edit" style={{ left: selectionEdit.anchor.left, top: selectionEdit.anchor.top }}>
+          <p className="draft-selection-edit__preview">{previewSelectionText(selectionEdit.selectedText)}</p>
+          <label>
+            <span>修改要求</span>
+            <textarea
+              autoFocus
+              onChange={(event) => setSelectionInstruction(event.target.value)}
+              rows={3}
+              value={selectionInstruction}
+            />
+          </label>
+          <div className="draft-selection-edit__actions">
+            <button className="secondary-button" onClick={() => setSelectionEdit(null)} type="button">
+              关闭
+            </button>
+            <button
+              className="start-button"
+              disabled={!selectionInstruction.trim()}
+              onClick={() => void submitSelectionRewrite()}
+              type="button"
+            >
+              发送修改
+            </button>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }
 
-function splitDraftParagraphs(body?: string) {
-  const paragraphs = body
-    ?.split(/\n+/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+function splitDraftParagraphsWithOffsets(body?: string) {
+  const source = body ?? "";
+  const matches = Array.from(source.matchAll(/[^\n]+/g));
+  const paragraphs = matches
+    .map((match) => {
+      const rawText = match[0];
+      const leadingWhitespace = rawText.match(/^\s*/)?.[0].length ?? 0;
+      const text = rawText.trim();
+      return {
+        end: (match.index ?? 0) + leadingWhitespace + text.length,
+        start: (match.index ?? 0) + leadingWhitespace,
+        text
+      };
+    })
+    .filter((paragraph) => paragraph.text.length > 0);
 
-  return paragraphs?.length ? paragraphs : ["第一次选择后，草稿会在这里更新。"];
+  return paragraphs.length ? paragraphs : [{ start: 0, end: 0, text: "第一次选择后，草稿会在这里更新。" }];
+}
+
+function selectionPopoverAnchor(selection: Selection | null) {
+  const rect = selection?.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null;
+  return {
+    left: Math.max(12, rect?.left ?? 24),
+    top: Math.max(12, (rect?.bottom ?? 24) + 8)
+  };
+}
+
+function textareaSelectionAnchor(textarea: HTMLTextAreaElement) {
+  const rect = textarea.getBoundingClientRect();
+  return { left: rect.left + 12, top: rect.top + 36 };
+}
+
+function previewSelectionText(value: string) {
+  const preview = value.replace(/\s+/g, " ").trim();
+  return Array.from(preview).slice(0, 48).join("");
 }
 
 function parseHashtags(value: string) {
@@ -546,6 +698,14 @@ type DiffToken = {
 
 type DiffField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDiffStreamingField = Extract<DiffField, "body" | "imagePrompt">;
+
+type SelectionEditState = {
+  anchor: { left: number; top: number };
+  draft: Draft;
+  selectedText: string;
+  selectionEnd: number;
+  selectionStart: number;
+};
 
 type SelectedDiffAction = {
   anchorElement: Element;
