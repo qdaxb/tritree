@@ -109,6 +109,23 @@ export function getDirectorAuthToken(env: Record<string, string | undefined> = p
   return env.ANTHROPIC_AUTH_TOKEN ?? env.KIMI_API_KEY ?? env.MOONSHOT_API_KEY ?? "";
 }
 
+export async function createDirectorStreamHttpError(response: Response) {
+  const contentType = response.headers.get("Content-Type") ?? "";
+  const body = contentType.includes("application/json")
+    ? ((await response.json().catch(() => null)) as unknown)
+    : await response.text().catch(() => "");
+
+  if (isRecord(body) && isRecord(body.error) && typeof body.error.message === "string") {
+    return new Error(body.error.message);
+  }
+
+  if (typeof body === "string" && body.trim().length > 0) {
+    return new Error(body);
+  }
+
+  return new Error(`Kimi Anthropic-compatible API stream request failed with status ${response.status}.`);
+}
+
 function buildDirectorOptionsRequest(
   parts: DirectorInputParts,
   env: Record<string, string | undefined> = process.env
@@ -324,4 +341,8 @@ function nextNonWhitespaceChar(value: string, startIndex: number) {
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
