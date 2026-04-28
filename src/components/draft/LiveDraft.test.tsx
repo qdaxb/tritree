@@ -43,6 +43,14 @@ function selectTextInside(element: HTMLElement, text: string, occurrence = 0) {
   selection?.addRange(range);
 }
 
+function deferredPromise() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 describe("LiveDraft", () => {
   it("renders the draft even if legacy publish package data is present", () => {
     render(
@@ -98,6 +106,63 @@ describe("LiveDraft", () => {
       selectionStart: 4,
       selectionEnd: 8
     });
+  });
+
+  it("clears an open selection popover when selection rewrite becomes unavailable", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("重复句。目标句。重复句。"), "目标句。");
+    await userEvent.click(screen.getByText("重复句。目标句。重复句。"));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+
+    rerender(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    expect(screen.queryByRole("textbox", { name: "修改要求" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发送修改" })).not.toBeInTheDocument();
+    expect(onRewriteSelection).not.toHaveBeenCalled();
+  });
+
+  it("submits a selected body rewrite only once while a rewrite is pending", async () => {
+    const rewrite = deferredPromise();
+    const onRewriteSelection = vi.fn(() => rewrite.promise);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("重复句。目标句。重复句。"), "目标句。");
+    await userEvent.click(screen.getByText("重复句。目标句。重复句。"));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+
+    const sendButton = screen.getByRole("button", { name: "发送修改" });
+    await userEvent.dblClick(sendButton);
+
+    expect(onRewriteSelection).toHaveBeenCalledTimes(1);
+    expect(sendButton).toBeDisabled();
+
+    await act(async () => rewrite.resolve());
   });
 
   it("submits the selected occurrence offset for repeated body text in display mode", async () => {

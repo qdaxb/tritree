@@ -78,6 +78,8 @@ export function LiveDraft({
   const [selectedDiffAction, setSelectedDiffAction] = useState<SelectedDiffAction | null>(null);
   const [selectionEdit, setSelectionEdit] = useState<SelectionEditState | null>(null);
   const [selectionInstruction, setSelectionInstruction] = useState("");
+  const [isSelectionRewritePending, setIsSelectionRewritePending] = useState(false);
+  const selectionRewritePendingRef = useRef(false);
   const [editingMode, setEditingMode] = useState<"normal" | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [title, setTitle] = useState(() => resolveDraftTitle(initialEditableDraft?.title, initialEditableDraft?.body));
@@ -164,9 +166,15 @@ export function LiveDraft({
     setEditingMode(null);
     setDiffEditDraft(null);
     setSelectedDiffAction(null);
+    closeSelectionEdit();
     setShowDiff(false);
     setEditorFieldsFromDraft(baseEditableDraft);
   }, [baseEditableDraft?.title, baseEditableDraft?.body, baseEditableDraft?.imagePrompt, baseEditableDraft?.hashtags]);
+
+  useEffect(() => {
+    if (canUseSelectionRewrite) return;
+    closeSelectionEdit();
+  }, [canUseSelectionRewrite]);
 
   useEffect(() => {
     if (!selectedDiffAction) return;
@@ -351,18 +359,37 @@ export function LiveDraft({
     setSelectionInstruction("");
   }
 
-  async function submitSelectionRewrite() {
-    if (!selectionEdit || !onRewriteSelection || !selectionInstruction.trim()) return;
-    await onRewriteSelection({
-      draft: selectionEdit.draft,
-      field: "body",
-      instruction: selectionInstruction.trim(),
-      selectedText: selectionEdit.selectedText,
-      selectionStart: selectionEdit.selectionStart,
-      selectionEnd: selectionEdit.selectionEnd
-    });
+  function closeSelectionEdit() {
     setSelectionEdit(null);
     setSelectionInstruction("");
+  }
+
+  async function submitSelectionRewrite() {
+    if (
+      selectionRewritePendingRef.current ||
+      !canUseSelectionRewrite ||
+      !selectionEdit ||
+      !onRewriteSelection ||
+      !selectionInstruction.trim()
+    ) {
+      return;
+    }
+    selectionRewritePendingRef.current = true;
+    setIsSelectionRewritePending(true);
+    try {
+      await onRewriteSelection({
+        draft: selectionEdit.draft,
+        field: "body",
+        instruction: selectionInstruction.trim(),
+        selectedText: selectionEdit.selectedText,
+        selectionStart: selectionEdit.selectionStart,
+        selectionEnd: selectionEdit.selectionEnd
+      });
+      closeSelectionEdit();
+    } finally {
+      selectionRewritePendingRef.current = false;
+      setIsSelectionRewritePending(false);
+    }
   }
 
   function setEditorFieldsFromDraft(nextDraft: Draft | null) {
@@ -633,12 +660,12 @@ export function LiveDraft({
             />
           </label>
           <div className="draft-selection-edit__actions">
-            <button className="secondary-button" onClick={() => setSelectionEdit(null)} type="button">
+            <button className="secondary-button" onClick={closeSelectionEdit} type="button">
               关闭
             </button>
             <button
               className="start-button"
-              disabled={!selectionInstruction.trim()}
+              disabled={!selectionInstruction.trim() || isSelectionRewritePending || isBusy}
               onClick={() => void submitSelectionRewrite()}
               type="button"
             >
