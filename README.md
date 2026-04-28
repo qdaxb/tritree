@@ -148,3 +148,7 @@ npm run typecheck
 - 本项目为本地个人使用设计，不包含多用户、认证或计费功能。
 - AI 生成需要有效的 API 密钥，请确保 `.env.local` 配置正确后再启动。
 - 数据库文件包含你的创作内容，请妥善备份 `.treeable/` 目录。
+
+## License
+
+Apache License 2.0. See [LICENSE](./LICENSE).
