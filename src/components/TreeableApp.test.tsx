@@ -2009,6 +2009,24 @@ describe("TreeableApp", () => {
     });
   });
 
+  it("does not save a draft when selected text rewrite fails", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "无法修改选中文本。" }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("live-draft");
+    await userEvent.click(screen.getByRole("button", { name: "rewrite selection" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("无法修改选中文本。");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it("rejects stale selected text before rewriting or saving", async () => {
     const fetchMock = vi
       .fn()

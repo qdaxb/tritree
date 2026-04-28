@@ -139,6 +139,27 @@ describe("LiveDraft", () => {
     expect(onRewriteSelection).not.toHaveBeenCalled();
   });
 
+  it("does not show the selected text edit popover while live diff is active", async () => {
+    const onRewriteSelection = vi.fn();
+    render(
+      <LiveDraft
+        draft={{ title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
+        isBusy={false}
+        isEditable
+        isLiveDiff
+        onRewriteSelection={onRewriteSelection}
+        previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("新增句"), "新增句");
+    await userEvent.click(screen.getByText("新增句"));
+
+    expect(screen.queryByRole("textbox", { name: "修改要求" })).not.toBeInTheDocument();
+    expect(onRewriteSelection).not.toHaveBeenCalled();
+  });
+
   it("submits a selected body rewrite only once while a rewrite is pending", async () => {
     const rewrite = deferredPromise();
     const onRewriteSelection = vi.fn(() => rewrite.promise);
