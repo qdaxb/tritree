@@ -299,19 +299,23 @@ export function LiveDraft({
   function captureDisplayBodySelection(event: ReactMouseEvent<HTMLElement>) {
     if (!canUseSelectionRewrite || !displayContent) return;
     const selection = window.getSelection();
-    const selectedText = selection?.toString() ?? "";
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
     const target = event.currentTarget;
     const bodyStart = Number(target.dataset.bodyStart);
+    if (!range || !target.contains(range.startContainer) || !target.contains(range.endContainer)) return;
+    const selectedText = range.toString();
     if (!selectedText.trim() || Number.isNaN(bodyStart)) return;
-    const paragraphText = target.textContent ?? "";
-    const localStart = paragraphText.indexOf(selectedText);
-    if (localStart < 0) return;
+    const preRange = document.createRange();
+    preRange.selectNodeContents(target);
+    preRange.setEnd(range.startContainer, range.startOffset);
+    const localStart = preRange.toString().length;
+    const selectedLength = selectedText.length;
     openSelectionEdit({
       anchor: selectionPopoverAnchor(selection),
       draft: displayContent,
       selectedText,
       selectionStart: bodyStart + localStart,
-      selectionEnd: bodyStart + localStart + selectedText.length
+      selectionEnd: bodyStart + localStart + selectedLength
     });
   }
 

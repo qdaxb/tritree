@@ -27,10 +27,14 @@ function getCodeMirrorText(textbox: HTMLElement) {
   return view?.state.doc.toString() ?? "";
 }
 
-function selectTextInside(element: HTMLElement, text: string) {
+function selectTextInside(element: HTMLElement, text: string, occurrence = 0) {
   const textNode = [...element.childNodes].find((node) => node.textContent?.includes(text));
   expect(textNode).toBeDefined();
-  const start = textNode!.textContent!.indexOf(text);
+  let start = -1;
+  for (let index = 0; index <= occurrence; index += 1) {
+    start = textNode!.textContent!.indexOf(text, start + 1);
+  }
+  expect(start).toBeGreaterThanOrEqual(0);
   const range = document.createRange();
   range.setStart(textNode!, start);
   range.setEnd(textNode!, start + text.length);
@@ -96,11 +100,38 @@ describe("LiveDraft", () => {
     });
   });
 
+  it("submits the selected occurrence offset for repeated body text in display mode", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "目标句。重复句。目标句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("目标句。重复句。目标句。"), "目标句。", 1);
+    await userEvent.click(screen.getByText("目标句。重复句。目标句。"));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "标题", body: "目标句。重复句。目标句。", hashtags: ["#当前"], imagePrompt: "当前画面" },
+      field: "body",
+      instruction: "补一个细节",
+      selectedText: "目标句。",
+      selectionStart: 8,
+      selectionEnd: 12
+    });
+  });
+
   it("opens an AI edit popover for selected body text in the normal editor", async () => {
     const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
     render(
       <LiveDraft
-        draft={{ title: "标题", body: "第一句。第二句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
         isBusy={false}
         isEditable
         onRewriteSelection={onRewriteSelection}
@@ -117,10 +148,10 @@ describe("LiveDraft", () => {
     await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
 
     expect(onRewriteSelection).toHaveBeenCalledWith({
-      draft: { title: "标题", body: "第一句。第二句。", hashtags: ["#当前"], imagePrompt: "当前画面" },
+      draft: { title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" },
       field: "body",
       instruction: "更具体",
-      selectedText: "第二句。",
+      selectedText: "目标句。",
       selectionStart: 4,
       selectionEnd: 8
     });
