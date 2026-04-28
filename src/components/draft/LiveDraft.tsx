@@ -49,6 +49,14 @@ export function LiveDraft({
   mode?: "current" | "history";
   onCancelComparison?: () => void;
   onDismissLiveDiff?: () => void;
+  onRewriteSelection?: (request: {
+    draft: Draft;
+    field: "body";
+    instruction: string;
+    selectedText: string;
+    selectionEnd: number;
+    selectionStart: number;
+  }) => void | Promise<void>;
   onSave?: (draft: Draft) => void | Promise<void>;
   onStartComparison?: () => void;
   previousDraft?: Draft | null;

@@ -106,6 +106,14 @@ vi.mock("@/components/draft/LiveDraft", () => ({
     liveDiffStreamingField?: "body" | "imagePrompt" | null;
     isComparisonMode?: boolean;
     onDismissLiveDiff?: () => void;
+    onRewriteSelection?: (request: {
+      draft: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string };
+      field: "body";
+      instruction: string;
+      selectedText: string;
+      selectionEnd: number;
+      selectionStart: number;
+    }) => void | Promise<void>;
     onSave?: (draft: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string }) => void;
     onStartComparison?: () => void;
     previousDraft?: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string } | null;
@@ -125,6 +133,26 @@ vi.mock("@/components/draft/LiveDraft", () => ({
         </button>
         <button onClick={props.onDismissLiveDiff} type="button">
           dismiss generated diff
+        </button>
+        <button
+          onClick={() =>
+            props.onRewriteSelection?.({
+              draft: {
+                title: props.draft?.title ?? "Draft",
+                body: "重复句。目标句。重复句。",
+                hashtags: props.draft?.hashtags ?? [],
+                imagePrompt: props.draft?.imagePrompt ?? ""
+              },
+              field: "body",
+              selectedText: "目标句。",
+              selectionStart: 4,
+              selectionEnd: 8,
+              instruction: "补一个细节"
+            })
+          }
+          type="button"
+        >
+          rewrite selection
         </button>
         <button
           onClick={() =>
@@ -1906,6 +1934,58 @@ describe("TreeableApp", () => {
           body: JSON.stringify({ nodeId: "node-4" })
         })
       );
+    });
+  });
+
+  it("rewrites selected text and saves the updated draft for the viewed node", async () => {
+    const draftOnlyState = {
+      ...activeState,
+      session: { ...activeState.session, currentNodeId: "node-2" },
+      currentNode: { ...activeState.currentNode, id: "node-2", parentId: "node-1", options: [] },
+      currentDraft: { title: "Edited", body: "重复句。目标句加入细节。重复句。", hashtags: ["#AI"], imagePrompt: "Tree" }
+    };
+    const optionsState = {
+      ...draftOnlyState,
+      currentNode: {
+        ...draftOnlyState.currentNode,
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "deepen" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "finish" }
+        ]
+      }
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ replacementText: "目标句加入细节。" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: draftOnlyState }) })
+      .mockResolvedValueOnce(optionsNdjsonResponse(optionsState));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("live-draft");
+    await userEvent.click(screen.getByRole("button", { name: "rewrite selection" }));
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        4,
+        "/api/sessions/session-1/draft/rewrite-selection",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(JSON.parse(fetchMock.mock.calls[3][1].body as string)).toEqual(
+        expect.objectContaining({
+          nodeId: "node-1",
+          field: "body",
+          selectedText: "目标句。",
+          instruction: "补一个细节"
+        })
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(5, "/api/sessions/session-1/draft", expect.objectContaining({ method: "POST" }));
+      expect(JSON.parse(fetchMock.mock.calls[4][1].body as string).draft.body).toBe("重复句。目标句加入细节。重复句。");
     });
   });
 });

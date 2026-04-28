@@ -31,6 +31,14 @@ type DraftStreamField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDraftStreamingField = "body" | "imagePrompt";
 type StreamingDraftEntry = { nodeId: string; draft: Draft; streamingField: DraftStreamField | null };
 type StreamingOptionsEntry = { nodeId: string; options: BranchOption[] };
+type DraftSelectionRewriteRequest = {
+  draft: Draft;
+  field: "body";
+  instruction: string;
+  selectedText: string;
+  selectionEnd: number;
+  selectionStart: number;
+};
 type DraftStreamEvent =
   | { type: "draft"; draft: Draft; streamingField?: DraftStreamField | null }
   | { type: "done"; state: SessionState }
@@ -264,6 +272,13 @@ function changedDraftNodeIdsForState(state: SessionState | null) {
 function previousComparisonNodeId(entries: DraftComparisonEntry[], toNodeId: string) {
   const toIndex = entries.findIndex((entry) => entry.nodeId === toNodeId);
   return toIndex > 0 ? entries[toIndex - 1].nodeId : null;
+}
+
+function replaceDraftSelection(draft: Draft, selectionStart: number, selectionEnd: number, replacementText: string): Draft {
+  return {
+    ...draft,
+    body: `${draft.body.slice(0, selectionStart)}${replacementText}${draft.body.slice(selectionEnd)}`
+  };
 }
 
 function formatComparisonNodeLabel(node: TreeNode, nodesById: Map<string, TreeNode>) {
@@ -887,6 +902,27 @@ export function TreeableApp() {
     setMessage("");
   }
 
+  async function saveDraftForNode(draft: Draft, draftParentNodeId: string) {
+    const response = await fetch(`/api/sessions/${sessionState!.session.id}/draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: draftParentNodeId, draft })
+    });
+    const data = (await response.json()) as { state?: SessionState; error?: string };
+    if (!response.ok || !data.state) throw new Error(data.error ?? "保存草稿失败。");
+    const nextNodeId = data.state.currentNode?.id ?? null;
+    setSessionState(data.state);
+    setViewNodeId(nextNodeId);
+    setCustomOption(null);
+    setDraftComparison(null);
+    previewDraftGeneration(data.state, nextNodeId);
+    if (data.error) {
+      setMessage(apiKeyMessage(data.error));
+    }
+    await allowDraftRender();
+    await finishNodeGeneration(data.state, nextNodeId);
+  }
+
   async function saveDraft(draft: Draft) {
     if (isBusy) return;
     if (!sessionState?.currentNode) return;
@@ -895,31 +931,49 @@ export function TreeableApp() {
     setIsBusy(true);
     setMessage("");
     try {
-      const response = await fetch(`/api/sessions/${sessionState.session.id}/draft`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nodeId: draftParentNodeId, draft })
-      });
-      const data = (await response.json()) as { state?: SessionState; error?: string };
-      if (!response.ok || !data.state) throw new Error(data.error ?? "保存草稿失败。");
-      const nextNodeId = data.state.currentNode?.id ?? null;
-      setSessionState(data.state);
-      setViewNodeId(nextNodeId);
-      setCustomOption(null);
-      setDraftComparison(null);
-      previewDraftGeneration(data.state, nextNodeId);
-      if (data.error) {
-        setMessage(apiKeyMessage(data.error));
-      }
-      await allowDraftRender();
-      await finishNodeGeneration(data.state, nextNodeId);
+      await saveDraftForNode(draft, draftParentNodeId);
     } catch (error) {
       const text = error instanceof Error ? error.message : "保存草稿失败。";
-      setMessage(
-        text.includes("Kimi API Key") || text.includes("KIMI_API_KEY")
-          ? "请在 .env.local 添加 ANTHROPIC_AUTH_TOKEN 或 KIMI_API_KEY，然后重启开发服务器。"
-          : text
+      setMessage(apiKeyMessage(text));
+    } finally {
+      setGenerationStage(null);
+      setStreamingDraft(null);
+      setStreamingOptions(null);
+      setIsBusy(false);
+    }
+  }
+
+  async function rewriteDraftSelection(request: DraftSelectionRewriteRequest) {
+    if (isBusy) return;
+    if (!sessionState?.currentNode) return;
+    const draftParentNodeId = viewNodeId ?? sessionState.currentNode.id;
+    setGeneratedDiffNodeId(null);
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/sessions/${sessionState.session.id}/draft/rewrite-selection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nodeId: draftParentNodeId,
+          draft: request.draft,
+          field: request.field,
+          selectedText: request.selectedText,
+          instruction: request.instruction
+        })
+      });
+      const data = (await response.json()) as { replacementText?: string; error?: string };
+      if (!response.ok || !data.replacementText) throw new Error(data.error ?? "无法修改选中文本。");
+      const updatedDraft = replaceDraftSelection(
+        request.draft,
+        request.selectionStart,
+        request.selectionEnd,
+        data.replacementText
       );
+      await saveDraftForNode(updatedDraft, draftParentNodeId);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "无法修改选中文本。";
+      setMessage(apiKeyMessage(text));
     } finally {
       setGenerationStage(null);
       setStreamingDraft(null);
@@ -1195,6 +1249,7 @@ export function TreeableApp() {
         mode={isViewingCurrentNode ? "current" : "history"}
         onCancelComparison={cancelDraftComparison}
         onDismissLiveDiff={() => setGeneratedDiffNodeId(null)}
+        onRewriteSelection={rewriteDraftSelection}
         onSave={saveDraft}
         onStartComparison={startDraftComparison}
         previousDraft={previousDraft}
