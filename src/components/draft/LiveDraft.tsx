@@ -314,21 +314,17 @@ export function LiveDraft({
     const selection = window.getSelection();
     const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
     const target = event.currentTarget;
-    const bodyStart = Number(target.dataset.bodyStart);
     if (!range || !target.contains(range.startContainer) || !target.contains(range.endContainer)) return;
-    const selectedText = range.toString();
-    if (!selectedText.trim() || Number.isNaN(bodyStart)) return;
-    const preRange = document.createRange();
-    preRange.selectNodeContents(target);
-    preRange.setEnd(range.startContainer, range.startOffset);
-    const localStart = preRange.toString().length;
-    const selectedLength = selectedText.length;
+    const selectedRange = bodyOffsetsForDisplayRange(target, range);
+    if (!selectedRange) return;
+    const selectedText = displayContent.body.slice(selectedRange.start, selectedRange.end);
+    if (!selectedText.trim()) return;
     openSelectionEdit({
       anchor: selectionPopoverAnchor(selection),
       draft: displayContent,
       selectedText,
-      selectionStart: bodyStart + localStart,
-      selectionEnd: bodyStart + localStart + selectedLength
+      selectionStart: selectedRange.start,
+      selectionEnd: selectedRange.end
     });
   }
 
@@ -554,7 +550,11 @@ export function LiveDraft({
                     displayTitle
                   )}
                 </h2>
-                <div className="draft-body">
+                <div
+                  className="draft-body"
+                  onMouseDown={preserveDisplayBodySelection}
+                  onMouseUp={captureDisplayBodySelection}
+                >
                   {shouldShowInlineDiff && draftDiff ? (
                     <p className="draft-inline-diff">
                       <DiffTokens
@@ -571,8 +571,6 @@ export function LiveDraft({
                         data-body-end={paragraph.end}
                         data-body-start={paragraph.start}
                         key={`${paragraph.start}-${paragraph.text}`}
-                        onMouseDown={preserveDisplayBodySelection}
-                        onMouseUp={captureDisplayBodySelection}
                       >
                         {paragraph.text}
                       </p>
@@ -700,6 +698,26 @@ function splitDraftParagraphsWithOffsets(body?: string) {
     .filter((paragraph) => paragraph.text.length > 0);
 
   return paragraphs.length ? paragraphs : [{ start: 0, end: 0, text: "第一次选择后，草稿会在这里更新。" }];
+}
+
+function bodyOffsetsForDisplayRange(container: HTMLElement, range: Range) {
+  const start = bodyOffsetForDisplayBoundary(container, range.startContainer, range.startOffset);
+  const end = bodyOffsetForDisplayBoundary(container, range.endContainer, range.endOffset);
+  if (start === null || end === null || start === end) return null;
+  return { start, end };
+}
+
+function bodyOffsetForDisplayBoundary(container: HTMLElement, node: Node, offset: number) {
+  const element = node instanceof Element ? node : node.parentNode instanceof Element ? node.parentNode : null;
+  const paragraph = element?.closest("[data-body-start]");
+  if (!(paragraph instanceof HTMLElement) || !container.contains(paragraph)) return null;
+  const bodyStart = Number(paragraph.dataset.bodyStart);
+  if (Number.isNaN(bodyStart)) return null;
+
+  const preRange = document.createRange();
+  preRange.selectNodeContents(paragraph);
+  preRange.setEnd(node, offset);
+  return bodyStart + preRange.toString().length;
 }
 
 function selectionPopoverAnchor(selection: Selection | null) {

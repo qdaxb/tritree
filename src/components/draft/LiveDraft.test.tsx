@@ -43,6 +43,23 @@ function selectTextInside(element: HTMLElement, text: string, occurrence = 0) {
   selection?.addRange(range);
 }
 
+function selectTextAcross(startElement: HTMLElement, startText: string, endElement: HTMLElement, endText: string) {
+  const startNode = [...startElement.childNodes].find((node) => node.textContent?.includes(startText));
+  const endNode = [...endElement.childNodes].find((node) => node.textContent?.includes(endText));
+  expect(startNode).toBeDefined();
+  expect(endNode).toBeDefined();
+  const start = startNode!.textContent!.indexOf(startText);
+  const end = endNode!.textContent!.indexOf(endText) + endText.length;
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThanOrEqual(endText.length);
+  const range = document.createRange();
+  range.setStart(startNode!, start);
+  range.setEnd(endNode!, end);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
 function deferredPromise() {
   let resolve!: () => void;
   const promise = new Promise<void>((nextResolve) => {
@@ -105,6 +122,39 @@ describe("LiveDraft", () => {
       selectedText: "目标句。",
       selectionStart: 4,
       selectionEnd: 8
+    });
+  });
+
+  it("opens an AI edit popover for selected body text spanning display paragraphs", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    const body = "第一段开始。目标一。\n第二段目标二。结尾。";
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body, hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextAcross(
+      screen.getByText("第一段开始。目标一。"),
+      "目标一。",
+      screen.getByText("第二段目标二。结尾。"),
+      "第二段目标二。"
+    );
+    await userEvent.click(screen.getByText("第一段开始。目标一。"));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "标题", body, hashtags: ["#当前"], imagePrompt: "当前画面" },
+      field: "body",
+      instruction: "补一个细节",
+      selectedText: "目标一。\n第二段目标二。",
+      selectionStart: 6,
+      selectionEnd: 18
     });
   });
 
