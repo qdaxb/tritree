@@ -177,6 +177,11 @@ export function LiveDraft({
   }, [canUseSelectionRewrite]);
 
   useEffect(() => {
+    if (!isEditing || !selectionEdit) return;
+    closeSelectionEdit();
+  }, [title, body, hashtags, imagePrompt]);
+
+  useEffect(() => {
     if (!selectedDiffAction) return;
 
     function updateDiffActionPosition() {

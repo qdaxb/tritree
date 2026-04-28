@@ -222,6 +222,34 @@ describe("LiveDraft", () => {
     });
   });
 
+  it("clears the normal editor selection popover when local draft fields change", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        onSave={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const bodyTextbox = screen.getByLabelText("正文") as HTMLTextAreaElement;
+    bodyTextbox.setSelectionRange(4, 8);
+    await userEvent.click(bodyTextbox);
+    expect(screen.getByRole("textbox", { name: "修改要求" })).toBeInTheDocument();
+
+    const titleTextbox = screen.getByRole("textbox", { name: "标题" });
+    await userEvent.clear(titleTextbox);
+    await userEvent.type(titleTextbox, "新标题");
+
+    expect(screen.queryByRole("textbox", { name: "修改要求" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发送修改" })).not.toBeInTheDocument();
+    expect(onRewriteSelection).not.toHaveBeenCalled();
+  });
+
   it("shows a no-op generate image button with the image prompt", async () => {
     render(
       <LiveDraft
