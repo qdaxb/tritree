@@ -30,7 +30,7 @@ const currentNode: TreeNode = {
 };
 
 const customOption = {
-  id: "d" as const,
+  id: "custom-existing" as const,
   label: "自定义视角",
   description: "沿着用户手写的方向继续。",
   impact: "模型会参考这条补充备注生成下一版。",
@@ -220,19 +220,37 @@ describe("TreeCanvas", () => {
       <BranchOptionTray
         isBusy={false}
         onChoose={onChoose}
+        options={currentNode.options}
+        pendingChoice={null}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "A 更多备注" }));
+    fireEvent.change(screen.getByLabelText("更多备注 A"), {
+      target: { value: "请用更尖锐一点的对比。" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
+
+    expect(onChoose).toHaveBeenCalledWith("a", "请用更尖锐一点的对比。", "balanced");
+  });
+
+  it("keeps custom as an action even after the node already has a custom branch", () => {
+    render(
+      <BranchOptionTray
+        isBusy={false}
+        onAddCustomOption={vi.fn()}
+        onChoose={vi.fn()}
         options={[...currentNode.options, customOption]}
         pendingChoice={null}
         visibleCount={4}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "自定义 更多备注" }));
-    fireEvent.change(screen.getByLabelText("更多备注 自定义"), {
-      target: { value: "请用更尖锐一点的对比。" }
-    });
-    fireEvent.click(screen.getByRole("button", { name: /自定义 自定义视角/ }));
+    const tray = screen.getByRole("group", { name: "下一步方向选项" });
+    const side = within(tray).getByRole("group", { name: "旁路设置" });
 
-    expect(onChoose).toHaveBeenCalledWith("d", "请用更尖锐一点的对比。", "balanced");
+    expect(within(side).getByRole("button", { name: "更多方向" })).toBeEnabled();
+    expect(within(side).queryByRole("button", { name: /自定义视角/ })).not.toBeInTheDocument();
   });
 
   it("lets the user add and close a custom branch from a single field", () => {
@@ -248,8 +266,8 @@ describe("TreeCanvas", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "更多方向" }));
-    expect(screen.queryByLabelText("D 方向短标题")).not.toBeInTheDocument();
-    expect(screen.queryByText("确认添加 D")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("自定义方向短标题")).not.toBeInTheDocument();
+    expect(screen.queryByText("确认添加自定义")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭更多方向" }));
     expect(screen.queryByRole("textbox", { name: "更多方向" })).not.toBeInTheDocument();
 
@@ -260,7 +278,7 @@ describe("TreeCanvas", () => {
     fireEvent.click(screen.getByRole("button", { name: "添加" }));
 
     expect(onAddCustomOption).toHaveBeenCalledWith({
-      id: "d",
+      id: expect.stringMatching(/^custom-/),
       label: "从一句办公室黑话切入",
       description: "从一句办公室黑话切入。",
       impact: "按用户自定义方向继续生成。",
@@ -298,7 +316,7 @@ describe("TreeCanvas", () => {
     fireEvent.click(screen.getByRole("button", { name: "使用技能 润色" }));
 
     expect(onAddCustomOption).toHaveBeenCalledWith({
-      id: "d",
+      id: expect.stringMatching(/^custom-/),
       label: "润色",
       description: "使用技能「润色」继续。",
       impact: "按当前作品启用技能继续生成。",
@@ -570,7 +588,7 @@ describe("TreeCanvas", () => {
     expect(graph.links.filter((link) => link.source === "history-node-1")).toHaveLength(3);
   });
 
-  it("adds a fourth option node after the user creates a custom D branch", () => {
+  it("keeps custom actions out of the next-option tree leaves", () => {
     const graph = createForceTreeGraph({
       currentNode: { ...currentNode, options: [...currentNode.options, customOption] },
       layout: getOptionBranchLayout(900),
@@ -581,10 +599,9 @@ describe("TreeCanvas", () => {
     expect(graph.nodes.filter((node) => node.kind === "option").map((node) => node.option?.id)).toEqual([
       "a",
       "b",
-      "c",
-      "d"
+      "c"
     ]);
-    expect(graph.links.filter((link) => link.source === "history-node-1")).toHaveLength(4);
+    expect(graph.links.filter((link) => link.source === "history-node-1")).toHaveLength(3);
   });
 
   it("keeps old options visible and marks the selected option itself as pending", () => {
@@ -655,6 +672,47 @@ describe("TreeCanvas", () => {
       });
       expect(tray.querySelectorAll('[data-choice-button="true"]')).toHaveLength(3);
       expect(within(tray).getByRole("button", { name: /反驳误解/ })).toBeEnabled();
+      expect(within(tray).getByRole("button", { name: "更多方向" })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps option tray visible when a viewed historical node already has children", () => {
+    vi.useFakeTimers();
+    try {
+      const historicalNode: TreeNode = {
+        ...selectedNodeWithFolded,
+        id: "node-history-with-child",
+        selectedOptionId: "b"
+      };
+      const childNode: TreeNode = {
+        ...currentNode,
+        id: "node-child-of-history",
+        parentId: historicalNode.id,
+        parentOptionId: "b",
+        roundIndex: historicalNode.roundIndex + 1
+      };
+
+      render(
+        <TreeCanvas
+          currentNode={historicalNode}
+          isBusy={false}
+          onAddCustomOption={vi.fn()}
+          onChoose={vi.fn()}
+          pendingChoice={null}
+          selectedPath={[historicalNode, childNode]}
+          treeNodes={[historicalNode, childNode]}
+        />
+      );
+
+      const tray = screen.getByRole("group", { name: "下一步方向选项" });
+
+      act(() => {
+        vi.advanceTimersByTime(1100);
+      });
+
+      expect(within(tray).getByRole("button", { name: /具体场景/ })).toBeEnabled();
       expect(within(tray).getByRole("button", { name: "更多方向" })).toBeEnabled();
     } finally {
       vi.useRealTimers();
@@ -1124,7 +1182,7 @@ describe("TreeCanvas", () => {
     expect(pendingFoldedNode?.querySelector(".tree-node__spinner")).toBeInTheDocument();
   });
 
-  it("hides stale option cards, including custom D, while a historical branch is generating", () => {
+  it("hides stale option cards, including prior custom branches, while a historical branch is generating", () => {
     render(
       <TreeCanvas
         currentNode={{ ...currentNode, options: [...currentNode.options, customOption] }}

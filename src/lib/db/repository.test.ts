@@ -521,7 +521,7 @@ describe("Treeable repository", () => {
     expect(repo.getLatestSessionState()?.session.id).toBe(latest.session.id);
   });
 
-  it("persists a user-authored D branch when it is selected", () => {
+  it("persists a user-authored custom branch when it is selected", () => {
     const repo = createTreeableRepository(testDbPath());
     const root = repo.saveRootMemory({
       domains: ["AI"],
@@ -548,9 +548,9 @@ describe("Treeable repository", () => {
     const next = appendGeneratedChild(repo, {
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
-      selectedOptionId: "d",
+      selectedOptionId: "custom-user",
       customOption: {
-        id: "d",
+        id: "custom-user",
         label: "自定义方向",
         description: "沿着用户手写的方向继续。",
         impact: "按用户自定义方向继续。",
@@ -570,10 +570,138 @@ describe("Treeable repository", () => {
       }
     });
 
-    expect(next.selectedPath[0].selectedOptionId).toBe("d");
-    expect(next.selectedPath[0].options.map((option) => option.id)).toEqual(["a", "b", "c", "d"]);
+    expect(next.selectedPath[0].selectedOptionId).toBe("custom-user");
+    expect(next.selectedPath[0].options.map((option) => option.id)).toEqual(["a", "b", "c", "custom-user"]);
     expect(next.foldedBranches.map((branch) => branch.option.id).sort()).toEqual(["a", "b", "c"]);
     expect(repo.getSessionState(first.session.id)?.selectedPath[0].options.at(-1)?.label).toBe("自定义方向");
+  });
+
+  it("persists a user-authored custom branch when branching from a historical node", () => {
+    const repo = createTreeableRepository(testDbPath());
+    const root = repo.saveRootMemory({
+      domains: ["AI"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+    const first = createSessionDraftWithOptions(repo, {
+      rootMemoryId: root.id,
+      output: {
+        roundIntent: "Start",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "explore" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "explore" }
+        ],
+        draft: { title: "Draft", body: "Body", hashtags: ["#AI"], imagePrompt: "Tree" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    appendGeneratedChild(repo, {
+      sessionId: first.session.id,
+      nodeId: first.currentNode!.id,
+      selectedOptionId: "b",
+      output: {
+        roundIntent: "Old route",
+        options: [
+          { id: "a", label: "Old A", description: "A", impact: "A", kind: "deepen" },
+          { id: "b", label: "Old B", description: "B", impact: "B", kind: "reframe" },
+          { id: "c", label: "Old C", description: "C", impact: "C", kind: "finish" }
+        ],
+        draft: { title: "Old", body: "Old route body", hashtags: ["#Old"], imagePrompt: "Old tree" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    const customOption = {
+      id: "custom-history" as const,
+      label: "历史自定义方向",
+      description: "从这个历史版本重新展开。",
+      impact: "按用户自定义方向继续。",
+      kind: "reframe" as const
+    };
+
+    const next = repo.createHistoricalDraftChild({
+      sessionId: first.session.id,
+      nodeId: first.currentNode!.id,
+      selectedOptionId: "custom-history",
+      customOption,
+      optionMode: "focused"
+    });
+
+    expect(next.currentNode?.parentId).toBe(first.currentNode!.id);
+    expect(next.currentNode?.parentOptionId).toBe("custom-history");
+    expect(next.selectedPath[0].selectedOptionId).toBe("custom-history");
+    expect(next.selectedPath[0].options.map((option) => option.id)).toEqual(["a", "b", "c", "custom-history"]);
+    expect(next.selectedPath[0].options.at(-1)).toEqual({ ...customOption, mode: "focused" });
+    expect(next.foldedBranches.map((branch) => branch.option.id).sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("keeps multiple custom branches from the same historical node distinct", () => {
+    const repo = createTreeableRepository(testDbPath());
+    const root = repo.saveRootMemory({
+      domains: ["AI"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+    const first = createSessionDraftWithOptions(repo, {
+      rootMemoryId: root.id,
+      output: {
+        roundIntent: "Start",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "explore" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "explore" }
+        ],
+        draft: { title: "Draft", body: "Body", hashtags: ["#AI"], imagePrompt: "Tree" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    const firstCustom = {
+      id: "custom-first" as const,
+      label: "第一次自定义",
+      description: "从第一个自定义方向继续。",
+      impact: "按用户自定义方向继续。",
+      kind: "reframe" as const
+    };
+    const secondCustom = {
+      id: "custom-second" as const,
+      label: "第二次自定义",
+      description: "从第二个自定义方向继续。",
+      impact: "按用户自定义方向继续。",
+      kind: "reframe" as const
+    };
+
+    repo.createHistoricalDraftChild({
+      sessionId: first.session.id,
+      nodeId: first.currentNode!.id,
+      selectedOptionId: firstCustom.id,
+      customOption: firstCustom
+    });
+    const next = repo.createHistoricalDraftChild({
+      sessionId: first.session.id,
+      nodeId: first.currentNode!.id,
+      selectedOptionId: secondCustom.id,
+      customOption: secondCustom
+    });
+
+    const parent = next.treeNodes?.find((node) => node.id === first.currentNode!.id);
+    const customChildren = next.treeNodes?.filter((node) => node.parentId === first.currentNode!.id);
+
+    expect(parent?.options.map((option) => option.label)).toEqual([
+      "A",
+      "B",
+      "C",
+      "第一次自定义",
+      "第二次自定义"
+    ]);
+    expect(customChildren?.map((node) => node.parentOptionId).sort()).toEqual(["custom-first", "custom-second"]);
   });
 
   it("branches from a historical option and makes that branch the active route", () => {
@@ -758,13 +886,13 @@ describe("Treeable repository", () => {
     });
 
     expect(updated.currentNode?.parentId).toBe(first.currentNode!.id);
-    expect(updated.currentNode?.parentOptionId).toBe("d");
+    expect(updated.currentNode?.parentOptionId).toMatch(/^custom-edit-/);
     expect(updated.currentDraft?.title).toBe("Edited");
     expect(updated.currentDraft?.body).toBe("Edited body");
     expect(updated.currentNode?.options.map((option) => option.label)).toEqual(["新A", "新B", "新C"]);
     expect(updated.nodeDrafts.find((item) => item.nodeId === first.currentNode!.id)?.draft.body).toBe("Body");
     expect(updated.nodeDrafts.find((item) => item.nodeId === updated.currentNode!.id)?.draft.body).toBe("Edited body");
-    expect(updated.treeNodes?.find((node) => node.id === first.currentNode!.id)?.selectedOptionId).toBe("d");
+    expect(updated.treeNodes?.find((node) => node.id === first.currentNode!.id)?.selectedOptionId).toMatch(/^custom-edit-/);
     expect(updated.treeNodes?.find((node) => node.id === first.currentNode!.id)?.options.at(-1)?.label).toBe("自定义编辑");
   });
 

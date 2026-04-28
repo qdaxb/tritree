@@ -69,7 +69,7 @@ describe("POST /api/sessions/:sessionId/draft", () => {
         ...baseState.currentNode,
         id: "node-2",
         parentId: "node-1",
-        parentOptionId: "d",
+        parentOptionId: "custom-edit-mock",
         roundIndex: 2,
         roundIntent: "自定义编辑",
         options: []
@@ -79,7 +79,10 @@ describe("POST /api/sessions/:sessionId/draft", () => {
         ...baseState.nodeDrafts,
         { nodeId: "node-2", draft: { title: "Edited", body: "Edited body", hashtags: ["#edited"], imagePrompt: "edited image" } }
       ],
-      selectedPath: [baseState.currentNode, { ...baseState.currentNode, id: "node-2", parentId: "node-1", parentOptionId: "d", options: [] }]
+      selectedPath: [
+        baseState.currentNode,
+        { ...baseState.currentNode, id: "node-2", parentId: "node-1", parentOptionId: "custom-edit-mock", options: [] }
+      ]
     };
     const createEditedDraftChild = vi.fn().mockReturnValue(draftState);
     const updateNodeOptions = vi.fn();
@@ -145,7 +148,14 @@ describe("POST /api/sessions/:sessionId/draft", () => {
     const draftState = {
       ...state,
       session: { ...state.session, currentNodeId: "node-4" },
-      currentNode: { ...historicalNode, id: "node-4", parentId: "node-2", parentOptionId: "d", roundIndex: 3, options: [] },
+      currentNode: {
+        ...historicalNode,
+        id: "node-4",
+        parentId: "node-2",
+        parentOptionId: "custom-edit-mock",
+        roundIndex: 3,
+        options: []
+      },
       currentDraft: { title: "Edited history", body: "Edited history body", hashtags: ["#history"], imagePrompt: "history image" }
     };
     const createEditedDraftChild = vi.fn().mockReturnValue(draftState);

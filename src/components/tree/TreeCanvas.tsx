@@ -12,7 +12,17 @@ import {
   useRef,
   useState
 } from "react";
-import { type BranchOption, type OptionGenerationMode, type Skill, type TreeNode } from "@/lib/domain";
+import {
+  CUSTOM_OPTION_ID_PREFIX,
+  PRIMARY_BRANCH_OPTION_IDS,
+  isCustomBranchOptionId,
+  isPrimaryBranchOptionId,
+  type BranchOption,
+  type CustomBranchOptionId,
+  type OptionGenerationMode,
+  type Skill,
+  type TreeNode
+} from "@/lib/domain";
 
 type TreeCanvasProps = {
   changedDraftNodeIds?: string[];
@@ -38,9 +48,8 @@ const CANVAS_HEIGHT = 560;
 const MIN_CANVAS_WIDTH = 320;
 const COMPACT_LABEL_LIMIT = 15;
 const SEED_ROOT_LABEL = "种子念头";
-const OPTION_IDS: BranchOption["id"][] = ["a", "b", "c", "d"];
-const OPTION_GROUPS: Record<BranchOption["id"], number> = { a: 0, b: 4, c: 8, d: 2 };
-const OPTION_RANK: Record<BranchOption["id"], number> = { a: 0, b: 1, c: 2, d: 3 };
+const OPTION_GROUPS = { a: 0, b: 4, c: 8, custom: 2 };
+const OPTION_RANK = { a: 0, b: 1, c: 2, custom: 3 };
 const SIDE_BRANCH_Y_SPREAD = 96;
 const DENSE_ROUTE_MIN_HISTORY_COUNT = 3;
 const DENSE_ROUTE_HISTORY_Y_SPAN = 48;
@@ -63,7 +72,7 @@ type OptionBranchLayout = {
   cardWidth: number;
   center: Point2;
   height: number;
-  positions: Record<BranchOption["id"], Point2>;
+  positions: Record<"a" | "b" | "c" | "custom", Point2>;
   width: number;
 };
 
@@ -135,16 +144,33 @@ export function getOptionBranchLayout(canvasWidth: number, historyNodeCount = 0)
       a: [optionX, centerY - optionSpread],
       b: [optionX, centerY],
       c: [optionX, centerY + optionSpread],
-      d: [optionX, centerY + optionSpread * 2]
+      custom: [optionX, centerY + optionSpread * 2]
     },
     width
   };
 }
 
 function orderBranchOptions(options: BranchOption[]) {
-  return OPTION_IDS.map((optionId) => options.find((option) => option.id === optionId)).filter(
+  const primaryOptions = PRIMARY_BRANCH_OPTION_IDS.map((optionId) => options.find((option) => option.id === optionId)).filter(
     (option): option is BranchOption => Boolean(option)
   );
+  const customOptions = options.filter((option) => !isPrimaryBranchOptionId(option.id));
+
+  return [...primaryOptions, ...customOptions];
+}
+
+function optionGroup(optionId: BranchOption["id"]) {
+  if (optionId === "a") return OPTION_GROUPS.a;
+  if (optionId === "b") return OPTION_GROUPS.b;
+  if (optionId === "c") return OPTION_GROUPS.c;
+  return OPTION_GROUPS.custom;
+}
+
+function optionRank(optionId: BranchOption["id"]) {
+  if (optionId === "a") return OPTION_RANK.a;
+  if (optionId === "b") return OPTION_RANK.b;
+  if (optionId === "c") return OPTION_RANK.c;
+  return OPTION_RANK.custom;
 }
 
 export function compactBranchLabel(label: string) {
@@ -351,7 +377,7 @@ export function createForceTreeGraph({
       branchFromNodeId: node.parentId ?? node.id,
       branchOptionId: node.parentOptionId ?? incomingOption?.id,
       focusDepth,
-      group: incomingOption ? OPTION_GROUPS[incomingOption.id] : 3 + (nodeIndex % 4),
+      group: incomingOption ? optionGroup(incomingOption.id) : 3 + (nodeIndex % 4),
       id: historyId,
       isInactiveRoute: !isActive,
       isSeedRoot,
@@ -401,7 +427,7 @@ export function createForceTreeGraph({
         branchFromNodeId: node.id,
         branchOptionId: option.id,
         focusDepth,
-        group: OPTION_GROUPS[option.id],
+        group: optionGroup(option.id),
         id: foldedId,
         isInactiveRoute: true,
         kind: "folded",
@@ -447,7 +473,7 @@ export function createForceTreeGraph({
     if (!currentSourceId) {
       return finishGraph();
     }
-    const orderedOptions = orderBranchOptions(currentNode.options);
+    const orderedOptions = orderBranchOptions(currentNode.options).filter((option) => isPrimaryBranchOptionId(option.id));
     const optionsToShow = pendingChoice ? orderedOptions : orderedOptions.slice(0, visibleOptionCount);
 
     const currentSource = nodeByIdFromNodes(nodes, currentSourceId);
@@ -455,7 +481,7 @@ export function createForceTreeGraph({
     optionsToShow.forEach((option) => {
       const [targetX, targetY] = optionPositionFromSource(layout, option.id, currentSource?.targetY ?? layout.center[1], optionYSpread);
       nodes.push({
-        group: OPTION_GROUPS[option.id],
+        group: optionGroup(option.id),
         id: `option-${option.id}`,
         kind: "option",
         label: compactBranchLabel(option.label),
@@ -477,7 +503,7 @@ export function createForceTreeGraph({
         optionYSpread
       );
       nodes.push({
-        group: OPTION_GROUPS[loadingOptionId],
+        group: optionGroup(loadingOptionId),
         id: `loading-${loadingOptionId}`,
         kind: "loading",
         label: "等待中",
@@ -544,10 +570,11 @@ export function TreeCanvas({
   const currentNodeHasChildren = Boolean(
     currentNode && treeNodes?.some((node) => node.parentId === currentNode.id)
   );
+  const currentPrimaryOptionCount = currentNode?.options.filter((option) => isPrimaryBranchOptionId(option.id)).length ?? 0;
   const effectiveVisibleOptionCount =
     nodeId && previousNodeIdRef.current === nodeId && !isBranchGenerating ? visibleOptionCount : 0;
   const isRevealing = Boolean(
-    graphCurrentNode && !currentNodeHasChildren && effectiveVisibleOptionCount < graphCurrentNode.options.length
+    graphCurrentNode && !currentNodeHasChildren && effectiveVisibleOptionCount < currentPrimaryOptionCount
   );
   const graph = useMemo(
     () =>
@@ -605,7 +632,7 @@ export function TreeCanvas({
       setVisibleOptionCount(0);
       return;
     }
-    const optionLength = currentNode?.options.length ?? 0;
+    const optionLength = currentNode?.options.filter((option) => isPrimaryBranchOptionId(option.id)).length ?? 0;
 
     if (previousNodeIdRef.current === nodeId) {
       setVisibleOptionCount((count) => (optionLength > count ? optionLength : Math.min(count, optionLength)));
@@ -623,7 +650,7 @@ export function TreeCanvas({
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [currentNode?.id, currentNode?.options.length]);
+  }, [currentNode?.id, currentPrimaryOptionCount]);
 
   useEffect(() => {
     scrollTreeToLatest("auto");
@@ -986,7 +1013,7 @@ export function TreeCanvas({
       {!currentNode && !pendingBranch ? (
         <div className="tree-empty">输入 seed 后开始创作，第一组三个方向会出现在这里。</div>
       ) : null}
-      {currentNode && !pendingBranch && !currentNodeHasChildren ? (
+      {currentNode && !pendingBranch ? (
         <BranchOptionTray
           isBusy={isBusy}
           onAddCustomOption={onAddCustomOption}
@@ -1020,10 +1047,8 @@ export function BranchOptionTray({
 }) {
   const [optionNotes, setOptionNotes] = useState<Partial<Record<BranchOption["id"], string>>>({});
   const orderedOptions = orderBranchOptions(options);
-  const primaryOptions = orderedOptions.filter((option) => option.id !== "d");
-  const customOption = orderedOptions.find((option) => option.id === "d");
+  const primaryOptions = orderedOptions.filter((option) => isPrimaryBranchOptionId(option.id));
   const primaryAllVisible = visibleCount >= primaryOptions.length;
-  const customVisible = Boolean(customOption && visibleCount >= orderedOptions.length);
 
   return (
     <div aria-label="下一步方向选项" className="branch-option-tray" role="group">
@@ -1045,18 +1070,7 @@ export function BranchOptionTray({
         )}
       </div>
       <div aria-label="旁路设置" className="branch-option-side" role="group">
-        {customOption && customVisible ? (
-          <BranchOptionCard
-            isBusy={isBusy}
-            isPending={pendingChoice === customOption.id}
-            note={optionNotes[customOption.id] ?? ""}
-            onNoteChange={(note) => setOptionNotes((notes) => ({ ...notes, [customOption.id]: note }))}
-            onChoose={onChoose}
-            option={customOption}
-            variant="side"
-          />
-        ) : null}
-        {!customOption && primaryAllVisible ? (
+        {primaryAllVisible ? (
           <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} skills={skills} />
         ) : null}
       </div>
@@ -1160,7 +1174,7 @@ function BranchOptionCard({
 }) {
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const displayLabel = displayBranchLabel(option.label);
-  const choiceLabel = option.id === "d" && variant === "side" ? "自定义" : option.id.toUpperCase();
+  const choiceLabel = isCustomBranchOptionId(option.id) && variant === "side" ? "自定义" : option.id.toUpperCase();
 
   return (
     <div
@@ -1251,6 +1265,14 @@ function MoreDirectionsCard({
   const [content, setContent] = useState("");
   const trimmedContent = content.trim();
 
+  function createCustomBranchOptionId(): CustomBranchOptionId {
+    const randomId =
+      typeof globalThis.crypto?.randomUUID === "function"
+        ? globalThis.crypto.randomUUID()
+        : Math.random().toString(36).slice(2);
+    return `${CUSTOM_OPTION_ID_PREFIX}${randomId}`;
+  }
+
   if (!isEditing) {
     return (
       <button
@@ -1273,7 +1295,7 @@ function MoreDirectionsCard({
   function addCustomOption() {
     if (!trimmedContent) return;
     onAddCustomOption?.({
-      id: "d",
+      id: createCustomBranchOptionId(),
       label: deriveCustomOptionLabel(trimmedContent),
       description: trimmedContent,
       impact: "按用户自定义方向继续生成。",
@@ -1299,7 +1321,7 @@ function MoreDirectionsCard({
               key={skill.id}
               onClick={() => {
                 onAddCustomOption?.({
-                  id: "d",
+                  id: createCustomBranchOptionId(),
                   label: deriveCustomOptionLabel(skill.title),
                   description: `使用技能「${skill.title}」继续。`,
                   impact: "按当前作品启用技能继续生成。",
@@ -1466,7 +1488,7 @@ function foldedOptionOffset(
   foldedIndex: number
 ) {
   if (selectedOptionId) {
-    const rankDistance = OPTION_RANK[optionId] - OPTION_RANK[selectedOptionId];
+    const rankDistance = optionRank(optionId) - optionRank(selectedOptionId);
     if (rankDistance !== 0) {
       return rankDistance * SIDE_BRANCH_Y_SPREAD;
     }
@@ -1492,9 +1514,11 @@ function optionPositionFromSource(
   sourceY: number,
   spread: number
 ): Point2 {
+  const positionKey = isPrimaryBranchOptionId(optionId) ? optionId : "custom";
+
   return [
-    layout.positions[optionId][0],
-    separateFromVerticalAnchors(sourceY + (OPTION_RANK[optionId] - OPTION_RANK.b) * spread, sourceY)
+    layout.positions[positionKey][0],
+    separateFromVerticalAnchors(sourceY + (optionRank(optionId) - OPTION_RANK.b) * spread, sourceY)
   ];
 }
 

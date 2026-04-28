@@ -141,8 +141,33 @@ export const RootMemorySchema = z.object({
   updatedAt: z.string()
 });
 
+export const PRIMARY_BRANCH_OPTION_IDS = ["a", "b", "c"] as const;
+export const CUSTOM_OPTION_ID_PREFIX = "custom-";
+
+export type PrimaryBranchOptionId = (typeof PRIMARY_BRANCH_OPTION_IDS)[number];
+export type CustomBranchOptionId = `${typeof CUSTOM_OPTION_ID_PREFIX}${string}`;
+
+export function isPrimaryBranchOptionId(id: string): id is PrimaryBranchOptionId {
+  return PRIMARY_BRANCH_OPTION_IDS.some((optionId) => optionId === id);
+}
+
+export function isCustomBranchOptionId(id: string) {
+  return id.startsWith(CUSTOM_OPTION_ID_PREFIX);
+}
+
+export const BranchOptionIdSchema = z.union([
+  z.enum(PRIMARY_BRANCH_OPTION_IDS),
+  z.custom<CustomBranchOptionId>(
+    (value) =>
+      typeof value === "string" &&
+      value.startsWith(CUSTOM_OPTION_ID_PREFIX) &&
+      value.length > CUSTOM_OPTION_ID_PREFIX.length,
+    `Custom branch option IDs must start with ${CUSTOM_OPTION_ID_PREFIX}.`
+  )
+]);
+
 export const BranchOptionSchema = z.object({
-  id: z.enum(["a", "b", "c", "d"]),
+  id: BranchOptionIdSchema,
   label: z.string().min(1),
   description: z.string().min(1),
   impact: z.string().min(1),
@@ -151,7 +176,7 @@ export const BranchOptionSchema = z.object({
 });
 
 export const CUSTOM_EDIT_OPTION = {
-  id: "d",
+  id: "custom-edit",
   label: "自定义编辑",
   description: "根据用户手动编辑后的草稿继续。",
   impact: "保留这次手动修改，并从修改后的版本生成新的下一步方向。",

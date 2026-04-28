@@ -14,6 +14,7 @@ import {
   type TreeNode,
   BranchOptionSchema,
   CUSTOM_EDIT_OPTION,
+  CUSTOM_OPTION_ID_PREFIX,
   DEFAULT_SYSTEM_SKILLS,
   DraftSchema,
   RootPreferencesSchema,
@@ -614,7 +615,10 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     output?: DirectorOptionsOutput;
   }) {
     const parsedDraft = DraftSchema.parse(draft);
-    const customEditOption = BranchOptionSchema.parse(CUSTOM_EDIT_OPTION);
+    const customEditOption = BranchOptionSchema.parse({
+      ...CUSTOM_EDIT_OPTION,
+      id: `${CUSTOM_OPTION_ID_PREFIX}edit-${nanoid()}`
+    });
 
     const draftState = createDraftChild({
       customOption: customEditOption,
@@ -822,11 +826,13 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function createHistoricalDraftChild({
+    customOption,
     optionMode = "balanced",
     sessionId,
     nodeId,
     selectedOptionId
   }: {
+    customOption?: BranchOption;
     optionMode?: OptionGenerationMode;
     sessionId: string;
     nodeId: string;
@@ -838,7 +844,14 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     }
 
     const parent = getNodeForSelection(sessionId, nodeId);
-    const selectedOptions = optionsWithSelection(parent, selectedOptionId, optionMode);
+    const parsedCustomOption = customOption ? BranchOptionSchema.parse(customOption) : null;
+    if (parsedCustomOption && parsedCustomOption.id !== selectedOptionId) {
+      throw new Error("Custom option must match the selected option.");
+    }
+    const parentOptions = parsedCustomOption
+      ? [...parent.options.filter((option) => option.id !== parsedCustomOption.id), parsedCustomOption]
+      : parent.options;
+    const selectedOptions = optionsWithSelection({ ...parent, options: parentOptions }, selectedOptionId, optionMode);
     const selected = selectedOptions.find((option) => option.id === selectedOptionId)!;
     const timestamp = now();
 

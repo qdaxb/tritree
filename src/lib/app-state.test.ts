@@ -73,7 +73,7 @@ describe("summarizeSessionForDirector", () => {
         publishPackage: null
       },
       {
-        id: "d",
+        id: "custom-user",
         label: "职场黑话",
         description: "从一句办公室黑话切入。",
         impact: "按用户自定义方向继续。",

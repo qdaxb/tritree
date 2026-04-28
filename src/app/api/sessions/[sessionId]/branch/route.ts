@@ -11,7 +11,8 @@ const BranchBodySchema = z.object({
   nodeId: z.string().min(1),
   optionId: BranchOptionSchema.shape.id,
   note: z.string().max(1200).optional(),
-  optionMode: OptionGenerationModeSchema.default("balanced")
+  optionMode: OptionGenerationModeSchema.default("balanced"),
+  customOption: BranchOptionSchema.optional()
 });
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
@@ -33,14 +34,19 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   if (!state) {
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
   }
+  if (body.customOption && body.customOption.id !== body.optionId) {
+    return NextResponse.json({ error: "自定义选项和当前选择不一致。" }, { status: 400 });
+  }
   try {
-    const existingState = repository.activateHistoricalBranch({
-      sessionId,
-      nodeId: body.nodeId,
-      selectedOptionId: body.optionId
-    });
-    if (existingState) {
-      return NextResponse.json({ state: existingState, reused: true });
+    if (!body.customOption) {
+      const existingState = repository.activateHistoricalBranch({
+        sessionId,
+        nodeId: body.nodeId,
+        selectedOptionId: body.optionId
+      });
+      if (existingState) {
+        return NextResponse.json({ state: existingState, reused: true });
+      }
     }
 
     const focusedState = focusSessionStateForNode(state, body.nodeId);
@@ -48,12 +54,13 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
       return NextResponse.json({ error: "没有找到这个历史节点。" }, { status: 404 });
     }
 
-    const selected = focusedState.currentNode.options.find((option) => option.id === body.optionId);
+    const selected = focusedState.currentNode.options.find((option) => option.id === body.optionId) ?? body.customOption;
     if (!selected) {
       return NextResponse.json({ error: "没有找到这个历史分支。" }, { status: 400 });
     }
 
     const nextState = repository.createHistoricalDraftChild({
+      customOption: body.customOption,
       optionMode: body.optionMode,
       sessionId,
       nodeId: body.nodeId,

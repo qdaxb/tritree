@@ -174,7 +174,7 @@ describe("DirectorOutputSchema", () => {
     ).toThrow("AI Director options must include IDs a, b, and c exactly once.");
   });
 
-  it("keeps custom D branches out of AI director responses", () => {
+  it("keeps custom branches out of AI director responses", () => {
     const option = {
       id: "a",
       label: "Turn it into a sharper opinion",
@@ -189,7 +189,7 @@ describe("DirectorOutputSchema", () => {
         options: [
           option,
           { ...option, id: "b", kind: "deepen" },
-          { ...option, id: "d", label: "User custom branch" }
+          { ...option, id: "custom-user", label: "User custom branch" }
         ],
         draft: {
           title: "",
@@ -296,16 +296,16 @@ describe("SkillSchema", () => {
 });
 
 describe("SessionStateSchema", () => {
-  it("accepts a user-authored D branch in the runtime tree", () => {
+  it("accepts a user-authored custom branch in the runtime tree", () => {
     const option = BranchOptionSchema.parse({
-      id: "d",
+      id: "custom-user",
       label: "自定义方向",
       description: "用户临时补充的方向。",
       impact: "按用户自定义方向继续。",
       kind: "reframe"
     });
 
-    expect(option.id).toBe("d");
+    expect(option.id).toBe("custom-user");
   });
 
   it("accepts the runtime session tree shape", () => {

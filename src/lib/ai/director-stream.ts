@@ -245,11 +245,10 @@ export function extractPartialDirectorOptions(text: string): BranchOption[] | nu
     return null;
   }
 
-  const fallbackKinds: Record<BranchOption["id"], BranchOption["kind"]> = {
+  const fallbackKinds: Record<"a" | "b" | "c", BranchOption["kind"]> = {
     a: "explore",
     b: "deepen",
-    c: "reframe",
-    d: "reframe"
+    c: "reframe"
   };
 
   return (["a", "b", "c"] as const).flatMap((id) => {

@@ -30,7 +30,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
     isBusy: boolean;
     isComparisonMode?: boolean;
     onActivateBranch?: (nodeId: string, optionId: "a") => void;
-    onAddCustomOption?: (option: { id: "d"; label: string; description: string; impact: string; kind: "reframe" }) => void;
+    onAddCustomOption?: (option: { id: string; label: string; description: string; impact: string; kind: "reframe" }) => void;
     onChoose?: (optionId: "a") => void;
     onSelectComparisonNode?: (nodeId: string) => void;
     onViewNode?: (nodeId: string) => void;
@@ -70,8 +70,8 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
         </button>
         <button
           onClick={() =>
-            onAddCustomOption?.({
-              id: "d",
+          onAddCustomOption?.({
+              id: "custom-skill",
               label: "润色",
               description: "使用技能「润色」继续。",
               impact: "按当前作品启用技能继续生成。",
@@ -601,6 +601,129 @@ describe("TreeableApp", () => {
         body: JSON.stringify({ nodeId: "node-1", optionId: "a", optionMode: "balanced" })
       })
     );
+  });
+
+  it("uses the viewed historical node as the source for custom directions", async () => {
+    const rootNode = {
+      ...activeState.currentNode,
+      id: "node-1",
+      selectedOptionId: "a" as const,
+      foldedOptions: [
+        { id: "b", label: "Root B", description: "B", impact: "B", kind: "deepen" },
+        { id: "c", label: "Root C", description: "C", impact: "C", kind: "finish" }
+      ]
+    };
+    const historicalNode = {
+      ...activeState.currentNode,
+      id: "node-2",
+      parentId: "node-1",
+      parentOptionId: "a" as const,
+      roundIndex: 2,
+      roundIntent: "Historical",
+      options: [
+        { id: "a", label: "History A", description: "A", impact: "A", kind: "explore" },
+        { id: "b", label: "History B", description: "B", impact: "B", kind: "deepen" },
+        { id: "c", label: "History C", description: "C", impact: "C", kind: "finish" }
+      ],
+      selectedOptionId: "b" as const,
+      foldedOptions: [
+        { id: "a", label: "History A", description: "A", impact: "A", kind: "explore" },
+        { id: "c", label: "History C", description: "C", impact: "C", kind: "finish" }
+      ]
+    };
+    const currentLeaf = {
+      ...activeState.currentNode,
+      id: "node-3",
+      parentId: "node-2",
+      parentOptionId: "b" as const,
+      roundIndex: 3,
+      roundIntent: "Current leaf",
+      options: activeState.currentNode.options,
+      selectedOptionId: null
+    };
+    const historicalState = {
+      ...activeState,
+      session: { ...activeState.session, currentNodeId: "node-3" },
+      currentNode: currentLeaf,
+      currentDraft: { title: "Current", body: "Current body", hashtags: ["#current"], imagePrompt: "Current image" },
+      nodeDrafts: [
+        { nodeId: "node-1", draft: { title: "Root", body: "Root body", hashtags: ["#root"], imagePrompt: "Root image" } },
+        { nodeId: "node-2", draft: { title: "History", body: "History body", hashtags: ["#history"], imagePrompt: "History image" } },
+        { nodeId: "node-3", draft: { title: "Current", body: "Current body", hashtags: ["#current"], imagePrompt: "Current image" } }
+      ],
+      selectedPath: [rootNode, historicalNode, currentLeaf],
+      treeNodes: [rootNode, historicalNode, currentLeaf]
+    };
+    const customOption = {
+      id: "custom-skill",
+      label: "润色",
+      description: "使用技能「润色」继续。",
+      impact: "按当前作品启用技能继续生成。",
+      kind: "reframe" as const
+    };
+    const customChild = {
+      ...activeState.currentNode,
+      id: "node-4",
+      parentId: "node-2",
+      parentOptionId: "custom-skill",
+      roundIndex: 3,
+      roundIntent: "润色",
+      options: activeState.currentNode.options
+    };
+    const customBranchState = {
+      ...historicalState,
+      session: { ...historicalState.session, currentNodeId: "node-4" },
+      currentNode: customChild,
+      currentDraft: { title: "Custom", body: "Custom body", hashtags: ["#custom"], imagePrompt: "Custom image" },
+      nodeDrafts: [
+        ...historicalState.nodeDrafts,
+        { nodeId: "node-4", draft: { title: "Custom", body: "Custom body", hashtags: ["#custom"], imagePrompt: "Custom image" } }
+      ],
+      selectedPath: [
+        rootNode,
+        {
+          ...historicalNode,
+          selectedOptionId: "custom-skill",
+          options: [...historicalNode.options, customOption],
+          foldedOptions: historicalNode.options
+        },
+        customChild
+      ],
+      treeNodes: [rootNode, historicalNode, currentLeaf, customChild]
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: historicalState }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: customBranchState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("tree-canvas");
+    await userEvent.click(screen.getByRole("button", { name: "view historical node" }));
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("canvas-current-node")).toHaveTextContent("node-2");
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "use custom skill option" }));
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        4,
+        "/api/sessions/session-1/branch",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            nodeId: "node-2",
+            optionId: "custom-skill",
+            optionMode: "balanced",
+            customOption
+          })
+        })
+      );
+    });
   });
 
   it("lets the user manage skills during a creation session", async () => {
@@ -1412,6 +1535,13 @@ describe("TreeableApp", () => {
   });
 
   it("immediately starts generation when a custom skill direction is picked", async () => {
+    const customSkillOption = {
+      id: "custom-skill",
+      label: "润色",
+      description: "使用技能「润色」继续。",
+      impact: "按当前作品启用技能继续生成。",
+      kind: "reframe" as const
+    };
     const nodeOnlyState = {
       ...activeState,
       session: { ...activeState.session, currentNodeId: "node-2" },
@@ -1419,7 +1549,7 @@ describe("TreeableApp", () => {
         ...activeState.currentNode,
         id: "node-2",
         parentId: "node-1",
-        parentOptionId: "d" as const,
+        parentOptionId: customSkillOption.id,
         roundIndex: 2,
         roundIntent: "润色",
         options: []
@@ -1428,23 +1558,14 @@ describe("TreeableApp", () => {
       selectedPath: [
         {
           ...activeState.currentNode,
-          selectedOptionId: "d" as const,
-          options: [
-            ...activeState.currentNode.options,
-            {
-              id: "d",
-              label: "润色",
-              description: "使用技能「润色」继续。",
-              impact: "按当前作品启用技能继续生成。",
-              kind: "reframe"
-            }
-          ]
+          selectedOptionId: customSkillOption.id,
+          options: [...activeState.currentNode.options, customSkillOption]
         },
-        { ...activeState.currentNode, id: "node-2", parentId: "node-1", parentOptionId: "d" as const, options: [] }
+        { ...activeState.currentNode, id: "node-2", parentId: "node-1", parentOptionId: customSkillOption.id, options: [] }
       ],
       treeNodes: [
         activeState.currentNode,
-        { ...activeState.currentNode, id: "node-2", parentId: "node-1", parentOptionId: "d" as const, options: [] }
+        { ...activeState.currentNode, id: "node-2", parentId: "node-1", parentOptionId: customSkillOption.id, options: [] }
       ]
     };
     const draftState = {
@@ -1488,15 +1609,9 @@ describe("TreeableApp", () => {
           method: "POST",
           body: JSON.stringify({
             nodeId: "node-1",
-            optionId: "d",
+            optionId: "custom-skill",
             optionMode: "balanced",
-            customOption: {
-              id: "d",
-              label: "润色",
-              description: "使用技能「润色」继续。",
-              impact: "按当前作品启用技能继续生成。",
-              kind: "reframe"
-            }
+            customOption: customSkillOption
           })
         })
       );
@@ -1719,7 +1834,7 @@ describe("TreeableApp", () => {
         ...historicalNode,
         id: "node-4",
         parentId: "node-2",
-        parentOptionId: "d" as const,
+        parentOptionId: "custom-edit-mock",
         roundIndex: 3,
         options: []
       },
@@ -1728,8 +1843,17 @@ describe("TreeableApp", () => {
         ...state.nodeDrafts,
         { nodeId: "node-4", draft: { title: "History", body: "Edited from mock", hashtags: ["#history"], imagePrompt: "History image" } }
       ],
-      selectedPath: [rootNode, historicalNode, { ...historicalNode, id: "node-4", parentId: "node-2", parentOptionId: "d" as const, options: [] }],
-      treeNodes: [rootNode, historicalNode, currentNode, { ...historicalNode, id: "node-4", parentId: "node-2", parentOptionId: "d" as const, options: [] }]
+      selectedPath: [
+        rootNode,
+        historicalNode,
+        { ...historicalNode, id: "node-4", parentId: "node-2", parentOptionId: "custom-edit-mock", options: [] }
+      ],
+      treeNodes: [
+        rootNode,
+        historicalNode,
+        currentNode,
+        { ...historicalNode, id: "node-4", parentId: "node-2", parentOptionId: "custom-edit-mock", options: [] }
+      ]
     };
     const optionsState = {
       ...draftOnlyState,

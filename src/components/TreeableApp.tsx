@@ -11,7 +11,9 @@ import {
   type SessionState,
   type Skill,
   type SkillUpsert,
-  type TreeNode
+  type TreeNode,
+  isCustomBranchOptionId,
+  isPrimaryBranchOptionId
 } from "@/lib/domain";
 import { LiveDraft } from "@/components/draft/LiveDraft";
 import { RootMemorySetup } from "@/components/root-memory/RootMemorySetup";
@@ -108,7 +110,8 @@ function isDraftStreamField(value: unknown): value is DraftStreamField {
 function isBranchOption(value: unknown): value is BranchOption {
   return (
     isRecord(value) &&
-    (value.id === "a" || value.id === "b" || value.id === "c" || value.id === "d") &&
+    typeof value.id === "string" &&
+    (isPrimaryBranchOptionId(value.id) || isCustomBranchOptionId(value.id)) &&
     typeof value.label === "string" &&
     typeof value.description === "string" &&
     typeof value.impact === "string" &&
@@ -179,7 +182,7 @@ function withCustomOption(node: TreeNode, customOption: BranchOption | null) {
 
   return {
     ...node,
-    options: [...node.options.filter((option) => option.id !== "d"), customOption]
+    options: [...node.options.filter((option) => option.id !== customOption.id), customOption]
   };
 }
 
@@ -500,7 +503,7 @@ export function TreeableApp() {
     if (isBusy) return;
     if (!sessionState?.currentNode) return;
     const trimmedNote = note?.trim();
-    const customOptionForChoice = optionId === "d" ? customOptionOverride ?? customOption : null;
+    const customOptionForChoice = isCustomBranchOptionId(optionId) ? customOptionOverride ?? customOption : null;
     setPendingChoice(optionId);
     setGeneratedDiffNodeId(null);
     setIsBusy(true);
@@ -542,11 +545,13 @@ export function TreeableApp() {
     nodeId: string,
     optionId: BranchOption["id"],
     optionMode: OptionGenerationMode = "balanced",
-    note?: string
+    note?: string,
+    customOptionOverride?: BranchOption
   ) {
     if (isBusy) return;
     if (!sessionState) return;
     const trimmedNote = note?.trim();
+    const customOptionForBranch = isCustomBranchOptionId(optionId) ? customOptionOverride ?? customOption : null;
     setPendingBranch({ nodeId, optionId });
     setGeneratedDiffNodeId(null);
     setViewNodeId(nodeId);
@@ -556,7 +561,13 @@ export function TreeableApp() {
       const response = await fetch(`/api/sessions/${sessionState.session.id}/branch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nodeId, optionId, optionMode, ...(trimmedNote ? { note: trimmedNote } : {}) })
+        body: JSON.stringify({
+          nodeId,
+          optionId,
+          optionMode,
+          ...(trimmedNote ? { note: trimmedNote } : {}),
+          ...(customOptionForBranch ? { customOption: customOptionForBranch } : {})
+        })
       });
       const data = (await response.json()) as { state?: SessionState; error?: string };
       if (!response.ok || !data.state) throw new Error(data.error ?? "切换分支失败。");
@@ -828,8 +839,16 @@ export function TreeableApp() {
 
   function addAndChooseCustomOption(option: BranchOption) {
     if (isBusy) return;
+    const activeNodeId = viewNodeId ?? sessionState?.currentNode?.id ?? null;
+    if (!activeNodeId) return;
+
     setCustomOption(option);
-    void choose(option.id, undefined, "balanced", option);
+    if (activeNodeId === sessionState?.currentNode?.id) {
+      void choose(option.id, undefined, "balanced", option);
+      return;
+    }
+
+    void activateHistoricalBranch(activeNodeId, option.id, "balanced", undefined, option);
   }
 
   function openSeedSetup(defaults: RootSetupDefaults | null = null) {
@@ -972,10 +991,7 @@ export function TreeableApp() {
       !isBusy
   );
   const streamedActiveViewNode = activeViewNode ? withStreamingOptions(activeViewNode, streamingOptions) : null;
-  const currentNodeForCanvas =
-    streamedActiveViewNode && isViewingCurrentNode
-      ? withCustomOption(streamedActiveViewNode, customOption)
-      : streamedActiveViewNode;
+  const currentNodeForCanvas = streamedActiveViewNode ? withCustomOption(streamedActiveViewNode, customOption) : null;
   const enabledSkillIds = sessionState?.enabledSkillIds ?? [];
   const enabledSkills: Skill[] = (sessionState?.enabledSkills ?? []).map((skill) => ({
     ...skill,
@@ -1101,7 +1117,7 @@ export function TreeableApp() {
           isComparisonMode={Boolean(draftComparison)}
           isBusy={treeChoicesDisabled}
           onActivateBranch={activateHistoricalBranch}
-          onAddCustomOption={isViewingCurrentNode ? addAndChooseCustomOption : undefined}
+          onAddCustomOption={activeViewNodeId ? addAndChooseCustomOption : undefined}
           onChoose={chooseFromViewedNode}
           onSelectComparisonNode={selectDraftComparisonNode}
           onViewNode={(nodeId) => void viewNode(nodeId)}
