@@ -11,10 +11,15 @@ export function createTreeableAnthropicModel(env: Record<string, string | undefi
 
   const anthropic = createAnthropic({
     apiKey,
-    baseURL: getDirectorBaseUrl(env)
+    baseURL: getAnthropicProviderBaseUrl(env)
   });
 
   return anthropic(getDirectorModel(env));
+}
+
+export function getAnthropicProviderBaseUrl(env: Record<string, string | undefined> = process.env) {
+  const baseUrl = getDirectorBaseUrl(env);
+  return baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
 }
 
 export function createWritingAgent(

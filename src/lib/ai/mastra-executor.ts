@@ -22,7 +22,7 @@ type MemoryScope = {
 type WritingAgentLike = {
   stream: (
     messages: MastraConversationMessage[],
-    options: { memory: MemoryScope; signal?: AbortSignal }
+    options: { abortSignal?: AbortSignal; memory: MemoryScope }
   ) => Promise<AgentStreamResult>;
 };
 
@@ -30,18 +30,23 @@ type SuggestionAgentLike = {
   generate: (
     messages: MastraConversationMessage[],
     options: {
+      abortSignal?: AbortSignal;
       memory: MemoryScope;
       structuredOutput: { schema: typeof SuggestionOutputSchema };
-      signal?: AbortSignal;
     }
   ) => Promise<{ object?: unknown; output?: unknown }>;
 };
+
+type AgentExecutionContextOverride = Pick<
+  SharedAgentContextInput,
+  "availableSkillSummaries" | "longTermMemory" | "toolSummaries"
+>;
 
 export type AgentExecutionInput = {
   state: SessionState;
   path: ConversationNode[];
   signal?: AbortSignal;
-  context?: Partial<SharedAgentContextInput>;
+  context?: Partial<AgentExecutionContextOverride>;
 };
 
 type SessionStateSkill = NonNullable<SessionState["enabledSkills"]>[number];
@@ -59,8 +64,8 @@ export async function streamWritingReply({
 }) {
   const agent = writingAgent ?? (createWritingAgent(contextForState(state, context)) as unknown as WritingAgentLike);
   const result = await agent.stream(buildMastraMessagesFromPath(path), {
-    memory: memoryScopeForState(state),
-    signal
+    abortSignal: signal,
+    memory: memoryScopeForState(state)
   });
 
   let accumulated = "";
@@ -89,20 +94,25 @@ export async function generateSuggestions({
 }): Promise<SuggestedUserMove[]> {
   const agent = suggestionAgent ?? (createSuggestionAgent(contextForState(state, context)) as unknown as SuggestionAgentLike);
   const result = await agent.generate(buildMastraMessagesFromPath(path), {
+    abortSignal: signal,
     memory: memoryScopeForState(state),
-    structuredOutput: { schema: SuggestionOutputSchema },
-    signal
+    structuredOutput: { schema: SuggestionOutputSchema }
   });
   const output = SuggestionOutputSchema.parse(result.object ?? result.output);
   return output.suggestions;
 }
 
-function contextForState(state: SessionState, context: Partial<SharedAgentContextInput> = {}): SharedAgentContextInput {
+function contextForState(
+  state: SessionState,
+  context: Partial<AgentExecutionContextOverride> = {}
+): SharedAgentContextInput {
   return {
     rootSummary: state.rootMemory.summary,
     learnedSummary: state.rootMemory.learnedSummary,
     enabledSkills: (state.enabledSkills ?? []).map(normalizeSkill),
-    ...context
+    longTermMemory: context.longTermMemory,
+    availableSkillSummaries: context.availableSkillSummaries,
+    toolSummaries: context.toolSummaries
   };
 }
 
