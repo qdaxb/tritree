@@ -2,8 +2,9 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 const TREEABLE_TABLES = [
+  "conversation_nodes",
   "publish_packages",
   "branch_history",
   "draft_versions",
@@ -91,6 +92,16 @@ function createSchema(sqlite: DatabaseSync) {
       skill_id TEXT NOT NULL REFERENCES skills(id),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (session_id, skill_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS conversation_nodes (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id),
+      parent_id TEXT REFERENCES conversation_nodes(id),
+      role TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant', 'tool')),
+      content TEXT NOT NULL,
+      metadata_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS tree_nodes (

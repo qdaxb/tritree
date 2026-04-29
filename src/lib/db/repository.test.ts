@@ -1186,3 +1186,99 @@ describe("Treeable repository", () => {
     expect(continued.session.status).toBe("active");
   });
 });
+
+describe("conversation nodes", () => {
+  it("creates conversation roots and children with suggestion metadata", () => {
+    const repo = createTreeableRepository(testDbPath());
+    const root = repo.saveRootMemory({
+      seed: "写一段天气文字",
+      domains: ["创作"],
+      tones: ["平静"],
+      styles: ["观点型"],
+      personas: ["实践者"]
+    });
+    const state = repo.createSessionDraft({
+      rootMemoryId: root.id,
+      draft: { title: "天气", body: "今天天气不错", hashtags: [], imagePrompt: "" }
+    });
+
+    const userNode = repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: null,
+      role: "user",
+      content: "今天天气不错",
+      metadata: { source: "user_typed" }
+    });
+    const assistantNode = repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: userNode.id,
+      role: "assistant",
+      content: "今天天气不错，晴朗的天空让人想多走一段路。",
+      metadata: {
+        source: "ai_reply",
+        suggestions: [
+          { id: "a", label: "代入天气", message: "查询并代入实际天气。" },
+          { id: "b", label: "换语气", message: "改得更像朋友圈。" },
+          { id: "c", label: "继续写", message: "继续补写心情。" }
+        ]
+      }
+    });
+
+    expect(repo.listConversationNodes(state.session.id).map((node) => node.id)).toEqual([userNode.id, assistantNode.id]);
+    expect(repo.getConversationPath(state.session.id, assistantNode.id).map((node) => node.content)).toEqual([
+      "今天天气不错",
+      "今天天气不错，晴朗的天空让人想多走一段路。"
+    ]);
+    expect(repo.getSessionState(state.session.id)?.session.currentNodeId).toBe(state.session.currentNodeId);
+  });
+
+  it("replays only the selected conversation branch", () => {
+    const repo = createTreeableRepository(testDbPath());
+    const root = repo.saveRootMemory({
+      seed: "写一段天气文字",
+      domains: ["创作"],
+      tones: ["平静"],
+      styles: ["观点型"],
+      personas: ["实践者"]
+    });
+    const state = repo.createSessionDraft({
+      rootMemoryId: root.id,
+      draft: { title: "天气", body: "今天天气不错", hashtags: [], imagePrompt: "" }
+    });
+
+    const user = repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: null,
+      role: "user",
+      content: "今天天气不错",
+      metadata: { source: "user_typed" }
+    });
+    const assistant = repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: user.id,
+      role: "assistant",
+      content: "晴朗的天空让人想散步。",
+      metadata: { source: "ai_reply" }
+    });
+    const branchA = repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: assistant.id,
+      role: "user",
+      content: "代入实际天气",
+      metadata: { source: "suggestion_pick", suggestionId: "a" }
+    });
+    repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: assistant.id,
+      role: "user",
+      content: "改成朋友圈",
+      metadata: { source: "suggestion_pick", suggestionId: "b" }
+    });
+
+    expect(repo.getConversationPath(state.session.id, branchA.id).map((node) => node.content)).toEqual([
+      "今天天气不错",
+      "晴朗的天空让人想散步。",
+      "代入实际天气"
+    ]);
+  });
+});
