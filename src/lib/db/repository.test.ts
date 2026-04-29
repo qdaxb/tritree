@@ -1281,4 +1281,177 @@ describe("conversation nodes", () => {
       "代入实际天气"
     ]);
   });
+
+  it("throws when replaying a missing conversation node", () => {
+    const repo = createTreeableRepository(testDbPath());
+    const root = repo.saveRootMemory({
+      seed: "写一段天气文字",
+      domains: ["创作"],
+      tones: ["平静"],
+      styles: ["观点型"],
+      personas: ["实践者"]
+    });
+    const state = repo.createSessionDraft({
+      rootMemoryId: root.id,
+      draft: { title: "天气", body: "今天天气不错", hashtags: [], imagePrompt: "" }
+    });
+
+    expect(() => repo.getConversationPath(state.session.id, "missing-node")).toThrow("Conversation node was not found.");
+  });
+
+  it("rejects cross-session parent edges during path replay", () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    const root = repo.saveRootMemory({
+      seed: "写一段天气文字",
+      domains: ["创作"],
+      tones: ["平静"],
+      styles: ["观点型"],
+      personas: ["实践者"]
+    });
+    const firstState = repo.createSessionDraft({
+      rootMemoryId: root.id,
+      draft: { title: "天气", body: "今天天气不错", hashtags: [], imagePrompt: "" }
+    });
+    const secondState = repo.createSessionDraft({
+      rootMemoryId: root.id,
+      draft: { title: "天气 2", body: "明天天气也不错", hashtags: [], imagePrompt: "" }
+    });
+    const firstNode = repo.createConversationNode({
+      sessionId: firstState.session.id,
+      parentId: null,
+      role: "user",
+      content: "今天天气不错",
+      metadata: { source: "user_typed" }
+    });
+    const secondNode = repo.createConversationNode({
+      sessionId: secondState.session.id,
+      parentId: null,
+      role: "user",
+      content: "明天天气也不错",
+      metadata: { source: "user_typed" }
+    });
+    const sqlite = new DatabaseSync(dbPath);
+    sqlite.exec("PRAGMA foreign_keys = ON;");
+    sqlite
+      .prepare("UPDATE conversation_nodes SET parent_id = ? WHERE id = ?")
+      .run(secondNode.id, firstNode.id);
+    sqlite.close();
+
+    expect(() => repo.getConversationPath(firstState.session.id, firstNode.id)).toThrow(
+      "Conversation path contains a parent outside the session."
+    );
+  });
+
+  it("rejects unresolved parent edges during path replay", () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    const root = repo.saveRootMemory({
+      seed: "写一段天气文字",
+      domains: ["创作"],
+      tones: ["平静"],
+      styles: ["观点型"],
+      personas: ["实践者"]
+    });
+    const state = repo.createSessionDraft({
+      rootMemoryId: root.id,
+      draft: { title: "天气", body: "今天天气不错", hashtags: [], imagePrompt: "" }
+    });
+    const node = repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: null,
+      role: "user",
+      content: "今天天气不错",
+      metadata: { source: "user_typed" }
+    });
+    const sqlite = new DatabaseSync(dbPath);
+    sqlite.exec("PRAGMA foreign_keys = OFF;");
+    sqlite.prepare("UPDATE conversation_nodes SET parent_id = ? WHERE id = ?").run("missing-parent", node.id);
+    sqlite.close();
+
+    expect(() => repo.getConversationPath(state.session.id, node.id)).toThrow(
+      "Conversation path contains an unresolved parent."
+    );
+  });
+
+  it("rejects cyclic conversation chains during path replay", () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    const root = repo.saveRootMemory({
+      seed: "写一段天气文字",
+      domains: ["创作"],
+      tones: ["平静"],
+      styles: ["观点型"],
+      personas: ["实践者"]
+    });
+    const state = repo.createSessionDraft({
+      rootMemoryId: root.id,
+      draft: { title: "天气", body: "今天天气不错", hashtags: [], imagePrompt: "" }
+    });
+    const user = repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: null,
+      role: "user",
+      content: "今天天气不错",
+      metadata: { source: "user_typed" }
+    });
+    const assistant = repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: user.id,
+      role: "assistant",
+      content: "晴朗的天空让人想散步。",
+      metadata: { source: "ai_reply" }
+    });
+    const sqlite = new DatabaseSync(dbPath);
+    sqlite.exec("PRAGMA foreign_keys = ON;");
+    sqlite.prepare("UPDATE conversation_nodes SET parent_id = ? WHERE id = ?").run(assistant.id, user.id);
+    sqlite.close();
+
+    expect(() => repo.getConversationPath(state.session.id, assistant.id)).toThrow(
+      "Conversation path contains a cycle."
+    );
+  });
+
+  it("updates conversation node metadata", () => {
+    const repo = createTreeableRepository(testDbPath());
+    const root = repo.saveRootMemory({
+      seed: "写一段天气文字",
+      domains: ["创作"],
+      tones: ["平静"],
+      styles: ["观点型"],
+      personas: ["实践者"]
+    });
+    const state = repo.createSessionDraft({
+      rootMemoryId: root.id,
+      draft: { title: "天气", body: "今天天气不错", hashtags: [], imagePrompt: "" }
+    });
+    const node = repo.createConversationNode({
+      sessionId: state.session.id,
+      parentId: null,
+      role: "assistant",
+      content: "晴朗的天空让人想散步。",
+      metadata: { source: "ai_reply" }
+    });
+
+    const updated = repo.updateConversationNodeMetadata({
+      sessionId: state.session.id,
+      nodeId: node.id,
+      metadata: {
+        source: "ai_reply",
+        skillsUsed: ["system-polish"],
+        suggestions: [
+          { id: "a", label: "代入天气", message: "查询并代入实际天气。" },
+          { id: "b", label: "换语气", message: "改得更像朋友圈。" },
+          { id: "c", label: "继续写", message: "继续补写心情。" }
+        ]
+      }
+    });
+
+    expect(updated.metadata.skillsUsed).toEqual(["system-polish"]);
+    expect(repo.listConversationNodes(state.session.id)[0].metadata.suggestions?.map((suggestion) => suggestion.id)).toEqual([
+      "a",
+      "b",
+      "c"
+    ]);
+  });
 });

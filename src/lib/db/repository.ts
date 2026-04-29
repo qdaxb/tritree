@@ -1062,14 +1062,32 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const visited = new Set<string>();
     let cursor = nodesById.get(nodeId);
 
-    while (cursor && !visited.has(cursor.id)) {
-      path.unshift(cursor);
-      visited.add(cursor.id);
-      cursor = cursor.parentId ? nodesById.get(cursor.parentId) : undefined;
+    if (!cursor) {
+      throw new Error("Conversation node was not found.");
     }
 
-    if (path.length === 0 || path.at(-1)?.id !== nodeId) {
-      throw new Error("Conversation node was not found.");
+    while (cursor) {
+      if (visited.has(cursor.id)) {
+        throw new Error("Conversation path contains a cycle.");
+      }
+
+      path.unshift(cursor);
+      visited.add(cursor.id);
+
+      if (!cursor.parentId) break;
+
+      const parent = nodesById.get(cursor.parentId);
+      if (!parent) {
+        const parentRow = db
+          .prepare("SELECT session_id FROM conversation_nodes WHERE id = ?")
+          .get(cursor.parentId) as { session_id: string } | undefined;
+        if (parentRow) {
+          throw new Error("Conversation path contains a parent outside the session.");
+        }
+        throw new Error("Conversation path contains an unresolved parent.");
+      }
+
+      cursor = parent;
     }
 
     return path;
