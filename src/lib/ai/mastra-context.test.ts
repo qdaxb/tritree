@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildSharedAgentContext, buildSuggestionInstructions, buildWritingInstructions } from "./mastra-context";
+import {
+  buildSharedAgentContext,
+  buildSuggestionInstructions,
+  buildWritingInstructions,
+  type SharedAgentContextInput
+} from "./mastra-context";
 
 const input = {
   rootSummary: "Seed：写一段天气文字",
@@ -21,7 +26,7 @@ const input = {
   ],
   availableSkillSummaries: ["小红书标题：生成适合小红书的标题。"],
   toolSummaries: ["get_weather：查询指定地点天气。"]
-};
+} satisfies SharedAgentContextInput;
 
 describe("buildSharedAgentContext", () => {
   it("renders memory, skills, inactive skill summaries, and tool summaries", () => {

@@ -68,6 +68,43 @@ describe("buildMastraMessagesFromPath", () => {
       }
     ]);
   });
+
+  it("skips tool nodes until structured tool replay is supported", () => {
+    expect(
+      buildMastraMessagesFromPath([
+        {
+          id: "user-1",
+          sessionId: "session-1",
+          parentId: null,
+          role: "user",
+          content: "查询今天的天气。",
+          metadata: { source: "user_typed" },
+          createdAt: "2026-04-29T00:00:00.000Z"
+        },
+        {
+          id: "tool-1",
+          sessionId: "session-1",
+          parentId: "user-1",
+          role: "tool",
+          content: "晴，22 摄氏度。",
+          metadata: { source: "tool_result", toolResults: [{ name: "get_weather", result: "晴，22 摄氏度。" }] },
+          createdAt: "2026-04-29T00:00:01.000Z"
+        },
+        {
+          id: "assistant-1",
+          sessionId: "session-1",
+          parentId: "tool-1",
+          role: "assistant",
+          content: "今天是晴天，适合出去走走。",
+          metadata: { source: "ai_reply" },
+          createdAt: "2026-04-29T00:00:02.000Z"
+        }
+      ])
+    ).toEqual([
+      { role: "user", content: "查询今天的天气。" },
+      { role: "assistant", content: "今天是晴天，适合出去走走。" }
+    ]);
+  });
 });
 
 describe("latestConversationNodeId", () => {
