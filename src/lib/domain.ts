@@ -381,6 +381,7 @@ export type ConversationRole = z.infer<typeof ConversationRoleSchema>;
 export type ConversationSource = z.infer<typeof ConversationSourceSchema>;
 export type SuggestedUserMove = z.infer<typeof SuggestedUserMoveSchema>;
 export type SuggestionOutput = z.infer<typeof SuggestionOutputSchema>;
+export type ConversationMetadata = z.infer<typeof ConversationMetadataSchema>;
 export type ConversationNode = z.infer<typeof ConversationNodeSchema>;
 export type ChatStreamEvent = z.infer<typeof ChatStreamEventSchema>;
 export type ToolCallRecord = z.infer<typeof ToolCallRecordSchema>;
