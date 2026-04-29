@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ChatStreamEventSchema } from "@/lib/domain";
 import { POST } from "./route";
 
 const getRepositoryMock = vi.hoisted(() => vi.fn());
@@ -54,6 +55,14 @@ beforeEach(() => {
   generateSuggestionsMock.mockReset();
 });
 
+function parseEvents(text: string) {
+  return text
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => ChatStreamEventSchema.parse(JSON.parse(line)));
+}
+
 describe("POST /api/sessions/:sessionId/messages/stream", () => {
   it("returns 404 when the session is missing", async () => {
     getRepositoryMock.mockReturnValue({
@@ -70,6 +79,99 @@ describe("POST /api/sessions/:sessionId/messages/stream", () => {
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: "没有找到这次创作。" });
+  });
+
+  it("returns a synchronous 404 when the parent node is outside the session", async () => {
+    const repo = {
+      getSessionState: vi.fn().mockReturnValue(state),
+      getConversationPath: vi.fn().mockImplementation(() => {
+        throw new Error("Conversation node was not found.");
+      }),
+      createConversationNode: vi.fn()
+    };
+    getRepositoryMock.mockReturnValue(repo);
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/messages/stream", {
+        method: "POST",
+        body: JSON.stringify({ parentId: "missing-parent", content: "继续写。" })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+    await expect(response.json()).resolves.toEqual({ error: "没有找到上级对话节点。" });
+    expect(repo.getConversationPath).toHaveBeenCalledWith("session-1", "missing-parent");
+    expect(repo.createConversationNode).not.toHaveBeenCalled();
+    expect(streamWritingReplyMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid provenance combinations before persistence", async () => {
+    const repo = {
+      getSessionState: vi.fn().mockReturnValue(state),
+      createConversationNode: vi.fn()
+    };
+    getRepositoryMock.mockReturnValue(repo);
+
+    const cases = [
+      { content: "继续写。", source: "suggestion_pick", suggestionId: "a", targetNodeId: "assistant-1" },
+      { parentId: "assistant-1", content: "继续写。", source: "suggestion_pick", targetNodeId: "assistant-1" },
+      { parentId: "assistant-1", content: "继续写。", source: "suggestion_pick", suggestionId: "a" },
+      { content: "继续写。", source: "user_edit" },
+      { content: "继续写。", source: "custom_direction", suggestionId: "a" },
+      { content: "继续写。", source: "user_typed", targetNodeId: "assistant-1" }
+    ];
+
+    for (const body of cases) {
+      const response = await POST(
+        new Request("http://test.local/api/sessions/session-1/messages/stream", {
+          method: "POST",
+          body: JSON.stringify(body)
+        }),
+        { params: Promise.resolve({ sessionId: "session-1" }) }
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({ error: "请求内容格式不正确。" });
+    }
+    expect(repo.createConversationNode).not.toHaveBeenCalled();
+    expect(streamWritingReplyMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a synchronous 404 when the provenance target node is outside the session", async () => {
+    const repo = {
+      getSessionState: vi.fn().mockReturnValue(state),
+      getConversationPath: vi
+        .fn()
+        .mockReturnValueOnce([{ id: "assistant-1" }])
+        .mockImplementationOnce(() => {
+          throw new Error("Conversation node was not found.");
+        }),
+      createConversationNode: vi.fn()
+    };
+    getRepositoryMock.mockReturnValue(repo);
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/messages/stream", {
+        method: "POST",
+        body: JSON.stringify({
+          parentId: "assistant-1",
+          content: "查询并代入实际天气。",
+          source: "suggestion_pick",
+          suggestionId: "a",
+          targetNodeId: "missing-target"
+        })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: "没有找到来源对话节点。" });
+    expect(repo.getConversationPath).toHaveBeenCalledWith("session-1", "assistant-1");
+    expect(repo.getConversationPath).toHaveBeenCalledWith("session-1", "missing-target");
+    expect(repo.createConversationNode).not.toHaveBeenCalled();
+    expect(streamWritingReplyMock).not.toHaveBeenCalled();
   });
 
   it("streams assistant text, saves assistant node, and stores suggestions as metadata", async () => {
@@ -124,12 +226,14 @@ describe("POST /api/sessions/:sessionId/messages/stream", () => {
     });
     const response = await POST(request, { params: Promise.resolve({ sessionId: "session-1" }) });
     const text = await response.text();
+    const events = parseEvents(text);
 
     expect(response.headers.get("Content-Type")).toContain("application/x-ndjson");
-    expect(text).toContain('"type":"text","text":"晴朗"');
-    expect(text).toContain('"type":"assistant"');
-    expect(text).toContain('"type":"suggestions"');
-    expect(text).toContain('"type":"done"');
+    expect(events.map((event) => event.type)).toEqual(["text", "text", "assistant", "suggestions", "done"]);
+    expect(events[0]).toEqual({ type: "text", text: "晴朗" });
+    expect(events[2]).toMatchObject({ type: "assistant", node: { id: "assistant-1" } });
+    expect(events[3]).toMatchObject({ type: "suggestions", nodeId: "assistant-1", suggestions });
+    expect(events[4]).toMatchObject({ type: "done", assistantNodeId: "assistant-1" });
     expect(repo.createConversationNode).toHaveBeenCalledWith({
       sessionId: "session-1",
       parentId: null,
@@ -187,7 +291,12 @@ describe("POST /api/sessions/:sessionId/messages/stream", () => {
     const repo = {
       getSessionState: vi.fn().mockReturnValue(state),
       createConversationNode: vi.fn().mockReturnValueOnce(pickedNode).mockReturnValueOnce(assistantNode),
-      getConversationPath: vi.fn().mockReturnValueOnce([parentNode, pickedNode]).mockReturnValueOnce([parentNode, pickedNode, assistantNode]),
+      getConversationPath: vi
+        .fn()
+        .mockReturnValueOnce([parentNode])
+        .mockReturnValueOnce([parentNode])
+        .mockReturnValueOnce([parentNode, pickedNode])
+        .mockReturnValueOnce([parentNode, pickedNode, assistantNode]),
       updateConversationNodeMetadata: vi.fn().mockReturnValue(assistantNode)
     };
     getRepositoryMock.mockReturnValue(repo);
@@ -208,10 +317,9 @@ describe("POST /api/sessions/:sessionId/messages/stream", () => {
       { params: Promise.resolve({ sessionId: "session-1" }) }
     );
     const text = await response.text();
+    const events = parseEvents(text);
 
-    expect(text).toContain('"type":"done"');
-    expect(text).not.toContain('"type":"error"');
-    expect(text).not.toContain('"type":"suggestions"');
+    expect(events.map((event) => event.type)).toEqual(["assistant", "done"]);
     expect(repo.createConversationNode).toHaveBeenCalledWith({
       sessionId: "session-1",
       parentId: "assistant-1",

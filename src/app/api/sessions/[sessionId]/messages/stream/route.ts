@@ -8,15 +8,66 @@ import { encodeNdjson } from "@/lib/stream/ndjson";
 
 export const runtime = "nodejs";
 
-const MessageStreamBodySchema = z.object({
-  parentId: z.string().min(1).nullable().optional(),
-  content: z.string().trim().min(1).max(12000),
-  source: ConversationSourceSchema.extract(["user_typed", "suggestion_pick", "custom_direction", "user_edit"]).default(
-    "user_typed"
-  ),
-  suggestionId: z.enum(["a", "b", "c"]).optional(),
-  targetNodeId: z.string().min(1).optional()
-});
+const MessageStreamBodySchema = z
+  .object({
+    parentId: z.string().min(1).nullable().optional(),
+    content: z.string().trim().min(1).max(12000),
+    source: ConversationSourceSchema.extract(["user_typed", "suggestion_pick", "custom_direction", "user_edit"]).default(
+      "user_typed"
+    ),
+    suggestionId: z.enum(["a", "b", "c"]).optional(),
+    targetNodeId: z.string().min(1).optional()
+  })
+  .superRefine((body, context) => {
+    if (body.source === "suggestion_pick") {
+      if (!body.parentId) {
+        context.addIssue({
+          code: "custom",
+          path: ["parentId"],
+          message: "Suggestion picks must include a parentId."
+        });
+      }
+      if (!body.suggestionId) {
+        context.addIssue({
+          code: "custom",
+          path: ["suggestionId"],
+          message: "Suggestion picks must include a suggestionId."
+        });
+      }
+      if (!body.targetNodeId) {
+        context.addIssue({
+          code: "custom",
+          path: ["targetNodeId"],
+          message: "Suggestion picks must include a targetNodeId."
+        });
+      }
+      return;
+    }
+
+    if (body.suggestionId) {
+      context.addIssue({
+        code: "custom",
+        path: ["suggestionId"],
+        message: "Only suggestion picks may include a suggestionId."
+      });
+    }
+
+    if (body.source === "user_edit" && !body.targetNodeId) {
+      context.addIssue({
+        code: "custom",
+        path: ["targetNodeId"],
+        message: "User edits must include a targetNodeId."
+      });
+    }
+
+    if (body.source === "user_typed" && body.targetNodeId) {
+      context.addIssue({
+        code: "custom",
+        path: ["targetNodeId"],
+        message: "Typed messages cannot include a targetNodeId."
+      });
+    }
+  });
 
 const ndjsonHeaders = {
   "Content-Type": "application/x-ndjson; charset=utf-8",
@@ -42,6 +93,14 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   const state = repository.getSessionState(sessionId);
   if (!state) {
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
+  }
+
+  if (body.parentId && !conversationNodeExists(repository, sessionId, body.parentId)) {
+    return NextResponse.json({ error: "没有找到上级对话节点。" }, { status: 404 });
+  }
+
+  if (body.targetNodeId && !conversationNodeExists(repository, sessionId, body.targetNodeId)) {
+    return NextResponse.json({ error: "没有找到来源对话节点。" }, { status: 404 });
   }
 
   const stream = new ReadableStream({
@@ -116,4 +175,17 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   });
 
   return new Response(stream, { headers: ndjsonHeaders });
+}
+
+function conversationNodeExists(
+  repository: { getConversationPath: (sessionId: string, nodeId: string) => unknown },
+  sessionId: string,
+  nodeId: string
+) {
+  try {
+    repository.getConversationPath(sessionId, nodeId);
+    return true;
+  } catch {
+    return false;
+  }
 }
