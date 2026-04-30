@@ -67,6 +67,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         const output = await streamDirectorDraft(
           summarizeSessionForDirector(parentState, selectedOption, body.note, selectedOption.mode ?? body.optionMode),
           {
+            memory: { resource: state.rootMemory.id, thread: sessionId },
             signal: request.signal,
             onText(event) {
               const draft = extractPartialDirectorDraft(event.accumulatedText);

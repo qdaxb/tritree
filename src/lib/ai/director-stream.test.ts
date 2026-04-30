@@ -1,4 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mastraMocks = vi.hoisted(() => ({
+  generateTreeDraft: vi.fn(),
+  generateTreeOptions: vi.fn()
+}));
+
+vi.mock("./mastra-executor", () => ({
+  generateTreeDraft: mastraMocks.generateTreeDraft,
+  generateTreeOptions: mastraMocks.generateTreeOptions
+}));
+
 import {
   extractActiveDirectorDraftField,
   extractPartialDirectorOptions,
@@ -17,6 +28,11 @@ const directorInput = {
   selectedOptionLabel: "扩写",
   enabledSkills: []
 };
+
+beforeEach(() => {
+  mastraMocks.generateTreeDraft.mockReset();
+  mastraMocks.generateTreeOptions.mockReset();
+});
 
 describe("parseAnthropicSseTextDeltas", () => {
   it("extracts text_delta chunks and ignores non-text events", () => {
@@ -176,6 +192,39 @@ describe("extractPartialDirectorOptions", () => {
 });
 
 describe("streamDirectorDraft", () => {
+  it("uses the Mastra tree draft generator when no low-level fetcher is injected", async () => {
+    const output = {
+      roundIntent: "扩写",
+      draft: { title: "新标题", body: "新正文", hashtags: ["#AI"], imagePrompt: "新图" },
+      memoryObservation: "观察"
+    };
+    mastraMocks.generateTreeDraft.mockResolvedValue(output);
+    const signal = new AbortController().signal;
+    const onText = vi.fn();
+
+    await expect(
+      streamDirectorDraft(directorInput, {
+        signal,
+        memory: { resource: "root", thread: "session-1" },
+        onText
+      })
+    ).resolves.toEqual(output);
+
+    expect(mastraMocks.generateTreeDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: directorInput,
+        signal,
+        memory: { resource: "root", thread: "session-1" }
+      })
+    );
+    expect(onText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accumulatedText: JSON.stringify(output),
+        partialDraft: output.draft
+      })
+    );
+  });
+
   it("calls onText with accumulated text and returns the final parsed draft", async () => {
     const encoder = new TextEncoder();
     const response = new Response(
@@ -258,6 +307,40 @@ describe("streamDirectorDraft", () => {
 });
 
 describe("streamDirectorOptions", () => {
+  it("uses the Mastra tree options generator when no low-level fetcher is injected", async () => {
+    const output = {
+      roundIntent: "下一步",
+      options: [
+        { id: "a", label: "补场景", description: "A", impact: "A", kind: "explore" },
+        { id: "b", label: "深挖", description: "B", impact: "B", kind: "deepen" },
+        { id: "c", label: "换角度", description: "C", impact: "C", kind: "reframe" }
+      ],
+      memoryObservation: "偏好具体表达。"
+    };
+    mastraMocks.generateTreeOptions.mockResolvedValue(output);
+    const onText = vi.fn();
+
+    await expect(
+      streamDirectorOptions(directorInput, {
+        memory: { resource: "root", thread: "session-1" },
+        onText
+      })
+    ).resolves.toEqual(output);
+
+    expect(mastraMocks.generateTreeOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: directorInput,
+        memory: { resource: "root", thread: "session-1" }
+      })
+    );
+    expect(onText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accumulatedText: JSON.stringify(output),
+        partialOptions: output.options
+      })
+    );
+  });
+
   it("calls onText with partial options and returns the final parsed options", async () => {
     const encoder = new TextEncoder();
     const finalText = JSON.stringify({

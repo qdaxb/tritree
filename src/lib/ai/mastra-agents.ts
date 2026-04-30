@@ -1,7 +1,13 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { Agent } from "@mastra/core/agent";
 import { getDirectorAuthToken, getDirectorBaseUrl, getDirectorModel } from "./director";
-import { buildSuggestionInstructions, buildWritingInstructions, type SharedAgentContextInput } from "./mastra-context";
+import {
+  buildSuggestionInstructions,
+  buildTreeDraftInstructions,
+  buildTreeOptionsInstructions,
+  buildWritingInstructions,
+  type SharedAgentContextInput
+} from "./mastra-context";
 
 export function createTreeableAnthropicModel(env: Record<string, string | undefined> = process.env) {
   const apiKey = getDirectorAuthToken(env);
@@ -42,6 +48,30 @@ export function createSuggestionAgent(
     id: "treeable-suggestion-agent",
     name: "Treeable Suggestion Agent",
     instructions: buildSuggestionInstructions(context),
+    model: createTreeableAnthropicModel(env)
+  });
+}
+
+export function createTreeDraftAgent(
+  context: SharedAgentContextInput,
+  env: Record<string, string | undefined> = process.env
+) {
+  return new Agent({
+    id: "treeable-tree-draft-agent",
+    name: "Treeable Tree Draft Agent",
+    instructions: buildTreeDraftInstructions(context),
+    model: createTreeableAnthropicModel(env)
+  });
+}
+
+export function createTreeOptionsAgent(
+  context: SharedAgentContextInput,
+  env: Record<string, string | undefined> = process.env
+) {
+  return new Agent({
+    id: "treeable-tree-options-agent",
+    name: "Treeable Tree Options Agent",
+    instructions: buildTreeOptionsInstructions(context),
     model: createTreeableAnthropicModel(env)
   });
 }

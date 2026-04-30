@@ -1,4 +1,5 @@
 import type { Skill } from "@/lib/domain";
+import { DIRECTOR_DRAFT_SYSTEM_PROMPT, DIRECTOR_OPTIONS_SYSTEM_PROMPT } from "./prompts";
 
 export type SharedAgentContextInput = {
   rootSummary: string;
@@ -57,6 +58,35 @@ export function buildSuggestionInstructions(input: SharedAgentContextInput) {
     "不要生成正文，不要替用户执行写作任务，不要调用有副作用的工具。",
     "可以根据 enabled skills、memory 和 tool summaries 提议用户下一步要做什么。",
     "三个候选输入要互相区分，并且都适合当前对话上下文。"
+  ].join("\n");
+}
+
+export function buildTreeDraftInstructions(input: SharedAgentContextInput) {
+  return [
+    buildSharedAgentContext(input),
+    "",
+    "# Tree Draft Agent Instructions",
+    DIRECTOR_DRAFT_SYSTEM_PROMPT,
+    "",
+    "只生成本轮 draft，不要生成下一步选项。",
+    "保持旧树形工作台的数据契约：输出必须能映射为 roundIntent、draft 和 memoryObservation。",
+    "draft 内包含 title、body、hashtags 和 imagePrompt。",
+    "所有面向用户的字段都必须使用简体中文。"
+  ].join("\n");
+}
+
+export function buildTreeOptionsInstructions(input: SharedAgentContextInput) {
+  return [
+    buildSharedAgentContext(input),
+    "",
+    "# Tree Options Agent Instructions",
+    DIRECTOR_OPTIONS_SYSTEM_PROMPT,
+    "",
+    "只生成下一步三个选项，不要生成 draft 正文。",
+    "保持旧树形工作台的数据契约：输出必须能映射为 roundIntent、options 和 memoryObservation。",
+    "Each round must return exactly three branch options.",
+    "Option ids must be exactly a, b, and c once each.",
+    "所有面向用户的字段都必须使用简体中文。"
   ].join("\n");
 }
 
