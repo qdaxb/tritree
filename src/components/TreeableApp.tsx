@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import {
   SessionStateSchema,
   type BranchOption,
+  CUSTOM_OPTION_ID_PREFIX,
+  type CustomBranchOptionId,
   type Draft,
   type OptionGenerationMode,
   type RootMemory,
@@ -29,8 +31,16 @@ type NodeGenerationStage = { nodeId: string; stage: "draft" | "options" };
 type RootSetupDefaults = { seed: string; enabledSkillIds?: string[] };
 type DraftStreamField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDraftStreamingField = "body" | "imagePrompt";
-type StreamingDraftEntry = { nodeId: string; draft: Draft; streamingField: DraftStreamField | null };
+type StreamingDraftEntry = { nodeId: string; draft: Draft; previousDraft?: Draft | null; streamingField: DraftStreamField | null };
 type StreamingOptionsEntry = { nodeId: string; options: BranchOption[] };
+type DraftSelectionRewriteRequest = {
+  draft: Draft;
+  field: "body";
+  instruction: string;
+  selectedText: string;
+  selectionEnd: number;
+  selectionStart: number;
+};
 type DraftStreamEvent =
   | { type: "draft"; draft: Draft; streamingField?: DraftStreamField | null }
   | { type: "done"; state: SessionState }
@@ -264,6 +274,43 @@ function changedDraftNodeIdsForState(state: SessionState | null) {
 function previousComparisonNodeId(entries: DraftComparisonEntry[], toNodeId: string) {
   const toIndex = entries.findIndex((entry) => entry.nodeId === toNodeId);
   return toIndex > 0 ? entries[toIndex - 1].nodeId : null;
+}
+
+function createCustomBranchOptionId(prefix: string): CustomBranchOptionId {
+  const randomId =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+  return `${CUSTOM_OPTION_ID_PREFIX}${prefix}-${randomId}`;
+}
+
+function deriveCustomOptionLabel(content: string) {
+  const normalized = content.replace(/\s+/g, " ").trim();
+  const [firstSegment = normalized] = normalized.split(/[。！？!?，,；;：:\n]/);
+  const label = firstSegment.trim() || normalized;
+  return Array.from(label).slice(0, 15).join("");
+}
+
+function createSelectionReferenceOption(request: DraftSelectionRewriteRequest): BranchOption {
+  const instruction = request.instruction.trim();
+  const selectedText = request.selectedText.trim();
+  return {
+    id: createCustomBranchOptionId("reference"),
+    label: deriveCustomOptionLabel(instruction || selectedText || "引用选中文本"),
+    description: `引用选中文本继续生成：\n「${selectedText}」\n\n用户要求：${instruction}`,
+    impact: "按选中文本和用户要求作为自定义方向继续生成。",
+    kind: "reframe"
+  };
+}
+
+function isValidDraftSelectionRewriteRequest(request: DraftSelectionRewriteRequest) {
+  const { body } = request.draft;
+  return (
+    request.selectionStart >= 0 &&
+    request.selectionEnd >= request.selectionStart &&
+    request.selectionEnd <= body.length &&
+    body.slice(request.selectionStart, request.selectionEnd) === request.selectedText
+  );
 }
 
 function formatComparisonNodeLabel(node: TreeNode, nodesById: Map<string, TreeNode>) {
@@ -887,6 +934,27 @@ export function TreeableApp() {
     setMessage("");
   }
 
+  async function saveDraftForNode(draft: Draft, draftParentNodeId: string) {
+    const response = await fetch(`/api/sessions/${sessionState!.session.id}/draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: draftParentNodeId, draft })
+    });
+    const data = (await response.json()) as { state?: SessionState; error?: string };
+    if (!response.ok || !data.state) throw new Error(data.error ?? "保存草稿失败。");
+    const nextNodeId = data.state.currentNode?.id ?? null;
+    setSessionState(data.state);
+    setViewNodeId(nextNodeId);
+    setCustomOption(null);
+    setDraftComparison(null);
+    previewDraftGeneration(data.state, nextNodeId);
+    if (data.error) {
+      setMessage(apiKeyMessage(data.error));
+    }
+    await allowDraftRender();
+    await finishNodeGeneration(data.state, nextNodeId);
+  }
+
   async function saveDraft(draft: Draft) {
     if (isBusy) return;
     if (!sessionState?.currentNode) return;
@@ -895,37 +963,27 @@ export function TreeableApp() {
     setIsBusy(true);
     setMessage("");
     try {
-      const response = await fetch(`/api/sessions/${sessionState.session.id}/draft`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nodeId: draftParentNodeId, draft })
-      });
-      const data = (await response.json()) as { state?: SessionState; error?: string };
-      if (!response.ok || !data.state) throw new Error(data.error ?? "保存草稿失败。");
-      const nextNodeId = data.state.currentNode?.id ?? null;
-      setSessionState(data.state);
-      setViewNodeId(nextNodeId);
-      setCustomOption(null);
-      setDraftComparison(null);
-      previewDraftGeneration(data.state, nextNodeId);
-      if (data.error) {
-        setMessage(apiKeyMessage(data.error));
-      }
-      await allowDraftRender();
-      await finishNodeGeneration(data.state, nextNodeId);
+      await saveDraftForNode(draft, draftParentNodeId);
     } catch (error) {
       const text = error instanceof Error ? error.message : "保存草稿失败。";
-      setMessage(
-        text.includes("Kimi API Key") || text.includes("KIMI_API_KEY")
-          ? "请在 .env.local 添加 ANTHROPIC_AUTH_TOKEN 或 KIMI_API_KEY，然后重启开发服务器。"
-          : text
-      );
+      setMessage(apiKeyMessage(text));
     } finally {
       setGenerationStage(null);
       setStreamingDraft(null);
       setStreamingOptions(null);
       setIsBusy(false);
     }
+  }
+
+  function rewriteDraftSelection(request: DraftSelectionRewriteRequest) {
+    if (isBusy) return;
+    if (!sessionState?.currentNode) return;
+    if (!isValidDraftSelectionRewriteRequest(request)) {
+      setMessage("选中文本已经变化，请重新选择。");
+      return;
+    }
+
+    addAndChooseCustomOption(createSelectionReferenceOption(request));
   }
 
   if (loadState === "loading") return <main className="loading-screen">正在唤醒 Tritree...</main>;
@@ -962,18 +1020,20 @@ export function TreeableApp() {
   const startButtonLabel = isBusy && !sessionState ? "生成方向中" : sessionState ? "重新开始" : "开始创作";
   const activeViewNodeId = viewNodeId ?? sessionState?.currentNode?.id ?? null;
   const activeViewNode = sessionState ? findTreeNode(sessionState, activeViewNodeId) : null;
-  const previousDraft =
+  const treePreviousDraft =
     activeViewNode?.parentId && sessionState
       ? sessionState.nodeDrafts.find((item) => item.nodeId === activeViewNode.parentId)?.draft ?? null
       : null;
+  const activeStreamingDraft = streamingDraft?.nodeId === activeViewNodeId ? streamingDraft : null;
+  const previousDraft = activeStreamingDraft?.previousDraft ?? treePreviousDraft;
   const persistedDraftForView = sessionState ? draftForNode(sessionState, activeViewNodeId) : null;
   const isDraftGenerationForView = Boolean(
     activeViewNodeId && generationStage?.nodeId === activeViewNodeId && generationStage.stage === "draft"
   );
-  const isStreamingDraftForView = Boolean(streamingDraft?.nodeId === activeViewNodeId && isDraftGenerationForView);
-  const streamedDraftForView = isStreamingDraftForView ? streamingDraft?.draft ?? null : null;
+  const isStreamingDraftForView = Boolean(activeStreamingDraft && isDraftGenerationForView);
+  const streamedDraftForView = isStreamingDraftForView ? activeStreamingDraft?.draft ?? null : null;
   const liveDiffStreamingField = isStreamingDraftForView
-    ? liveDraftStreamingFieldFor(streamingDraft?.streamingField)
+    ? liveDraftStreamingFieldFor(activeStreamingDraft?.streamingField)
     : undefined;
   const viewedDraft = streamedDraftForView ?? (isDraftGenerationForView ? previousDraft : persistedDraftForView);
   const isGeneratedDiffReview = Boolean(
@@ -1195,6 +1255,7 @@ export function TreeableApp() {
         mode={isViewingCurrentNode ? "current" : "history"}
         onCancelComparison={cancelDraftComparison}
         onDismissLiveDiff={() => setGeneratedDiffNodeId(null)}
+        onRewriteSelection={rewriteDraftSelection}
         onSave={saveDraft}
         onStartComparison={startDraftComparison}
         previousDraft={previousDraft}

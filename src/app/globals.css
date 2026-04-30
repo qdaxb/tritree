@@ -1061,6 +1061,7 @@ button:disabled {
 
 .branch-option-side {
   min-height: 30px;
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
@@ -1283,13 +1284,22 @@ button:disabled {
 }
 
 .branch-side-form {
-  width: min(300px, 100%);
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  width: min(320px, 100%);
+  max-width: calc(100% - 24px);
+  max-height: min(420px, calc(100dvh - 160px));
   display: grid;
   gap: 8px;
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 10px;
   background: rgba(248, 250, 252, 0.82);
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 8px;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.16);
 }
 
 .more-directions__skills {
@@ -1549,6 +1559,7 @@ button:disabled {
 .draft-content {
   min-width: 0;
   overflow-wrap: anywhere;
+  user-select: text;
 }
 
 .draft-editor {
@@ -1575,6 +1586,7 @@ button:disabled {
   border-radius: 8px;
   line-height: 1.5;
   outline: none;
+  user-select: text;
 }
 
 .draft-editor textarea {
@@ -1591,6 +1603,78 @@ button:disabled {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.draft-selection-actions {
+  position: fixed;
+  z-index: 35;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.28);
+}
+
+.draft-selection-actions button {
+  min-width: 62px;
+  min-height: 28px;
+  padding: 0 12px;
+  color: #f8fafc;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.draft-selection-actions button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.draft-selection-edit {
+  position: fixed;
+  z-index: 30;
+  width: min(320px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+}
+
+.draft-selection-edit__preview {
+  margin: 0 0 10px;
+  color: #334155;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.draft-selection-edit label {
+  display: grid;
+  gap: 6px;
+}
+
+.draft-selection-edit label span {
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.draft-selection-edit textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.draft-selection-edit__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .draft-diff-inline-actions {
@@ -1726,6 +1810,7 @@ button:disabled {
   color: var(--muted);
   font-size: 0.95rem;
   line-height: 1.6;
+  user-select: text;
   word-break: break-word;
 }
 

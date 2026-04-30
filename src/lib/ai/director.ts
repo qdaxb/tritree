@@ -90,11 +90,11 @@ export function buildDirectorInput(parts: DirectorInputParts) {
 }
 
 export function parseDirectorDraftText(text: string): DirectorDraftOutput {
-  return parseDirectorDraftOutput(parseJsonObject(text));
+  return parseDirectorDraftOutput(parseDirectorJsonObject(text));
 }
 
 export function parseDirectorOptionsText(text: string): DirectorOptionsOutput {
-  return parseDirectorOptionsOutput(parseJsonObject(text));
+  return parseDirectorOptionsOutput(parseDirectorJsonObject(text));
 }
 
 export function getDirectorModel(env: Record<string, string | undefined> = process.env) {
@@ -107,6 +107,23 @@ export function getDirectorBaseUrl(env: Record<string, string | undefined> = pro
 
 export function getDirectorAuthToken(env: Record<string, string | undefined> = process.env) {
   return env.ANTHROPIC_AUTH_TOKEN ?? env.KIMI_API_KEY ?? env.MOONSHOT_API_KEY ?? "";
+}
+
+export async function createDirectorStreamHttpError(response: Response) {
+  const contentType = response.headers.get("Content-Type") ?? "";
+  const body = contentType.includes("application/json")
+    ? ((await response.json().catch(() => null)) as unknown)
+    : await response.text().catch(() => "");
+
+  if (isRecord(body) && isRecord(body.error) && typeof body.error.message === "string") {
+    return new Error(body.error.message);
+  }
+
+  if (typeof body === "string" && body.trim().length > 0) {
+    return new Error(body);
+  }
+
+  return new Error(`Kimi Anthropic-compatible API stream request failed with status ${response.status}.`);
 }
 
 function buildDirectorOptionsRequest(
@@ -219,7 +236,7 @@ function findLatestUserMessageIndex(messages: DirectorMessage[]) {
   return -1;
 }
 
-function parseJsonObject(text: string) {
+export function parseDirectorJsonObject(text: string) {
   const withoutFence = text
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
@@ -324,4 +341,8 @@ function nextNonWhitespaceChar(value: string, startIndex: number) {
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

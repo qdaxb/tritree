@@ -106,6 +106,14 @@ vi.mock("@/components/draft/LiveDraft", () => ({
     liveDiffStreamingField?: "body" | "imagePrompt" | null;
     isComparisonMode?: boolean;
     onDismissLiveDiff?: () => void;
+    onRewriteSelection?: (request: {
+      draft: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string };
+      field: "body";
+      instruction: string;
+      selectedText: string;
+      selectionEnd: number;
+      selectionStart: number;
+    }) => void | Promise<void>;
     onSave?: (draft: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string }) => void;
     onStartComparison?: () => void;
     previousDraft?: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string } | null;
@@ -125,6 +133,46 @@ vi.mock("@/components/draft/LiveDraft", () => ({
         </button>
         <button onClick={props.onDismissLiveDiff} type="button">
           dismiss generated diff
+        </button>
+        <button
+          onClick={() =>
+            props.onRewriteSelection?.({
+              draft: {
+                title: props.draft?.title ?? "Draft",
+                body: "重复句。目标句。重复句。",
+                hashtags: props.draft?.hashtags ?? [],
+                imagePrompt: props.draft?.imagePrompt ?? ""
+              },
+              field: "body",
+              selectedText: "目标句。",
+              selectionStart: 4,
+              selectionEnd: 8,
+              instruction: "补一个细节"
+            })
+          }
+          type="button"
+        >
+          rewrite selection
+        </button>
+        <button
+          onClick={() =>
+            props.onRewriteSelection?.({
+              draft: {
+                title: props.draft?.title ?? "Draft",
+                body: "重复句。目标句已经变了。重复句。",
+                hashtags: props.draft?.hashtags ?? [],
+                imagePrompt: props.draft?.imagePrompt ?? ""
+              },
+              field: "body",
+              selectedText: "目标句。",
+              selectionStart: 4,
+              selectionEnd: 8,
+              instruction: "补一个细节"
+            })
+          }
+          type="button"
+        >
+          rewrite stale selection
         </button>
         <button
           onClick={() =>
@@ -1907,5 +1955,161 @@ describe("TreeableApp", () => {
         })
       );
     });
+  });
+
+  it("uses selected text rewrite as a custom direction and follows the regular generation flow", async () => {
+    const nodeOnlyState = {
+      ...activeState,
+      session: { ...activeState.session, currentNodeId: "node-2" },
+      currentNode: {
+        ...activeState.currentNode,
+        id: "node-2",
+        parentId: "node-1",
+        parentOptionId: "custom-reference-mock",
+        roundIndex: 2,
+        roundIntent: "补一个细节",
+        options: []
+      },
+      currentDraft: null,
+      selectedPath: [
+        activeState.currentNode,
+        {
+          ...activeState.currentNode,
+          id: "node-2",
+          parentId: "node-1",
+          parentOptionId: "custom-reference-mock",
+          roundIndex: 2,
+          roundIntent: "补一个细节",
+          options: []
+        }
+      ],
+      treeNodes: [
+        activeState.currentNode,
+        {
+          ...activeState.currentNode,
+          id: "node-2",
+          parentId: "node-1",
+          parentOptionId: "custom-reference-mock",
+          roundIndex: 2,
+          roundIntent: "补一个细节",
+          options: []
+        }
+      ]
+    };
+    const finalDraft = { title: "Draft first", body: "Draft body first", hashtags: ["#draft"], imagePrompt: "draft image" };
+    const draftState = {
+      ...nodeOnlyState,
+      currentDraft: finalDraft,
+      nodeDrafts: [...activeState.nodeDrafts, { nodeId: "node-2", draft: finalDraft }]
+    };
+    const optionsState = {
+      ...draftState,
+      currentNode: {
+        ...draftState.currentNode,
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "deepen" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "finish" }
+        ]
+      }
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: nodeOnlyState }) })
+      .mockResolvedValueOnce(ndjsonResponse([`${JSON.stringify({ type: "done", state: draftState })}\n`]))
+      .mockResolvedValueOnce(optionsNdjsonResponse(optionsState));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("live-draft");
+    await userEvent.click(screen.getByRole("button", { name: "rewrite selection" }));
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        4,
+        "/api/sessions/session-1/choose",
+        expect.objectContaining({ method: "POST" })
+      );
+      const chooseBody = JSON.parse(fetchMock.mock.calls[3][1].body as string);
+      expect(chooseBody).toEqual(
+        expect.objectContaining({
+          nodeId: "node-1",
+          optionMode: "balanced",
+          customOption: expect.objectContaining({
+            description: expect.stringContaining("目标句。"),
+            impact: "按选中文本和用户要求作为自定义方向继续生成。",
+            kind: "reframe",
+            label: "补一个细节"
+          })
+        })
+      );
+      expect(chooseBody.optionId).toBe(chooseBody.customOption.id);
+      expect(chooseBody.customOption.description).toContain("补一个细节");
+    });
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        5,
+        "/api/sessions/session-1/draft/generate/stream",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ nodeId: "node-2" })
+        })
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(6, "/api/sessions/session-1/options", expect.objectContaining({ method: "POST" }));
+      expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("idle");
+    });
+  });
+
+  it("does not generate a draft when selected text custom direction creation fails", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "无法生成下一版草稿。" }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("live-draft");
+    await userEvent.click(screen.getByRole("button", { name: "rewrite selection" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("无法生成下一版草稿。");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("rejects stale selected text before rewriting or saving", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("live-draft");
+    await userEvent.click(screen.getByRole("button", { name: "rewrite stale selection" }));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("选中文本已经变化，请重新选择。");
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/sessions/session-1/draft/rewrite-selection",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/sessions/session-1/draft",
+      expect.objectContaining({ method: "POST" })
+    );
   });
 });

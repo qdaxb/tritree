@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { EditorView } from "@codemirror/view";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -25,6 +25,67 @@ function getCodeMirrorText(textbox: HTMLElement) {
   const view = EditorView.findFromDOM(textbox);
   expect(view).not.toBeNull();
   return view?.state.doc.toString() ?? "";
+}
+
+function selectTextInside(element: HTMLElement, text: string, occurrence = 0) {
+  const textNode = findTextNodeContaining(element, text);
+  expect(textNode).toBeDefined();
+  let start = -1;
+  for (let index = 0; index <= occurrence; index += 1) {
+    start = textNode!.textContent!.indexOf(text, start + 1);
+  }
+  expect(start).toBeGreaterThanOrEqual(0);
+  const range = document.createRange();
+  range.setStart(textNode!, start);
+  range.setEnd(textNode!, start + text.length);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function selectTextAcross(startElement: HTMLElement, startText: string, endElement: HTMLElement, endText: string) {
+  const startNode = findTextNodeContaining(startElement, startText);
+  const endNode = findTextNodeContaining(endElement, endText);
+  expect(startNode).toBeDefined();
+  expect(endNode).toBeDefined();
+  const start = startNode!.textContent!.indexOf(startText);
+  const end = endNode!.textContent!.indexOf(endText) + endText.length;
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThanOrEqual(endText.length);
+  const range = document.createRange();
+  range.setStart(startNode!, start);
+  range.setEnd(endNode!, end);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function findTextNodeContaining(node: Node, text: string): Text | null {
+  if (node.nodeType === Node.TEXT_NODE && node.textContent?.includes(text)) return node as Text;
+
+  for (const child of Array.from(node.childNodes)) {
+    const match = findTextNodeContaining(child, text);
+    if (match) return match;
+  }
+
+  return null;
+}
+
+function selectCodeMirrorRange(textbox: HTMLElement, from: number, to: number) {
+  const view = EditorView.findFromDOM(textbox);
+  expect(view).not.toBeNull();
+
+  act(() => {
+    view?.dispatch({ selection: { anchor: from, head: to } });
+  });
+}
+
+function deferredPromise() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
 }
 
 describe("LiveDraft", () => {
@@ -55,6 +116,432 @@ describe("LiveDraft", () => {
 
     expect(screen.getByText("第一段").tagName.toLowerCase()).toBe("p");
     expect(screen.getByText("第二段").tagName.toLowerCase()).toBe("p");
+  });
+
+  it("opens an AI edit popover for selected body text in display mode and submits the captured range", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("重复句。目标句。重复句。"), "目标句。");
+    fireEvent.mouseUp(screen.getByText("重复句。目标句。重复句。"));
+    expect(screen.getByRole("toolbar", { name: "选中文本操作" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "引用" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "修改要求" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" },
+      field: "body",
+      instruction: "补一个细节",
+      selectedText: "目标句。",
+      selectionStart: 4,
+      selectionEnd: 8
+    });
+  });
+
+  it("opens an AI edit popover for selected body text spanning display paragraphs", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    const body = "第一段开始。目标一。\n第二段目标二。结尾。";
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body, hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextAcross(
+      screen.getByText("第一段开始。目标一。"),
+      "目标一。",
+      screen.getByText("第二段目标二。结尾。"),
+      "第二段目标二。"
+    );
+    fireEvent.mouseUp(screen.getByText("第一段开始。目标一。"));
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "标题", body, hashtags: ["#当前"], imagePrompt: "当前画面" },
+      field: "body",
+      instruction: "补一个细节",
+      selectedText: "目标一。\n第二段目标二。",
+      selectionStart: 6,
+      selectionEnd: 18
+    });
+  });
+
+  it("clears an open selection popover when the selection rewrite callback is removed", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("重复句。目标句。重复句。"), "目标句。");
+    fireEvent.mouseUp(screen.getByText("重复句。目标句。重复句。"));
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+
+    rerender(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isEditable
+        isBusy={false}
+        publishPackage={null}
+      />
+    );
+
+    expect(screen.queryByRole("textbox", { name: "修改要求" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发送修改" })).not.toBeInTheDocument();
+    expect(onRewriteSelection).not.toHaveBeenCalled();
+  });
+
+  it("opens selected text actions for ordinary read-only draft text", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("重复句。目标句。重复句。"), "目标句。");
+    fireEvent.mouseUp(screen.getByText("重复句。目标句。重复句。"));
+    expect(screen.getByRole("toolbar", { name: "选中文本操作" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "更具体");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" },
+      field: "body",
+      instruction: "更具体",
+      selectedText: "目标句。",
+      selectionStart: 4,
+      selectionEnd: 8
+    });
+  });
+
+  it("copies selected body text from the selection action bubble without opening the edit popover", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("重复句。目标句。重复句。"), "目标句。");
+    fireEvent.mouseUp(screen.getByText("重复句。目标句。重复句。"));
+    await userEvent.click(screen.getByRole("button", { name: "复制" }));
+
+    expect(writeText).toHaveBeenCalledWith("目标句。");
+    expect(screen.queryByRole("toolbar", { name: "选中文本操作" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "修改要求" })).not.toBeInTheDocument();
+  });
+
+  it("allows the body selection to be changed after the selection action bubble is open", async () => {
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    const paragraph = screen.getByText("重复句。目标句。重复句。");
+    selectTextInside(paragraph, "目标句。");
+    fireEvent.mouseUp(paragraph);
+    expect(screen.getByRole("toolbar", { name: "选中文本操作" })).toBeInTheDocument();
+
+    expect(fireEvent.mouseDown(paragraph, { cancelable: true })).toBe(true);
+    fireEvent.mouseUp(paragraph);
+    expect(screen.queryByRole("toolbar", { name: "选中文本操作" })).not.toBeInTheDocument();
+  });
+
+  it("opens selected text actions from a native display body mouseup", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    const paragraph = screen.getByText("重复句。目标句。重复句。");
+    selectTextInside(paragraph, "目标句。");
+    fireEvent.mouseUp(paragraph);
+
+    expect(screen.getByRole("toolbar", { name: "选中文本操作" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "引用" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制" })).toBeInTheDocument();
+  });
+
+  it("renders selected text actions outside the draft panel so viewport positioning is not clipped", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    const paragraph = screen.getByText("重复句。目标句。重复句。");
+    selectTextInside(paragraph, "目标句。");
+    fireEvent.mouseUp(paragraph);
+
+    expect(screen.getByRole("toolbar", { name: "选中文本操作" }).parentElement).toBe(document.body);
+  });
+
+  it("does not block native display body reselection when stale selected text exists", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    const paragraph = screen.getByText("重复句。目标句。重复句。");
+    selectTextInside(paragraph, "目标句。");
+    expect(fireEvent.mouseDown(paragraph, { cancelable: true })).toBe(true);
+  });
+
+  it("keeps selected text controls inside the viewport when the selection is near the edge", async () => {
+    const rangeRect = {
+      bottom: 740,
+      height: 20,
+      left: 1000,
+      right: 1060,
+      top: 720,
+      width: 60,
+      x: 1000,
+      y: 720,
+      toJSON: () => ({})
+    } as DOMRect;
+    const rectSpy = vi.spyOn(Range.prototype, "getBoundingClientRect").mockReturnValue(rangeRect);
+
+    try {
+      render(
+        <LiveDraft
+          draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+          isBusy={false}
+          isEditable
+          onRewriteSelection={vi.fn()}
+          publishPackage={null}
+        />
+      );
+
+      selectTextInside(screen.getByText("重复句。目标句。重复句。"), "目标句。");
+      fireEvent.mouseUp(screen.getByText("重复句。目标句。重复句。"));
+
+      const toolbar = screen.getByRole("toolbar", { name: "选中文本操作" });
+      expect(toolbar).toHaveStyle({ left: "870px", top: "674px" });
+
+      await userEvent.click(screen.getByRole("button", { name: "引用" }));
+      expect(screen.getByRole("dialog", { name: "引用选中文本修改" })).toHaveStyle({
+        left: "692px",
+        top: "452px"
+      });
+    } finally {
+      rectSpy.mockRestore();
+    }
+  });
+
+  it("closes the selected body rewrite dialog as soon as the request is submitted", async () => {
+    const rewrite = deferredPromise();
+    const onRewriteSelection = vi.fn(() => rewrite.promise);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("重复句。目标句。重复句。"), "目标句。");
+    fireEvent.mouseUp(screen.getByText("重复句。目标句。重复句。"));
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog", { name: "引用选中文本修改" })).not.toBeInTheDocument();
+
+    await act(async () => rewrite.resolve());
+  });
+
+  it("submits the selected occurrence offset for repeated body text in display mode", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "目标句。重复句。目标句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        publishPackage={null}
+      />
+    );
+
+    selectTextInside(screen.getByText("目标句。重复句。目标句。"), "目标句。", 1);
+    fireEvent.mouseUp(screen.getByText("目标句。重复句。目标句。"));
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "补一个细节");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "标题", body: "目标句。重复句。目标句。", hashtags: ["#当前"], imagePrompt: "当前画面" },
+      field: "body",
+      instruction: "补一个细节",
+      selectedText: "目标句。",
+      selectionStart: 8,
+      selectionEnd: 12
+    });
+  });
+
+  it("opens an AI edit popover for selected body text in the normal editor", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        onSave={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const bodyTextbox = screen.getByLabelText("正文") as HTMLTextAreaElement;
+    bodyTextbox.setSelectionRange(4, 8);
+    fireEvent.mouseUp(bodyTextbox);
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "更具体");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" },
+      field: "body",
+      instruction: "更具体",
+      selectedText: "目标句。",
+      selectionStart: 4,
+      selectionEnd: 8
+    });
+  });
+
+  it("does not block native textarea reselection after text is selected in the normal editor", async () => {
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={vi.fn()}
+        onSave={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const bodyTextbox = screen.getByLabelText("正文") as HTMLTextAreaElement;
+    bodyTextbox.setSelectionRange(4, 8);
+
+    expect(fireEvent.mouseDown(bodyTextbox, { cancelable: true })).toBe(true);
+  });
+
+  it("clears selected text actions after exiting the normal editor", async () => {
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={vi.fn()}
+        onSave={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const bodyTextbox = screen.getByLabelText("正文") as HTMLTextAreaElement;
+    bodyTextbox.setSelectionRange(4, 8);
+    fireEvent.mouseUp(bodyTextbox);
+    expect(screen.getByRole("toolbar", { name: "选中文本操作" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "退出草稿" }));
+
+    expect(screen.queryByRole("toolbar", { name: "选中文本操作" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "引用选中文本修改" })).not.toBeInTheDocument();
+  });
+
+  it("clears the normal editor selection popover when local draft fields change", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "重复句。目标句。重复句。", hashtags: ["#当前"], imagePrompt: "当前画面" }}
+        isBusy={false}
+        isEditable
+        onRewriteSelection={onRewriteSelection}
+        onSave={vi.fn()}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+    const bodyTextbox = screen.getByLabelText("正文") as HTMLTextAreaElement;
+    bodyTextbox.setSelectionRange(4, 8);
+    fireEvent.mouseUp(bodyTextbox);
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    expect(screen.getByRole("textbox", { name: "修改要求" })).toBeInTheDocument();
+
+    const titleTextbox = screen.getByRole("textbox", { name: "标题" });
+    await userEvent.clear(titleTextbox);
+    await userEvent.type(titleTextbox, "新标题");
+
+    expect(screen.queryByRole("textbox", { name: "修改要求" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "发送修改" })).not.toBeInTheDocument();
+    expect(onRewriteSelection).not.toHaveBeenCalled();
   });
 
   it("shows a no-op generate image button with the image prompt", async () => {
@@ -268,6 +755,60 @@ describe("LiveDraft", () => {
     expect(currentLine).toHaveClass("cm-stream-current-line");
   });
 
+  it("scrolls the streaming body line into view as text arrives", async () => {
+    const elementPrototype = Element.prototype as Omit<Element, "scrollIntoView"> & {
+      scrollIntoView?: Element["scrollIntoView"];
+    };
+    const originalScrollIntoView = elementPrototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    elementPrototype.scrollIntoView = scrollIntoView;
+
+    try {
+      const previousDraft = {
+        title: "旧标题",
+        body: "第一行。\n第二行旧内容。\n第三行旧内容。",
+        hashtags: ["#旧"],
+        imagePrompt: "旧图"
+      };
+      const { rerender } = render(
+        <LiveDraft
+          draft={{ title: "旧标题", body: "第一行。\n第二行正在生成", hashtags: ["#旧"], imagePrompt: "旧图" }}
+          isBusy
+          isLiveDiff
+          isLiveDiffStreaming
+          previousDraft={previousDraft}
+          publishPackage={null}
+        />
+      );
+
+      await waitFor(() => {
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "center", inline: "nearest" });
+      });
+
+      scrollIntoView.mockClear();
+      rerender(
+        <LiveDraft
+          draft={{ title: "旧标题", body: "第一行。\n第二行。\n第三行正在生成", hashtags: ["#旧"], imagePrompt: "旧图" }}
+          isBusy
+          isLiveDiff
+          isLiveDiffStreaming
+          previousDraft={previousDraft}
+          publishPackage={null}
+        />
+      );
+
+      await waitFor(() => {
+        const scrolledCurrentLine = scrollIntoView.mock.contexts.find(
+          (context) => context instanceof Element && context.textContent?.includes("第三行正在生成")
+        );
+        expect(scrolledCurrentLine).toBeDefined();
+      });
+    } finally {
+      if (originalScrollIntoView) elementPrototype.scrollIntoView = originalScrollIntoView;
+      else delete elementPrototype.scrollIntoView;
+    }
+  });
+
   it("does not show the previous final paragraph as deleted when streaming appends a new paragraph", () => {
     const unchangedFinalParagraph =
       "太阳斜下来，浅金色的浪一层一层推过来。光脚踩进去，凉得缩了一下，又踩进去。沙滩上有人放风筝，线很长，风筝很小。";
@@ -440,6 +981,7 @@ describe("LiveDraft", () => {
 
   it("lets generated diff review be dismissed after streaming completes", async () => {
     const onDismissLiveDiff = vi.fn();
+    const onSave = vi.fn();
 
     render(
       <LiveDraft
@@ -448,21 +990,142 @@ describe("LiveDraft", () => {
         isEditable
         isLiveDiff
         onDismissLiveDiff={onDismissLiveDiff}
+        onSave={onSave}
         previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
         publishPackage={null}
       />
     );
 
-    expect(screen.getByText("新增句")).toHaveClass("draft-diff-token--added");
+    const bodyDiffEditor = screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field");
+    expect(bodyDiffEditor).not.toBeNull();
+    expect(within(bodyDiffEditor as HTMLElement).getByText(/新增句/)).toBeInTheDocument();
     expect(screen.queryByLabelText("正在生成到这里")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "编辑" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "关闭对比" }));
 
     expect(onDismissLiveDiff).toHaveBeenCalledTimes(1);
   });
 
-  it("lets completed generated diff review be edited directly without opening another editor", async () => {
+  it("keeps completed generated diff review read-only until editing is requested", async () => {
+    const onSave = vi.fn();
+
+    render(
+      <LiveDraft
+        draft={{ title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
+        isBusy={false}
+        isEditable
+        isLiveDiff
+        onDismissLiveDiff={vi.fn()}
+        onSave={onSave}
+        previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    const bodyTextbox = within(screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field") as HTMLElement).getByRole(
+      "textbox",
+      { name: "正文" }
+    );
+    expect(bodyTextbox).toHaveAttribute("contenteditable", "false");
+    expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存草稿" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+
+    const editableBodyTextbox = within(screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field") as HTMLElement).getByRole(
+      "textbox",
+      { name: "正文" }
+    );
+    expect(editableBodyTextbox).toHaveAttribute("contenteditable", "true");
+    expect(screen.getByRole("button", { name: "保存草稿" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "退出草稿" })).toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("opens selected text actions from completed generated diff review while it is read-only", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <LiveDraft
+        draft={{ title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
+        isBusy={false}
+        isEditable
+        isLiveDiff
+        onDismissLiveDiff={vi.fn()}
+        onRewriteSelection={onRewriteSelection}
+        onSave={vi.fn()}
+        previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    const bodyDiffEditor = screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field");
+    expect(bodyDiffEditor).not.toBeNull();
+    const bodyTextbox = within(bodyDiffEditor as HTMLElement).getByRole("textbox", { name: "正文" });
+    expect(bodyTextbox).toHaveAttribute("contenteditable", "false");
+
+    selectTextInside(within(bodyDiffEditor as HTMLElement).getByText(/新增句/), "新增句");
+    fireEvent.mouseUp(bodyTextbox);
+
+    expect(screen.getByRole("toolbar", { name: "选中文本操作" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "更具体");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" },
+      field: "body",
+      instruction: "更具体",
+      selectedText: "新增句",
+      selectionStart: 3,
+      selectionEnd: 6
+    });
+  });
+
+  it("opens selected text actions from completed generated diff review after editing is requested", async () => {
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <LiveDraft
+        draft={{ title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
+        isBusy={false}
+        isEditable
+        isLiveDiff
+        onDismissLiveDiff={vi.fn()}
+        onRewriteSelection={onRewriteSelection}
+        onSave={vi.fn()}
+        previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+
+    const bodyDiffEditor = screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field");
+    expect(bodyDiffEditor).not.toBeNull();
+    const bodyTextbox = within(bodyDiffEditor as HTMLElement).getByRole("textbox", { name: "正文" });
+    expect(bodyTextbox).toHaveAttribute("contenteditable", "true");
+
+    selectCodeMirrorRange(bodyTextbox, 3, 6);
+    fireEvent.mouseUp(bodyTextbox);
+
+    expect(screen.getByRole("toolbar", { name: "选中文本操作" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "引用" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "更具体");
+    await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+    expect(onRewriteSelection).toHaveBeenCalledWith({
+      draft: { title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" },
+      field: "body",
+      instruction: "更具体",
+      selectedText: "新增句",
+      selectionStart: 3,
+      selectionEnd: 6
+    });
+  });
+
+  it("lets completed generated diff review be edited after leaving read-only mode", async () => {
     const onDismissLiveDiff = vi.fn();
     const onSave = vi.fn();
 
@@ -479,7 +1142,8 @@ describe("LiveDraft", () => {
       />
     );
 
-    expect(screen.queryByRole("button", { name: "编辑" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+
     const bodyDiffEditor = screen.getByRole("textbox", { name: "正文" }).closest(".draft-cm-diff-field");
     expect(bodyDiffEditor).not.toBeNull();
     const bodyTextbox = within(bodyDiffEditor as HTMLElement).getByRole("textbox", { name: "正文" });
@@ -806,5 +1470,65 @@ describe("LiveDraft", () => {
     expect(screen.getByRole("textbox", { name: "正文" }).closest(".cm-editor")).toHaveClass("cm-merge-b");
     expect(screen.queryByRole("button", { name: /选择差异/ })).not.toBeInTheDocument();
     expect(document.querySelector(".draft-diff-token-popover")).not.toBeInTheDocument();
+  });
+
+  it("opens selected text actions from an editable comparison body selection near the selected text", async () => {
+    const coordsSpy = vi.spyOn(EditorView.prototype, "coordsAtPos").mockImplementation((position) => {
+      const left = position <= 3 ? 520 : 580;
+      return {
+        bottom: 220,
+        height: 20,
+        left,
+        right: left,
+        top: 200,
+        width: 0,
+        x: left,
+        y: 200,
+        toJSON: () => ({})
+      } as DOMRect;
+    });
+    const onRewriteSelection = vi.fn().mockResolvedValue(undefined);
+
+    try {
+      render(
+        <LiveDraft
+          comparisonDrafts={{
+            from: { title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" },
+            to: { title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }
+          }}
+          comparisonLabels={{ from: "第 1 轮 · 旧", to: "第 2 轮 · 新" }}
+          draft={{ title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
+          isBusy={false}
+          isComparisonMode
+          isEditable
+          onCancelComparison={vi.fn()}
+          onRewriteSelection={onRewriteSelection}
+          onSave={vi.fn()}
+          publishPackage={null}
+        />
+      );
+
+      const bodyTextbox = screen.getByRole("textbox", { name: "正文" });
+      selectCodeMirrorRange(bodyTextbox, 3, 5);
+      fireEvent.mouseUp(bodyTextbox);
+
+      const toolbar = screen.getByRole("toolbar", { name: "选中文本操作" });
+      expect(toolbar).toHaveStyle({ left: "479px", top: "228px" });
+
+      await userEvent.click(screen.getByRole("button", { name: "引用" }));
+      await userEvent.type(screen.getByRole("textbox", { name: "修改要求" }), "更具体");
+      await userEvent.click(screen.getByRole("button", { name: "发送修改" }));
+
+      expect(onRewriteSelection).toHaveBeenCalledWith({
+        draft: { title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" },
+        field: "body",
+        instruction: "更具体",
+        selectedText: "新增",
+        selectionStart: 3,
+        selectionEnd: 5
+      });
+    } finally {
+      coordsSpy.mockRestore();
+    }
   });
 });

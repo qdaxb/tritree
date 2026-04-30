@@ -108,6 +108,25 @@ export function summarizeCurrentDraftOptionsForDirector(state: SessionState): Di
   };
 }
 
+export function summarizeSelectionRewriteForDirector(
+  state: SessionState,
+  draft: Draft,
+  selectedText: string,
+  instruction: string,
+  field: "body"
+) {
+  return {
+    rootSummary: state.rootMemory.summary,
+    learnedSummary: state.rootMemory.learnedSummary,
+    pathSummary: formatPathForDirector(state),
+    currentDraft: draft,
+    enabledSkills: enabledSkillsForDirector(state),
+    field,
+    selectedText,
+    instruction
+  };
+}
+
 function enabledSkillsForDirector(state: SessionState) {
   return SkillSchema.array().parse(state.enabledSkills ?? []);
 }
