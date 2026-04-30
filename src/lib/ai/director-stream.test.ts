@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mastraMocks = vi.hoisted(() => ({
-  generateTreeDraft: vi.fn(),
-  generateTreeOptions: vi.fn()
+  streamTreeDraft: vi.fn(),
+  streamTreeOptions: vi.fn()
 }));
 
 vi.mock("./mastra-executor", () => ({
-  generateTreeDraft: mastraMocks.generateTreeDraft,
-  generateTreeOptions: mastraMocks.generateTreeOptions
+  streamTreeDraft: mastraMocks.streamTreeDraft,
+  streamTreeOptions: mastraMocks.streamTreeOptions
 }));
 
 import {
@@ -30,8 +30,8 @@ const directorInput = {
 };
 
 beforeEach(() => {
-  mastraMocks.generateTreeDraft.mockReset();
-  mastraMocks.generateTreeOptions.mockReset();
+  mastraMocks.streamTreeDraft.mockReset();
+  mastraMocks.streamTreeOptions.mockReset();
 });
 
 describe("parseAnthropicSseTextDeltas", () => {
@@ -192,13 +192,17 @@ describe("extractPartialDirectorOptions", () => {
 });
 
 describe("streamDirectorDraft", () => {
-  it("uses the Mastra tree draft generator when no low-level fetcher is injected", async () => {
+  it("uses the Mastra tree draft stream when no low-level fetcher is injected", async () => {
     const output = {
       roundIntent: "扩写",
       draft: { title: "新标题", body: "新正文", hashtags: ["#AI"], imagePrompt: "新图" },
       memoryObservation: "观察"
     };
-    mastraMocks.generateTreeDraft.mockResolvedValue(output);
+    mastraMocks.streamTreeDraft.mockImplementation(async ({ onPartialObject }) => {
+      onPartialObject({ roundIntent: "扩写", draft: { title: "新标题" } });
+      onPartialObject({ roundIntent: "扩写", draft: { title: "新标题", body: "新正文" } });
+      return output;
+    });
     const signal = new AbortController().signal;
     const onText = vi.fn();
 
@@ -210,11 +214,19 @@ describe("streamDirectorDraft", () => {
       })
     ).resolves.toEqual(output);
 
-    expect(mastraMocks.generateTreeDraft).toHaveBeenCalledWith(
+    expect(mastraMocks.streamTreeDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         parts: directorInput,
         signal,
         memory: { resource: "root", thread: "session-1" }
+      })
+    );
+    expect(onText).toHaveBeenCalledTimes(3);
+    expect(onText).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        accumulatedText: JSON.stringify({ roundIntent: "扩写", draft: { title: "新标题" } }),
+        partialDraft: expect.objectContaining({ title: "新标题" })
       })
     );
     expect(onText).toHaveBeenCalledWith(
@@ -307,7 +319,7 @@ describe("streamDirectorDraft", () => {
 });
 
 describe("streamDirectorOptions", () => {
-  it("uses the Mastra tree options generator when no low-level fetcher is injected", async () => {
+  it("uses the Mastra tree options stream when no low-level fetcher is injected", async () => {
     const output = {
       roundIntent: "下一步",
       options: [
@@ -317,7 +329,17 @@ describe("streamDirectorOptions", () => {
       ],
       memoryObservation: "偏好具体表达。"
     };
-    mastraMocks.generateTreeOptions.mockResolvedValue(output);
+    mastraMocks.streamTreeOptions.mockImplementation(async ({ onPartialObject }) => {
+      onPartialObject({ roundIntent: "下一步", options: [{ id: "a", label: "补场景" }] });
+      onPartialObject({
+        roundIntent: "下一步",
+        options: [
+          { id: "a", label: "补场景" },
+          { id: "b", label: "深挖" }
+        ]
+      });
+      return output;
+    });
     const onText = vi.fn();
 
     await expect(
@@ -327,10 +349,26 @@ describe("streamDirectorOptions", () => {
       })
     ).resolves.toEqual(output);
 
-    expect(mastraMocks.generateTreeOptions).toHaveBeenCalledWith(
+    expect(mastraMocks.streamTreeOptions).toHaveBeenCalledWith(
       expect.objectContaining({
         parts: directorInput,
         memory: { resource: "root", thread: "session-1" }
+      })
+    );
+    expect(onText).toHaveBeenCalledTimes(3);
+    expect(onText).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        accumulatedText: JSON.stringify({ roundIntent: "下一步", options: [{ id: "a", label: "补场景" }] }),
+        partialOptions: [
+          {
+            id: "a",
+            label: "补场景",
+            description: "正在生成方向说明",
+            impact: "正在生成影响说明",
+            kind: "explore"
+          }
+        ]
       })
     );
     expect(onText).toHaveBeenCalledWith(

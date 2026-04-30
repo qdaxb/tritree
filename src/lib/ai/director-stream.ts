@@ -5,7 +5,7 @@ import {
   parseDirectorDraftText,
   parseDirectorOptionsText
 } from "./director";
-import { generateTreeDraft, generateTreeOptions, type MemoryScope } from "./mastra-executor";
+import { streamTreeDraft, streamTreeOptions, type MemoryScope } from "./mastra-executor";
 import type { DirectorInputParts } from "./prompts";
 
 type DirectorDraftFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -32,14 +32,25 @@ export async function streamDirectorDraft(
   options: DirectorDraftStreamOptions = {}
 ): Promise<DirectorDraftOutput> {
   if (!options.fetcher) {
-    const output = await generateTreeDraft({
+    let accumulatedText = "";
+    const emit = (value: unknown) => {
+      const text = JSON.stringify(value);
+      if (!text || text === accumulatedText) return;
+      accumulatedText = text;
+      options.onText?.({
+        delta: text,
+        accumulatedText,
+        partialDraft: extractPartialDirectorDraft(accumulatedText)
+      });
+    };
+    const output = await streamTreeDraft({
       parts,
       env: options.env,
       memory: options.memory,
-      signal: options.signal
+      signal: options.signal,
+      onPartialObject: emit
     });
-    const text = JSON.stringify(output);
-    options.onText?.({ delta: text, accumulatedText: text, partialDraft: output.draft });
+    emit(output);
     return output;
   }
 
@@ -91,14 +102,25 @@ export async function streamDirectorOptions(
   options: DirectorOptionsStreamOptions = {}
 ): Promise<DirectorOptionsOutput> {
   if (!options.fetcher) {
-    const output = await generateTreeOptions({
+    let accumulatedText = "";
+    const emit = (value: unknown) => {
+      const text = JSON.stringify(value);
+      if (!text || text === accumulatedText) return;
+      accumulatedText = text;
+      options.onText?.({
+        delta: text,
+        accumulatedText,
+        partialOptions: extractPartialDirectorOptions(accumulatedText)
+      });
+    };
+    const output = await streamTreeOptions({
       parts,
       env: options.env,
       memory: options.memory,
-      signal: options.signal
+      signal: options.signal,
+      onPartialObject: emit
     });
-    const text = JSON.stringify(output);
-    options.onText?.({ delta: text, accumulatedText: text, partialOptions: output.options });
+    emit(output);
     return output;
   }
 
