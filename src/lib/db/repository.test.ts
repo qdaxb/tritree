@@ -1188,31 +1188,6 @@ describe("Treeable repository", () => {
 });
 
 describe("conversation nodes", () => {
-  it("creates empty conversation sessions without draft tree nodes", () => {
-    const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
-      seed: "写一段天气文字",
-      domains: ["创作"],
-      tones: ["平静"],
-      styles: ["观点型"],
-      personas: ["实践者"]
-    });
-
-    const state = repo.createConversationSession({
-      rootMemoryId: root.id,
-      title: "天气对话",
-      enabledSkillIds: []
-    });
-
-    expect(state.session.title).toBe("天气对话");
-    expect(state.session.currentNodeId).toBeNull();
-    expect(state.currentNode).toBeNull();
-    expect(state.currentDraft).toBeNull();
-    expect(state.selectedPath).toEqual([]);
-    expect(state.treeNodes).toEqual([]);
-    expect(repo.listConversationNodes(state.session.id)).toEqual([]);
-  });
-
   it("creates conversation roots and children with suggestion metadata", () => {
     const repo = createTreeableRepository(testDbPath());
     const root = repo.saveRootMemory({

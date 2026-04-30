@@ -58,7 +58,7 @@ export function RootMemorySetup({
         </div>
         <h1>先写下一个念头。</h1>
         <p className="root-setup__copy">
-          可以是一句话、一个观点、一个问题，或者一段还没想清楚的表达。AI 会把它带进主对话，三选一只作为后续可选输入出现。
+          可以是一句话、一个观点、一个问题，或者一段还没想清楚的表达。AI 会把它带进树里，并给出第一组三个起始方向。
         </p>
         {message ? (
           <p className="root-setup__error" role="alert">

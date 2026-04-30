@@ -515,40 +515,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     });
   }
 
-  function createConversationSession({
-    enabledSkillIds,
-    rootMemoryId,
-    title
-  }: {
-    enabledSkillIds?: string[];
-    rootMemoryId: string;
-    title: string;
-  }) {
-    const root = db.prepare("SELECT * FROM root_memory WHERE id = ?").get(rootMemoryId) as RootMemoryRow | undefined;
-    if (!root) throw new Error("Root memory was not found.");
-
-    const sessionId = nanoid();
-    const timestamp = now();
-    const sessionTitle = title.trim() || "Untitled Conversation";
-
-    return withTransaction(db, () => {
-      db.prepare(
-        `
-          INSERT INTO sessions (id, root_memory_id, title, status, current_node_id, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `
-      ).run(sessionId, rootMemoryId, sessionTitle, "active", null, timestamp, timestamp);
-
-      saveSessionEnabledSkills(sessionId, enabledSkillIds ?? defaultEnabledSkillIds(), timestamp);
-
-      const state = getSessionState(sessionId);
-      if (!state) {
-        throw new Error("Failed to create conversation session state.");
-      }
-      return state;
-    });
-  }
-
   function createDraftChild({
     customOption,
     draft,
@@ -1198,7 +1164,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     defaultEnabledSkillIds,
     resolveSkillsByIds,
     replaceSessionEnabledSkills,
-    createConversationSession,
     createSessionDraft,
     createDraftChild,
     activateHistoricalBranch,
