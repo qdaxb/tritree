@@ -1,48 +1,29 @@
-import { buildMastraMessagesFromPath, type MastraConversationMessage } from "@/lib/conversation/messages";
 import {
   type BranchOption,
   DirectorDraftOutputSchema,
   DirectorOptionsOutputSchema,
   type Draft,
-  SuggestionOutputSchema,
-  type ConversationNode,
   type DirectorDraftOutput,
   type DirectorOptionsOutput,
-  type SessionState,
-  type Skill,
-  type SuggestedUserMove
+  type Skill
 } from "@/lib/domain";
-import { createSuggestionAgent, createTreeDraftAgent, createTreeOptionsAgent, createWritingAgent } from "./mastra-agents";
-import type { SharedAgentContextInput } from "./mastra-context";
+import { createTreeDraftAgent, createTreeOptionsAgent } from "./mastra-agents";
+import {
+  buildTreeDraftInstructions,
+  buildTreeOptionsInstructions,
+  type SharedAgentContextInput
+} from "./mastra-context";
 import { buildDirectorInput } from "./director";
 import type { DirectorInputParts } from "./prompts";
 
-type AgentStreamResult = {
-  textStream?: AsyncIterable<string> | (() => AsyncIterable<string>);
-  text?: Promise<string> | string;
+export type MastraConversationMessage = {
+  role: "assistant" | "user";
+  content: string;
 };
 
 export type MemoryScope = {
   resource: string;
   thread: string;
-};
-
-type WritingAgentLike = {
-  stream: (
-    messages: MastraConversationMessage[],
-    options: { abortSignal?: AbortSignal; memory: MemoryScope }
-  ) => Promise<AgentStreamResult>;
-};
-
-type SuggestionAgentLike = {
-  generate: (
-    messages: MastraConversationMessage[],
-    options: {
-      abortSignal?: AbortSignal;
-      memory: MemoryScope;
-      structuredOutput: { schema: typeof SuggestionOutputSchema };
-    }
-  ) => Promise<{ object?: unknown; output?: unknown }>;
 };
 
 type TreeDraftAgentLike = {
@@ -96,13 +77,6 @@ type AgentExecutionContextOverride = Pick<
   "availableSkillSummaries" | "longTermMemory" | "toolSummaries"
 >;
 
-export type AgentExecutionInput = {
-  state: SessionState;
-  path: ConversationNode[];
-  signal?: AbortSignal;
-  context?: Partial<AgentExecutionContextOverride>;
-};
-
 export type TreeDirectorExecutionInput = {
   parts: DirectorInputParts;
   signal?: AbortSignal;
@@ -119,59 +93,6 @@ type TreeOptionsPartial = Partial<Omit<DirectorOptionsOutput, "options">> & {
   options?: Array<Partial<BranchOption>>;
 };
 
-type SessionStateSkill = NonNullable<SessionState["enabledSkills"]>[number];
-
-export async function streamWritingReply({
-  state,
-  path,
-  signal,
-  context,
-  writingAgent,
-  onText
-}: AgentExecutionInput & {
-  writingAgent?: WritingAgentLike;
-  onText?: (chunk: string) => void;
-}) {
-  const agent = writingAgent ?? (createWritingAgent(contextForState(state, context)) as unknown as WritingAgentLike);
-  const result = await agent.stream(buildMastraMessagesFromPath(path), {
-    abortSignal: signal,
-    memory: memoryScopeForState(state)
-  });
-
-  let accumulated = "";
-  if (result.textStream) {
-    const textStream = typeof result.textStream === "function" ? result.textStream() : result.textStream;
-    for await (const chunk of textStream) {
-      accumulated += chunk;
-      onText?.(chunk);
-    }
-    return accumulated;
-  }
-
-  const text = typeof result.text === "string" ? result.text : await result.text;
-  if (text) onText?.(text);
-  return text ?? "";
-}
-
-export async function generateSuggestions({
-  state,
-  path,
-  signal,
-  context,
-  suggestionAgent
-}: AgentExecutionInput & {
-  suggestionAgent?: SuggestionAgentLike;
-}): Promise<SuggestedUserMove[]> {
-  const agent = suggestionAgent ?? (createSuggestionAgent(contextForState(state, context)) as unknown as SuggestionAgentLike);
-  const result = await agent.generate(buildMastraMessagesFromPath(path), {
-    abortSignal: signal,
-    memory: memoryScopeForState(state),
-    structuredOutput: { schema: SuggestionOutputSchema }
-  });
-  const output = SuggestionOutputSchema.parse(result.object ?? result.output);
-  return output.suggestions;
-}
-
 export async function generateTreeDraft({
   parts,
   signal,
@@ -182,9 +103,11 @@ export async function generateTreeDraft({
 }: TreeDirectorExecutionInput & {
   treeDraftAgent?: TreeDraftAgentLike;
 }): Promise<DirectorDraftOutput> {
-  const agent =
-    treeDraftAgent ?? (createTreeDraftAgent(contextForDirectorParts(parts, context), env) as unknown as TreeDraftAgentLike);
-  const result = await agent.generate(directorMessagesForParts(parts), {
+  const agentContext = contextForDirectorParts(parts, context);
+  const messages = directorMessagesForParts(parts);
+  logMastraPrompt("draft", agentContext, messages);
+  const agent = treeDraftAgent ?? (createTreeDraftAgent(agentContext, env) as unknown as TreeDraftAgentLike);
+  const result = await agent.generate(messages, {
     abortSignal: signal,
     memory: memory ?? memoryScopeForDirectorParts(parts),
     structuredOutput: { schema: DirectorDraftOutputSchema }
@@ -205,9 +128,10 @@ export async function streamTreeDraft({
   treeDraftAgent?: TreeDraftAgentLike;
   onPartialObject?: (partial: TreeDraftPartial) => void;
 }): Promise<DirectorDraftOutput> {
-  const agent =
-    treeDraftAgent ?? (createTreeDraftAgent(contextForDirectorParts(parts, context), env) as unknown as TreeDraftAgentLike);
+  const agentContext = contextForDirectorParts(parts, context);
   const messages = directorMessagesForParts(parts);
+  logMastraPrompt("draft", agentContext, messages);
+  const agent = treeDraftAgent ?? (createTreeDraftAgent(agentContext, env) as unknown as TreeDraftAgentLike);
   const stream = agent.stream
     ? await agent.stream(messages, {
         abortSignal: signal,
@@ -244,10 +168,11 @@ export async function generateTreeOptions({
 }: TreeDirectorExecutionInput & {
   treeOptionsAgent?: TreeOptionsAgentLike;
 }): Promise<DirectorOptionsOutput> {
-  const agent =
-    treeOptionsAgent ??
-    (createTreeOptionsAgent(contextForDirectorParts(parts, context), env) as unknown as TreeOptionsAgentLike);
-  const result = await agent.generate(directorMessagesForParts(parts), {
+  const agentContext = contextForDirectorParts(parts, context);
+  const messages = directorMessagesForParts(parts);
+  logMastraPrompt("options", agentContext, messages);
+  const agent = treeOptionsAgent ?? (createTreeOptionsAgent(agentContext, env) as unknown as TreeOptionsAgentLike);
+  const result = await agent.generate(messages, {
     abortSignal: signal,
     memory: memory ?? memoryScopeForDirectorParts(parts),
     structuredOutput: { schema: DirectorOptionsOutputSchema }
@@ -268,10 +193,10 @@ export async function streamTreeOptions({
   treeOptionsAgent?: TreeOptionsAgentLike;
   onPartialObject?: (partial: TreeOptionsPartial) => void;
 }): Promise<DirectorOptionsOutput> {
-  const agent =
-    treeOptionsAgent ??
-    (createTreeOptionsAgent(contextForDirectorParts(parts, context), env) as unknown as TreeOptionsAgentLike);
+  const agentContext = contextForDirectorParts(parts, context);
   const messages = directorMessagesForParts(parts);
+  logMastraPrompt("options", agentContext, messages);
+  const agent = treeOptionsAgent ?? (createTreeOptionsAgent(agentContext, env) as unknown as TreeOptionsAgentLike);
   const stream = agent.stream
     ? await agent.stream(messages, {
         abortSignal: signal,
@@ -298,20 +223,6 @@ export async function streamTreeOptions({
   return DirectorOptionsOutputSchema.parse(output);
 }
 
-function contextForState(
-  state: SessionState,
-  context: Partial<AgentExecutionContextOverride> = {}
-): SharedAgentContextInput {
-  return {
-    rootSummary: state.rootMemory.summary,
-    learnedSummary: state.rootMemory.learnedSummary,
-    enabledSkills: (state.enabledSkills ?? []).map(normalizeSkill),
-    longTermMemory: context.longTermMemory,
-    availableSkillSummaries: context.availableSkillSummaries,
-    toolSummaries: context.toolSummaries
-  };
-}
-
 function contextForDirectorParts(
   parts: DirectorInputParts,
   context: Partial<AgentExecutionContextOverride> = {}
@@ -326,18 +237,11 @@ function contextForDirectorParts(
   };
 }
 
-function normalizeSkill(skill: SessionStateSkill): Skill {
+function normalizeSkill(skill: Skill): Skill {
   return {
     ...skill,
     defaultEnabled: skill.defaultEnabled ?? false,
     isArchived: skill.isArchived ?? false
-  };
-}
-
-function memoryScopeForState(state: SessionState): MemoryScope {
-  return {
-    resource: state.rootMemory.id,
-    thread: state.session.id
   };
 }
 
@@ -351,6 +255,25 @@ function memoryScopeForDirectorParts(parts: DirectorInputParts): MemoryScope {
 
 function directorMessagesForParts(parts: DirectorInputParts): MastraConversationMessage[] {
   return parts.messages ?? [{ role: "user", content: buildDirectorInput(parts) }];
+}
+
+function logMastraPrompt(
+  kind: "draft" | "options",
+  context: SharedAgentContextInput,
+  messages: MastraConversationMessage[]
+) {
+  const instructions = kind === "draft" ? buildTreeDraftInstructions(context) : buildTreeOptionsInstructions(context);
+  console.info(
+    `[treeable:mastra-prompt:${kind}]`,
+    JSON.stringify(
+      {
+        instructions,
+        messages
+      },
+      null,
+      2
+    )
+  );
 }
 
 async function resolveStructuredStreamOutput(stream: StructuredObjectStreamResult, latestPartial: unknown) {

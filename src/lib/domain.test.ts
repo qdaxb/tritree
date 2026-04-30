@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   BranchOptionSchema,
-  ChatStreamEventSchema,
-  ConversationNodeSchema,
   DEFAULT_SYSTEM_SKILLS,
   DirectorOptionsOutputSchema,
   DirectorOutputSchema,
@@ -10,7 +8,6 @@ import {
   SessionStateSchema,
   SkillSchema,
   SkillUpsertSchema,
-  SuggestionOutputSchema,
   requireThreeOptions
 } from "./domain";
 
@@ -389,51 +386,5 @@ describe("SessionStateSchema", () => {
     });
 
     expect(parsed.session.status).toBe("active");
-  });
-});
-
-describe("conversation schemas", () => {
-  it("accepts normal assistant nodes with suggestion metadata", () => {
-    const parsed = ConversationNodeSchema.parse({
-      id: "assistant-1",
-      sessionId: "session-1",
-      parentId: "user-1",
-      role: "assistant",
-      content: "今天天气不错，适合继续写下去。",
-      metadata: {
-        source: "ai_reply",
-        suggestions: [
-          { id: "a", label: "代入天气", message: "查询并代入我所在地的实际天气。" },
-          { id: "b", label: "更像朋友圈", message: "把这段改得更像自然的朋友圈。" },
-          { id: "c", label: "继续补写", message: "继续补写这个天气带来的心情和画面。" }
-        ]
-      },
-      createdAt: "2026-04-29T00:00:00.000Z"
-    });
-
-    expect(parsed.metadata.suggestions?.[1].message).toBe("把这段改得更像自然的朋友圈。");
-  });
-
-  it("requires exactly three suggestions in suggestion output", () => {
-    expect(() =>
-      SuggestionOutputSchema.parse({
-        suggestions: [{ id: "a", label: "继续", message: "继续写。" }]
-      })
-    ).toThrow();
-  });
-
-  it("validates chat stream events", () => {
-    expect(ChatStreamEventSchema.parse({ type: "text", text: "晴朗" })).toEqual({ type: "text", text: "晴朗" });
-    expect(
-      ChatStreamEventSchema.parse({
-        type: "suggestions",
-        nodeId: "assistant-1",
-        suggestions: [
-          { id: "a", label: "A", message: "继续写 A。" },
-          { id: "b", label: "B", message: "继续写 B。" },
-          { id: "c", label: "C", message: "继续写 C。" }
-        ]
-      })
-    ).toMatchObject({ type: "suggestions", nodeId: "assistant-1" });
   });
 });

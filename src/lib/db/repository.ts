@@ -1,9 +1,6 @@
 import { nanoid } from "nanoid";
 import {
   type BranchOption,
-  type ConversationMetadata,
-  type ConversationNode,
-  type ConversationRole,
   type DirectorDraftOutput,
   type DirectorOptionsOutput,
   type DirectorOutput,
@@ -16,8 +13,6 @@ import {
   type SessionState,
   type TreeNode,
   BranchOptionSchema,
-  ConversationMetadataSchema,
-  ConversationNodeSchema,
   CUSTOM_EDIT_OPTION,
   CUSTOM_OPTION_ID_PREFIX,
   DEFAULT_SYSTEM_SKILLS,
@@ -95,16 +90,6 @@ type SkillRow = {
   is_archived: number;
   created_at: string;
   updated_at: string;
-};
-
-type ConversationNodeRow = {
-  id: string;
-  session_id: string;
-  parent_id: string | null;
-  role: string;
-  content: string;
-  metadata_json: string;
-  created_at: string;
 };
 
 function now() {
@@ -192,18 +177,6 @@ function toSkill(row: SkillRow): Skill {
     isArchived: Boolean(row.is_archived),
     createdAt: row.created_at,
     updatedAt: row.updated_at
-  });
-}
-
-function toConversationNode(row: ConversationNodeRow): ConversationNode {
-  return ConversationNodeSchema.parse({
-    id: row.id,
-    sessionId: row.session_id,
-    parentId: row.parent_id,
-    role: row.role,
-    content: row.content,
-    metadata: ConversationMetadataSchema.parse(parseJson(row.metadata_json)),
-    createdAt: row.created_at
   });
 }
 
@@ -995,104 +968,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     return latestDraftByNode;
   }
 
-  function createConversationNode({
-    sessionId,
-    parentId,
-    role,
-    content,
-    metadata
-  }: {
-    sessionId: string;
-    parentId: string | null;
-    role: ConversationRole;
-    content: string;
-    metadata: ConversationMetadata;
-  }) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
-    if (!session) throw new Error("Session was not found.");
-
-    if (parentId) {
-      const parent = db
-        .prepare("SELECT id FROM conversation_nodes WHERE id = ? AND session_id = ?")
-        .get(parentId, sessionId);
-      if (!parent) throw new Error("Parent conversation node was not found.");
-    }
-
-    const id = nanoid();
-    const timestamp = now();
-    const parsedMetadata = ConversationMetadataSchema.parse(metadata);
-    db.prepare(
-      `
-        INSERT INTO conversation_nodes (id, session_id, parent_id, role, content, metadata_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `
-    ).run(id, sessionId, parentId, role, content, JSON.stringify(parsedMetadata), timestamp);
-
-    return toConversationNode(db.prepare("SELECT * FROM conversation_nodes WHERE id = ?").get(id) as ConversationNodeRow);
-  }
-
-  function updateConversationNodeMetadata({
-    sessionId,
-    nodeId,
-    metadata
-  }: {
-    sessionId: string;
-    nodeId: string;
-    metadata: ConversationMetadata;
-  }) {
-    const parsedMetadata = ConversationMetadataSchema.parse(metadata);
-    const result = db
-      .prepare("UPDATE conversation_nodes SET metadata_json = ? WHERE id = ? AND session_id = ?")
-      .run(JSON.stringify(parsedMetadata), nodeId, sessionId);
-    if (result.changes === 0) throw new Error("Conversation node was not found.");
-    return toConversationNode(db.prepare("SELECT * FROM conversation_nodes WHERE id = ?").get(nodeId) as ConversationNodeRow);
-  }
-
-  function listConversationNodes(sessionId: string) {
-    const rows = db
-      .prepare("SELECT * FROM conversation_nodes WHERE session_id = ? ORDER BY created_at, rowid")
-      .all(sessionId) as ConversationNodeRow[];
-    return rows.map(toConversationNode);
-  }
-
-  function getConversationPath(sessionId: string, nodeId: string) {
-    const nodes = listConversationNodes(sessionId);
-    const nodesById = new Map(nodes.map((node) => [node.id, node]));
-    const path: ConversationNode[] = [];
-    const visited = new Set<string>();
-    let cursor = nodesById.get(nodeId);
-
-    if (!cursor) {
-      throw new Error("Conversation node was not found.");
-    }
-
-    while (cursor) {
-      if (visited.has(cursor.id)) {
-        throw new Error("Conversation path contains a cycle.");
-      }
-
-      path.unshift(cursor);
-      visited.add(cursor.id);
-
-      if (!cursor.parentId) break;
-
-      const parent = nodesById.get(cursor.parentId);
-      if (!parent) {
-        const parentRow = db
-          .prepare("SELECT session_id FROM conversation_nodes WHERE id = ?")
-          .get(cursor.parentId) as { session_id: string } | undefined;
-        if (parentRow) {
-          throw new Error("Conversation path contains a parent outside the session.");
-        }
-        throw new Error("Conversation path contains an unresolved parent.");
-      }
-
-      cursor = parent;
-    }
-
-    return path;
-  }
-
   function getSessionState(sessionId: string): SessionState | null {
     const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
     if (!session) return null;
@@ -1172,10 +1047,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     updateCurrentNodeDraftAndOptions,
     updateNodeDraft,
     updateNodeOptions,
-    createConversationNode,
-    updateConversationNodeMetadata,
-    listConversationNodes,
-    getConversationPath,
     getSessionState,
     getLatestSessionState
   };

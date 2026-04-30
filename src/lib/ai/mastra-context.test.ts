@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSharedAgentContext,
-  buildSuggestionInstructions,
   buildTreeDraftInstructions,
   buildTreeOptionsInstructions,
-  buildWritingInstructions,
   type SharedAgentContextInput
 } from "./mastra-context";
 
@@ -45,16 +43,9 @@ describe("buildSharedAgentContext", () => {
 });
 
 describe("agent instructions", () => {
-  it("keeps writing and suggestion duties separate", () => {
-    expect(buildWritingInstructions(input)).toContain("响应用户本轮真实请求");
-    expect(buildWritingInstructions(input)).not.toContain("只输出三个候选用户输入");
-    expect(buildSuggestionInstructions(input)).toContain("只输出三个候选用户输入");
-    expect(buildSuggestionInstructions(input)).toContain("不要生成正文");
-  });
-
   it("keeps the old tree UI contract while using agent instructions", () => {
     expect(buildTreeDraftInstructions(input)).toContain("只生成本轮 draft");
-    expect(buildTreeDraftInstructions(input)).not.toContain("只输出三个候选用户输入");
+    expect(buildTreeDraftInstructions(input)).not.toContain("候选用户输入");
     expect(buildTreeOptionsInstructions(input)).toContain("只生成下一步三个选项");
     expect(buildTreeOptionsInstructions(input)).toContain("Each round must return exactly three branch options");
   });

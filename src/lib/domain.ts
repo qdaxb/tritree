@@ -243,72 +243,6 @@ export const DirectorDraftOutputSchema = z.object({
   memoryObservation: z.string()
 });
 
-export const ConversationRoleSchema = z.enum(["system", "user", "assistant", "tool"]);
-
-export const ConversationSourceSchema = z.enum([
-  "system",
-  "user_typed",
-  "suggestion_pick",
-  "custom_direction",
-  "user_edit",
-  "ai_reply",
-  "tool_result"
-]);
-
-export const ToolCallRecordSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1),
-  arguments: z.unknown().optional()
-});
-
-export const ToolResultRecordSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1),
-  result: z.unknown().optional(),
-  isError: z.boolean().optional()
-});
-
-export const SuggestedUserMoveSchema = z.object({
-  id: z.enum(PRIMARY_BRANCH_OPTION_IDS),
-  label: z.string().trim().min(1).max(40),
-  message: z.string().trim().min(1).max(1200),
-  rationale: z.string().trim().max(240).optional()
-});
-
-export const SuggestionOutputSchema = z.object({
-  suggestions: z
-    .array(SuggestedUserMoveSchema)
-    .length(3, "Suggestion Agent must return exactly three suggestions.")
-}).superRefine((output, context) => {
-  if (!includesDirectorOptionIdsOnce(output.suggestions)) {
-    context.addIssue({
-      code: "custom",
-      path: ["suggestions"],
-      message: DIRECTOR_OPTION_IDS_ERROR
-    });
-  }
-});
-
-export const ConversationMetadataSchema = z.object({
-  source: ConversationSourceSchema,
-  suggestionId: z.enum(PRIMARY_BRANCH_OPTION_IDS).optional(),
-  toolCalls: z.array(ToolCallRecordSchema).optional(),
-  toolResults: z.array(ToolResultRecordSchema).optional(),
-  skillsUsed: z.array(z.string().min(1)).optional(),
-  suggestions: z.array(SuggestedUserMoveSchema).optional(),
-  targetNodeId: z.string().min(1).optional()
-});
-
-export const ConversationNodeSchema = z.object({
-  id: z.string().min(1),
-  sessionId: z.string().min(1),
-  parentId: z.string().min(1).nullable(),
-  role: ConversationRoleSchema,
-  content: z.string(),
-  metadata: ConversationMetadataSchema,
-  createdAt: z.string()
-});
-
 export const SessionStatusSchema = z.enum(["active", "finished"]);
 
 export const TreeNodeSchema = z.object({
@@ -352,18 +286,6 @@ export const SessionStateSchema = z.object({
   publishPackage: PublishPackageSchema.nullable()
 });
 
-export const ChatStreamEventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("text"), text: z.string() }),
-  z.object({ type: z.literal("assistant"), node: ConversationNodeSchema }),
-  z.object({
-    type: z.literal("suggestions"),
-    nodeId: z.string().min(1),
-    suggestions: z.array(SuggestedUserMoveSchema).length(3)
-  }),
-  z.object({ type: z.literal("done"), state: SessionStateSchema, assistantNodeId: z.string().min(1) }),
-  z.object({ type: z.literal("error"), error: z.string() })
-]);
-
 export type RootPreferences = z.input<typeof RootPreferencesSchema>;
 export type SkillCategory = z.infer<typeof SkillCategorySchema>;
 export type Skill = z.infer<typeof SkillSchema>;
@@ -377,15 +299,6 @@ export type OptionGenerationMode = z.infer<typeof OptionGenerationModeSchema>;
 export type DirectorOutput = z.infer<typeof DirectorOutputSchema>;
 export type DirectorOptionsOutput = z.infer<typeof DirectorOptionsOutputSchema>;
 export type DirectorDraftOutput = z.infer<typeof DirectorDraftOutputSchema>;
-export type ConversationRole = z.infer<typeof ConversationRoleSchema>;
-export type ConversationSource = z.infer<typeof ConversationSourceSchema>;
-export type SuggestedUserMove = z.infer<typeof SuggestedUserMoveSchema>;
-export type SuggestionOutput = z.infer<typeof SuggestionOutputSchema>;
-export type ConversationMetadata = z.infer<typeof ConversationMetadataSchema>;
-export type ConversationNode = z.infer<typeof ConversationNodeSchema>;
-export type ChatStreamEvent = z.infer<typeof ChatStreamEventSchema>;
-export type ToolCallRecord = z.infer<typeof ToolCallRecordSchema>;
-export type ToolResultRecord = z.infer<typeof ToolResultRecordSchema>;
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 export type TreeNode = z.infer<typeof TreeNodeSchema>;
 export type FoldedBranch = z.infer<typeof FoldedBranchSchema>;

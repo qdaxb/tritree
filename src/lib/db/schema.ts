@@ -55,22 +55,6 @@ export const sessionEnabledSkills = sqliteTable(
   (table) => [primaryKey({ columns: [table.sessionId, table.skillId] })]
 );
 
-export const conversationNodes = sqliteTable(
-  "conversation_nodes",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id")
-      .notNull()
-      .references(() => sessions.id),
-    parentId: text("parent_id").references((): AnySQLiteColumn => conversationNodes.id),
-    role: text("role").notNull(),
-    content: text("content").notNull(),
-    metadataJson: text("metadata_json").notNull(),
-    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)
-  },
-  (table) => [check("conversation_nodes_role_check", sql`${table.role} IN ('system', 'user', 'assistant', 'tool')`)]
-);
-
 export const treeNodes = sqliteTable("tree_nodes", {
   id: text("id").primaryKey(),
   sessionId: text("session_id")
