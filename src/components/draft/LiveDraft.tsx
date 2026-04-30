@@ -77,9 +77,11 @@ export function LiveDraft({
   const [diffEditDraft, setDiffEditDraft] = useState<Draft | null>(null);
   const [selectedDiffAction, setSelectedDiffAction] = useState<SelectedDiffAction | null>(null);
   const [selectionEdit, setSelectionEdit] = useState<SelectionEditState | null>(null);
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>("actions");
   const [selectionInstruction, setSelectionInstruction] = useState("");
   const [isSelectionRewritePending, setIsSelectionRewritePending] = useState(false);
   const selectionRewritePendingRef = useRef(false);
+  const [isGeneratedDiffEditing, setIsGeneratedDiffEditing] = useState(false);
   const [editingMode, setEditingMode] = useState<"normal" | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [title, setTitle] = useState(() => resolveDraftTitle(initialEditableDraft?.title, initialEditableDraft?.body));
@@ -115,7 +117,18 @@ export function LiveDraft({
     [baseEditableDraft, isLiveDiffStreaming, liveStreamingField, previousDraft]
   );
   const isPotentialMergeDiff = Boolean(comparisonDrafts || (showDiff && content && previousDraft) || isLiveDiff);
-  const canUseInlineDiffEditing = Boolean(!isLiveDiffStreaming && isPotentialMergeDiff && baseEditableDraft && isEditable && onSave);
+  const canEditGeneratedDiffReview = Boolean(
+    isLiveDiff && !isLiveDiffStreaming && isPotentialMergeDiff && baseEditableDraft && previousDraft && isEditable && onSave
+  );
+  const canUseGeneratedDiffReadOnlyMerge = Boolean(canEditGeneratedDiffReview && !isGeneratedDiffEditing);
+  const canUseInlineDiffEditing = Boolean(
+    !isLiveDiffStreaming &&
+      isPotentialMergeDiff &&
+      baseEditableDraft &&
+      isEditable &&
+      onSave &&
+      (!isLiveDiff || isGeneratedDiffEditing)
+  );
   const canUseStreamingMergeDiff = Boolean(isLiveDiffStreaming && isPotentialMergeDiff && streamingDisplayDraft && previousDraft);
   const displayContent = canUseInlineDiffEditing
     ? editedDraft
@@ -143,12 +156,13 @@ export function LiveDraft({
   const shouldShowInlineDiff = Boolean(
     draftDiff && !isEditing && (comparisonDrafts || (showDiff && canShowParentDiff) || isLiveDiff)
   );
-  const canUseSelectionRewrite = Boolean(
-    content && isEditable && onRewriteSelection && !isBusy && !isComparisonMode && !isLiveDiff && !shouldShowInlineDiff
-  );
+  const canUseSelectionRewrite = Boolean(content && onRewriteSelection);
   const canEditCurrentDraft = Boolean(content && isEditable && !isComparisonMode && !isLiveDiff && !showDiff);
-  const isMergeDiffView = Boolean(shouldShowInlineDiff && (canUseInlineDiffEditing || canUseStreamingMergeDiff));
+  const isMergeDiffView = Boolean(
+    shouldShowInlineDiff && (canUseInlineDiffEditing || canUseStreamingMergeDiff || canUseGeneratedDiffReadOnlyMerge)
+  );
   const isInlineDiffEditor = Boolean(shouldShowInlineDiff && canUseInlineDiffEditing);
+  const isReadOnlyMergeDiff = Boolean(canUseStreamingMergeDiff || canUseGeneratedDiffReadOnlyMerge);
   const inlineDiffOriginalDraft = comparisonDrafts?.from ?? previousDraft;
   const bodyStreamingLinePosition =
     canUseStreamingMergeDiff && liveStreamingField === "body" && baseEditableDraft && previousDraft
@@ -166,15 +180,26 @@ export function LiveDraft({
     setEditingMode(null);
     setDiffEditDraft(null);
     setSelectedDiffAction(null);
+    setIsGeneratedDiffEditing(false);
     closeSelectionEdit();
     setShowDiff(false);
     setEditorFieldsFromDraft(baseEditableDraft);
   }, [baseEditableDraft?.title, baseEditableDraft?.body, baseEditableDraft?.imagePrompt, baseEditableDraft?.hashtags]);
 
   useEffect(() => {
+    if (isLiveDiff && !isLiveDiffStreaming) return;
+    setIsGeneratedDiffEditing(false);
+  }, [isLiveDiff, isLiveDiffStreaming]);
+
+  useEffect(() => {
     if (canUseSelectionRewrite) return;
     closeSelectionEdit();
   }, [canUseSelectionRewrite]);
+
+  useEffect(() => {
+    if (!selectionEdit) return;
+    closeSelectionEdit();
+  }, [editingMode, isComparisonMode, isGeneratedDiffEditing, showDiff]);
 
   useEffect(() => {
     if (!isEditing || !selectionEdit) return;
@@ -261,10 +286,20 @@ export function LiveDraft({
     finishInlineDiffDraft({ resetFields: true });
   }
 
+  function startGeneratedDiffEditing() {
+    if (!baseEditableDraft) return;
+
+    setEditorFieldsFromDraft(baseEditableDraft);
+    setDiffEditDraft(null);
+    setSelectedDiffAction(null);
+    setIsGeneratedDiffEditing(true);
+  }
+
   function finishInlineDiffDraft({ resetFields }: { resetFields: boolean }) {
     if (resetFields) setEditorFieldsFromDraft(baseEditableDraft);
     setDiffEditDraft(null);
     setSelectedDiffAction(null);
+    setIsGeneratedDiffEditing(false);
     if (isComparisonMode) {
       onCancelComparison?.();
       return;
@@ -320,7 +355,7 @@ export function LiveDraft({
     const selectedText = displayContent.body.slice(selectedRange.start, selectedRange.end);
     if (!selectedText.trim()) return;
     openSelectionEdit({
-      anchor: selectionPopoverAnchor(selection),
+      anchors: selectionPopoverAnchors(selection),
       draft: displayContent,
       selectedText,
       selectionStart: selectedRange.start,
@@ -330,8 +365,11 @@ export function LiveDraft({
 
   function preserveDisplayBodySelection(event: ReactMouseEvent<HTMLElement>) {
     if (!canUseSelectionRewrite) return;
-    const selectedText = window.getSelection()?.toString() ?? "";
-    if (selectedText.trim()) event.preventDefault();
+    if (selectionEdit) {
+      closeSelectionEdit();
+      window.getSelection()?.removeAllRanges();
+      return;
+    }
   }
 
   function captureTextareaSelection(event: SyntheticEvent<HTMLTextAreaElement>) {
@@ -341,7 +379,7 @@ export function LiveDraft({
     const selectedText = target.value.slice(target.selectionStart, target.selectionEnd);
     if (!selectedText.trim()) return;
     openSelectionEdit({
-      anchor: textareaSelectionAnchor(target),
+      anchors: textareaSelectionAnchors(target),
       draft: editedDraft,
       selectedText,
       selectionStart: target.selectionStart,
@@ -349,20 +387,46 @@ export function LiveDraft({
     });
   }
 
+  function captureMergeBodySelection(selection: CapturedTextSelection) {
+    if (!canUseSelectionRewrite || !displayContent) return;
+    openSelectionEdit({
+      ...selection,
+      draft: displayContent
+    });
+  }
+
   function preserveTextareaSelection(event: ReactMouseEvent<HTMLTextAreaElement>) {
     if (!canUseSelectionRewrite) return;
-    const target = event.currentTarget;
-    if (target.selectionStart !== target.selectionEnd) event.preventDefault();
+    if (selectionEdit) {
+      closeSelectionEdit();
+      event.currentTarget.setSelectionRange(event.currentTarget.selectionStart, event.currentTarget.selectionStart);
+      return;
+    }
+
   }
 
   function openSelectionEdit(nextSelection: SelectionEditState) {
     setSelectionEdit(nextSelection);
+    setSelectionMode("actions");
     setSelectionInstruction("");
   }
 
   function closeSelectionEdit() {
     setSelectionEdit(null);
+    setSelectionMode("actions");
     setSelectionInstruction("");
+  }
+
+  async function copySelectionText() {
+    if (!selectionEdit) return;
+
+    try {
+      await copyTextToClipboard(selectionEdit.selectedText);
+    } catch {
+      // Clipboard permission can be denied in browser automation or locked-down contexts.
+    } finally {
+      closeSelectionEdit();
+    }
   }
 
   async function submitSelectionRewrite() {
@@ -375,18 +439,19 @@ export function LiveDraft({
     ) {
       return;
     }
+    const request = {
+      draft: selectionEdit.draft,
+      field: "body" as const,
+      instruction: selectionInstruction.trim(),
+      selectedText: selectionEdit.selectedText,
+      selectionStart: selectionEdit.selectionStart,
+      selectionEnd: selectionEdit.selectionEnd
+    };
     selectionRewritePendingRef.current = true;
     setIsSelectionRewritePending(true);
+    closeSelectionEdit();
     try {
-      await onRewriteSelection({
-        draft: selectionEdit.draft,
-        field: "body",
-        instruction: selectionInstruction.trim(),
-        selectedText: selectionEdit.selectedText,
-        selectionStart: selectionEdit.selectionStart,
-        selectionEnd: selectionEdit.selectionEnd
-      });
-      closeSelectionEdit();
+      await onRewriteSelection(request);
     } finally {
       selectionRewritePendingRef.current = false;
       setIsSelectionRewritePending(false);
@@ -449,7 +514,6 @@ export function LiveDraft({
                 onChange={(event) => setBody(event.target.value)}
                 onMouseDown={preserveTextareaSelection}
                 onMouseUp={captureTextareaSelection}
-                onSelect={captureTextareaSelection}
                 rows={10}
                 value={body}
               />
@@ -478,9 +542,9 @@ export function LiveDraft({
                 <h2>
                   <DraftDiffMergeField
                     className="draft-cm-diff-field--title"
-                    disabled={isBusy || canUseStreamingMergeDiff}
+                    disabled={isBusy || isReadOnlyMergeDiff}
                     label="标题"
-                    onChange={canUseStreamingMergeDiff ? undefined : setTitle}
+                    onChange={isReadOnlyMergeDiff ? undefined : setTitle}
                     original={resolveDraftTitle(inlineDiffOriginalDraft?.title, inlineDiffOriginalDraft?.body)}
                     rows={1}
                     value={resolveDraftTitle(displayContent?.title, displayContent?.body)}
@@ -488,9 +552,10 @@ export function LiveDraft({
                 </h2>
                 <div className="draft-body">
                   <DraftDiffMergeField
-                    disabled={isBusy || canUseStreamingMergeDiff}
+                    disabled={isBusy || isReadOnlyMergeDiff}
                     label="正文"
-                    onChange={canUseStreamingMergeDiff ? undefined : setBody}
+                    onChange={isReadOnlyMergeDiff ? undefined : setBody}
+                    onSelectText={canUseSelectionRewrite ? captureMergeBodySelection : undefined}
                     original={inlineDiffOriginalDraft?.body ?? ""}
                     rows={10}
                     streamingLinePosition={bodyStreamingLinePosition}
@@ -515,9 +580,9 @@ export function LiveDraft({
                     </button>
                   </div>
                   <DraftDiffMergeField
-                    disabled={isBusy || canUseStreamingMergeDiff}
+                    disabled={isBusy || isReadOnlyMergeDiff}
                     label="配图提示"
-                    onChange={canUseStreamingMergeDiff ? undefined : setImagePrompt}
+                    onChange={isReadOnlyMergeDiff ? undefined : setImagePrompt}
                     original={inlineDiffOriginalDraft?.imagePrompt ?? ""}
                     rows={4}
                     streamingLinePosition={imagePromptStreamingLinePosition}
@@ -531,6 +596,12 @@ export function LiveDraft({
                     </button>
                     <button className="start-button" disabled={isBusy} onClick={() => void saveInlineDiffDraft()} type="button">
                       保存草稿
+                    </button>
+                  </div>
+                ) : canUseGeneratedDiffReadOnlyMerge ? (
+                  <div className="draft-diff-inline-actions">
+                    <button className="start-button" disabled={isBusy} onClick={startGeneratedDiffEditing} type="button">
+                      编辑
                     </button>
                   </div>
                 ) : null}
@@ -650,33 +721,57 @@ export function LiveDraft({
           </div>
         )}
       </div>
-      {selectionEdit ? (
-        <div className="draft-selection-edit" style={{ left: selectionEdit.anchor.left, top: selectionEdit.anchor.top }}>
-          <p className="draft-selection-edit__preview">{previewSelectionText(selectionEdit.selectedText)}</p>
-          <label>
-            <span>修改要求</span>
-            <textarea
-              autoFocus
-              onChange={(event) => setSelectionInstruction(event.target.value)}
-              rows={3}
-              value={selectionInstruction}
-            />
-          </label>
-          <div className="draft-selection-edit__actions">
-            <button className="secondary-button" onClick={closeSelectionEdit} type="button">
-              关闭
-            </button>
-            <button
-              className="start-button"
-              disabled={!selectionInstruction.trim() || isSelectionRewritePending || isBusy}
-              onClick={() => void submitSelectionRewrite()}
-              type="button"
-            >
-              发送修改
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {selectionEdit && typeof document !== "undefined"
+        ? createPortal(
+            selectionMode === "actions" ? (
+              <div
+                aria-label="选中文本操作"
+                className="draft-selection-actions"
+                role="toolbar"
+                style={{ left: selectionEdit.anchors.actions.left, top: selectionEdit.anchors.actions.top }}
+              >
+                <button onClick={() => setSelectionMode("edit")} type="button">
+                  引用
+                </button>
+                <button onClick={() => void copySelectionText()} type="button">
+                  复制
+                </button>
+              </div>
+            ) : (
+              <div
+                aria-label="引用选中文本修改"
+                className="draft-selection-edit"
+                role="dialog"
+                style={{ left: selectionEdit.anchors.editor.left, top: selectionEdit.anchors.editor.top }}
+              >
+                <p className="draft-selection-edit__preview">{previewSelectionText(selectionEdit.selectedText)}</p>
+                <label>
+                  <span>修改要求</span>
+                  <textarea
+                    autoFocus
+                    onChange={(event) => setSelectionInstruction(event.target.value)}
+                    rows={3}
+                    value={selectionInstruction}
+                  />
+                </label>
+                <div className="draft-selection-edit__actions">
+                  <button className="secondary-button" onClick={closeSelectionEdit} type="button">
+                    关闭
+                  </button>
+                  <button
+                    className="start-button"
+                    disabled={!selectionInstruction.trim() || isSelectionRewritePending || isBusy}
+                    onClick={() => void submitSelectionRewrite()}
+                    type="button"
+                  >
+                    发送修改
+                  </button>
+                </div>
+              </div>
+            ),
+            document.body
+          )
+        : null}
     </aside>
   );
 }
@@ -720,17 +815,155 @@ function bodyOffsetForDisplayBoundary(container: HTMLElement, node: Node, offset
   return bodyStart + preRange.toString().length;
 }
 
-function selectionPopoverAnchor(selection: Selection | null) {
-  const rect = selection?.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null;
+function selectionPopoverAnchors(selection: Selection | null) {
+  const rect = selectionRangeRect(selection);
+  return selectionAnchorsFromRect(rect ?? fallbackSelectionRect());
+}
+
+function codeMirrorSelectionAnchors(view: EditorView, selectionStart: number, selectionEnd: number) {
+  const nativeSelectionRect = selectionRangeRectWithin(window.getSelection(), view.dom);
+  if (nativeSelectionRect) return selectionAnchorsFromRect(nativeSelectionRect);
+
+  const startRect = view.coordsAtPos(selectionStart, -1);
+  const endRect = view.coordsAtPos(selectionEnd, 1);
+  return selectionAnchorsFromRect(mergeSelectionRects(startRect, endRect) ?? codeMirrorFallbackSelectionRect(view));
+}
+
+function selectionRangeRect(selection: Selection | null) {
+  if (!selection?.rangeCount) return null;
+
+  const range = selection.getRangeAt(0);
+  const rect = range.getBoundingClientRect();
+  if (hasVisibleRect(rect)) return rect;
+
+  return Array.from(range.getClientRects()).find(hasVisibleRect) ?? null;
+}
+
+function selectionRangeRectWithin(selection: Selection | null, container: HTMLElement) {
+  if (!selection?.rangeCount) return null;
+
+  const range = selection.getRangeAt(0);
+  if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) return null;
+  return selectionRangeRect(selection);
+}
+
+function mergeSelectionRects(startRect: RectCoordinates | null, endRect: RectCoordinates | null) {
+  if (!startRect && !endRect) return null;
+  if (!startRect) return selectionRectFromCoordinates(endRect!);
+  if (!endRect) return selectionRectFromCoordinates(startRect);
+
+  const left = Math.min(startRect.left, endRect.left);
+  const right = Math.max(startRect.right, endRect.right);
+  const top = Math.min(startRect.top, endRect.top);
+  const bottom = Math.max(startRect.bottom, endRect.bottom);
+  return selectionRectFromCoordinates({ bottom, left, right, top });
+}
+
+function selectionRectFromCoordinates({ bottom, left, right, top }: RectCoordinates): SelectionRect {
   return {
-    left: Math.max(12, rect?.left ?? 24),
-    top: Math.max(12, (rect?.bottom ?? 24) + 8)
+    bottom,
+    height: Math.max(0, bottom - top),
+    left,
+    right,
+    top,
+    width: Math.max(0, right - left),
+    x: left,
+    y: top
   };
 }
 
-function textareaSelectionAnchor(textarea: HTMLTextAreaElement) {
+function codeMirrorFallbackSelectionRect(view: EditorView): SelectionRect {
+  const rect = view.dom.getBoundingClientRect();
+  return {
+    bottom: rect.top + 56,
+    height: 20,
+    left: rect.left + 12,
+    right: rect.left + 72,
+    top: rect.top + 36,
+    width: 60,
+    x: rect.left + 12,
+    y: rect.top + 36
+  };
+}
+
+function hasVisibleRect(rect: SelectionRect) {
+  return rect.width > 0 || rect.height > 0;
+}
+
+function textareaSelectionAnchors(textarea: HTMLTextAreaElement) {
   const rect = textarea.getBoundingClientRect();
-  return { left: rect.left + 12, top: rect.top + 36 };
+  return selectionAnchorsFromRect({
+    bottom: rect.top + 56,
+    height: 20,
+    left: rect.left + 12,
+    right: rect.left + 72,
+    top: rect.top + 36,
+    width: 60,
+    x: rect.left + 12,
+    y: rect.top + 36
+  });
+}
+
+function selectionAnchorsFromRect(rect: SelectionRect) {
+  return {
+    actions: boundedPopoverAnchor(rect, { align: "center", height: 38, width: 142 }),
+    editor: boundedPopoverAnchor(rect, { align: "left", height: 260, width: 320 })
+  };
+}
+
+function boundedPopoverAnchor(
+  rect: SelectionRect,
+  { align, height, width }: { align: "center" | "left"; height: number; width: number }
+) {
+  const edgeGap = 12;
+  const anchorGap = 8;
+  const viewportWidth = typeof window === "undefined" ? width + edgeGap * 2 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? height + edgeGap * 2 : window.innerHeight;
+  const maxLeft = Math.max(edgeGap, viewportWidth - width - edgeGap);
+  const preferredLeft = align === "center" ? rect.left + rect.width / 2 - width / 2 : rect.left;
+  const belowTop = rect.bottom + anchorGap;
+  const aboveTop = rect.top - height - anchorGap;
+  const maxTop = Math.max(edgeGap, viewportHeight - height - edgeGap);
+  const preferredTop = belowTop + height <= viewportHeight - edgeGap ? belowTop : aboveTop;
+
+  return {
+    left: clamp(preferredLeft, edgeGap, maxLeft),
+    top: clamp(preferredTop, edgeGap, maxTop)
+  };
+}
+
+function fallbackSelectionRect(): SelectionRect {
+  return {
+    bottom: 24,
+    height: 0,
+    left: 24,
+    right: 24,
+    top: 24,
+    width: 0,
+    x: 24,
+    y: 24
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+async function copyTextToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
 }
 
 function previewSelectionText(value: string) {
@@ -752,13 +985,20 @@ type DiffToken = {
 
 type DiffField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDiffStreamingField = Extract<DiffField, "body" | "imagePrompt">;
+type SelectionMode = "actions" | "edit";
+type SelectionAnchor = { left: number; top: number };
+type SelectionRect = Pick<DOMRect, "bottom" | "height" | "left" | "right" | "top" | "width" | "x" | "y">;
+type RectCoordinates = Pick<SelectionRect, "bottom" | "left" | "right" | "top">;
 
-type SelectionEditState = {
-  anchor: { left: number; top: number };
-  draft: Draft;
+type CapturedTextSelection = {
+  anchors: { actions: SelectionAnchor; editor: SelectionAnchor };
   selectedText: string;
   selectionEnd: number;
   selectionStart: number;
+};
+
+type SelectionEditState = CapturedTextSelection & {
+  draft: Draft;
 };
 
 type SelectedDiffAction = {
@@ -833,6 +1073,7 @@ function DraftDiffMergeField({
   disabled = false,
   label,
   onChange,
+  onSelectText,
   original,
   rows,
   streamingLinePosition = null,
@@ -842,6 +1083,7 @@ function DraftDiffMergeField({
   disabled?: boolean;
   label: string;
   onChange?: (value: string) => void;
+  onSelectText?: (selection: CapturedTextSelection) => void;
   original: string;
   rows: number;
   streamingLinePosition?: number | null;
@@ -850,6 +1092,7 @@ function DraftDiffMergeField({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
+  const onSelectTextRef = useRef(onSelectText);
   const streamingLinePositionRef = useRef(streamingLinePosition);
   const originalRef = useRef(original);
   const stableMergeOriginalRef = useRef(mergeViewOriginalText(original, value));
@@ -865,8 +1108,14 @@ function DraftDiffMergeField({
   }, [onChange]);
 
   useEffect(() => {
+    onSelectTextRef.current = onSelectText;
+  }, [onSelectText]);
+
+  useEffect(() => {
     streamingLinePositionRef.current = streamingLinePosition;
-    viewRef.current?.dispatch({});
+    const view = viewRef.current;
+    view?.dispatch({});
+    scrollStreamingLineIntoView(view, streamingLinePosition);
   }, [streamingLinePosition]);
 
   useEffect(() => {
@@ -905,6 +1154,7 @@ function DraftDiffMergeField({
     });
 
     viewRef.current = view;
+    scrollStreamingLineIntoView(view, streamingLinePositionRef.current);
     return () => {
       view.destroy();
       viewRef.current = null;
@@ -920,17 +1170,73 @@ function DraftDiffMergeField({
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: value }
     });
+    scrollStreamingLineIntoView(view, streamingLinePositionRef.current);
   }, [value]);
+
+  function captureSelection() {
+    const view = viewRef.current;
+    if (!view || !onSelectTextRef.current) return;
+
+    const nativeSelection = codeMirrorNativeSelection(view);
+    if (nativeSelection) {
+      onSelectTextRef.current(nativeSelection);
+      return;
+    }
+
+    const range = view.state.selection.main;
+    const selectionStart = Math.min(range.from, range.to);
+    const selectionEnd = Math.max(range.from, range.to);
+    if (selectionStart === selectionEnd) return;
+
+    const selectedText = view.state.sliceDoc(selectionStart, selectionEnd);
+    if (!selectedText.trim()) return;
+
+    onSelectTextRef.current({
+      anchors: codeMirrorSelectionAnchors(view, selectionStart, selectionEnd),
+      selectedText,
+      selectionEnd,
+      selectionStart
+    });
+  }
 
   return (
     <section
       className={`draft-cm-diff-field${className ? ` ${className}` : ""}`}
+      onMouseUp={captureSelection}
       style={{ "--draft-cm-min-lines": rows } as CSSProperties}
     >
       <span className="draft-cm-diff-field__label">{label}</span>
       <div className="draft-cm-diff-field__editor" data-diff-editor-label={label} ref={containerRef} />
     </section>
   );
+}
+
+function codeMirrorNativeSelection(view: EditorView): CapturedTextSelection | null {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return null;
+
+  const range = selection.getRangeAt(0);
+  if (!view.dom.contains(range.startContainer) || !view.dom.contains(range.endContainer)) return null;
+
+  try {
+    const start = view.posAtDOM(range.startContainer, range.startOffset);
+    const end = view.posAtDOM(range.endContainer, range.endOffset);
+    const selectionStart = Math.min(start, end);
+    const selectionEnd = Math.max(start, end);
+    if (selectionStart === selectionEnd) return null;
+
+    const selectedText = view.state.sliceDoc(selectionStart, selectionEnd);
+    if (!selectedText.trim()) return null;
+
+    return {
+      anchors: codeMirrorSelectionAnchors(view, selectionStart, selectionEnd),
+      selectedText,
+      selectionEnd,
+      selectionStart
+    };
+  } catch {
+    return null;
+  }
 }
 
 const draftMergeDiffConfig = { scanLimit: 10000 };
@@ -942,6 +1248,18 @@ function streamingCurrentLineExtension(getPosition: () => number | null) {
 
     const line = view.state.doc.lineAt(Math.min(Math.max(position, 0), view.state.doc.length));
     return Decoration.set([Decoration.line({ class: "cm-stream-current-line" }).range(line.from)]);
+  });
+}
+
+function scrollStreamingLineIntoView(view: EditorView | null, position: number | null) {
+  if (!view || position === null) return;
+
+  view.requestMeasure({
+    read: () => view.dom.querySelector(".cm-stream-current-line"),
+    write: (currentLine) => {
+      if (!(currentLine instanceof HTMLElement)) return;
+      currentLine.scrollIntoView({ block: "center", inline: "nearest" });
+    }
   });
 }
 

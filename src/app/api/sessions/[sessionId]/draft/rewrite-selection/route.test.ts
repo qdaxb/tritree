@@ -3,13 +3,15 @@ import { POST } from "./route";
 
 const getRepositoryMock = vi.hoisted(() => vi.fn());
 const rewriteSelectedDraftTextMock = vi.hoisted(() => vi.fn());
+const streamSelectedDraftTextMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/db/repository", () => ({
   getRepository: getRepositoryMock
 }));
 
 vi.mock("@/lib/ai/selection-rewrite", () => ({
-  rewriteSelectedDraftText: rewriteSelectedDraftTextMock
+  rewriteSelectedDraftText: rewriteSelectedDraftTextMock,
+  streamSelectedDraftText: streamSelectedDraftTextMock
 }));
 
 const node = {
@@ -56,6 +58,7 @@ const state = {
 beforeEach(() => {
   getRepositoryMock.mockReset();
   rewriteSelectedDraftTextMock.mockReset();
+  streamSelectedDraftTextMock.mockReset();
 });
 
 describe("POST /api/sessions/:sessionId/draft/rewrite-selection", () => {
@@ -116,6 +119,44 @@ describe("POST /api/sessions/:sessionId/draft/rewrite-selection", () => {
         selectedText: " 第二句。 "
       }),
       expect.any(Object)
+    );
+  });
+
+  it("streams selected body rewrite replacements when requested", async () => {
+    getRepositoryMock.mockReturnValue({ getSessionState: vi.fn().mockReturnValue(state) });
+    streamSelectedDraftTextMock.mockImplementation(async (_input, options) => {
+      options.onText({ delta: "第二句", accumulatedText: '{"replacementText":"第二句', partialReplacementText: "第二句" });
+      return { replacementText: "第二句加入一个排期会细节。" };
+    });
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/draft/rewrite-selection", {
+        method: "POST",
+        body: JSON.stringify({
+          nodeId: "node-1",
+          draft: state.currentDraft,
+          field: "body",
+          selectedText: "第二句。",
+          instruction: "补真实细节",
+          stream: true
+        })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+    const text = await response.text();
+
+    expect(response.headers.get("Content-Type")).toContain("application/x-ndjson");
+    expect(text).toContain('"type":"replacement"');
+    expect(text).toContain('"replacementText":"第二句"');
+    expect(text).toContain('"type":"done"');
+    expect(text).toContain('"replacementText":"第二句加入一个排期会细节。"');
+    expect(streamSelectedDraftTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentDraft: state.currentDraft,
+        field: "body",
+        selectedText: "第二句。"
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal), onText: expect.any(Function) })
     );
   });
 

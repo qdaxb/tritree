@@ -793,6 +793,18 @@ describe("TreeCanvas", () => {
     expect(trayRule).toContain("margin: 16px var(--tree-canvas-inset) var(--tree-canvas-inset)");
   });
 
+  it("keeps the More Directions editor inside the bottom tray bounds", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const formRule = css.match(/\.branch-side-form\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(formRule).toContain("position: absolute");
+    expect(formRule).toContain("right: 0");
+    expect(formRule).toContain("bottom: 0");
+    expect(formRule).toContain("max-width: calc(100% - 24px)");
+    expect(formRule).toContain("max-height: min(420px, calc(100dvh - 160px))");
+    expect(formRule).toContain("overflow: auto");
+  });
+
   it("keeps unselected historical options as grey folded side paths", () => {
     const graph = createForceTreeGraph({
       currentNode,

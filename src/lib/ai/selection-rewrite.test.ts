@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildSelectionRewritePrompt,
   buildSelectionRewriteRequest,
+  extractPartialSelectionRewriteText,
   parseSelectionRewriteText,
-  rewriteSelectedDraftText
+  rewriteSelectedDraftText,
+  streamSelectedDraftText
 } from "./selection-rewrite";
 
 const input = {
@@ -75,6 +77,12 @@ describe("parseSelectionRewriteText", () => {
   });
 });
 
+describe("extractPartialSelectionRewriteText", () => {
+  it("extracts visible replacement text from incomplete JSON", () => {
+    expect(extractPartialSelectionRewriteText('{"replacementText":"第二句正在生成')).toBe("第二句正在生成");
+  });
+});
+
 describe("buildSelectionRewriteRequest", () => {
   it("builds an Anthropic-compatible non-streaming request", () => {
     const request = buildSelectionRewriteRequest(input, { ANTHROPIC_AUTH_TOKEN: "token", ANTHROPIC_MODEL: "model-x" });
@@ -106,6 +114,58 @@ describe("rewriteSelectedDraftText", () => {
     expect(fetcher).toHaveBeenCalledWith(
       "https://api.moonshot.ai/anthropic/v1/messages",
       expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("streamSelectedDraftText", () => {
+  it("streams partial replacement text before returning the final replacement", async () => {
+    const encoder = new TextEncoder();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              [
+                "event: content_block_delta",
+                'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\\"replacementText\\":\\"第二句"}}',
+                "",
+                "event: content_block_delta",
+                'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"加入排期会细节。\\"}"}}',
+                "",
+                "event: message_stop",
+                'data: {"type":"message_stop"}',
+                ""
+              ].join("\n")
+            )
+          );
+          controller.close();
+        }
+      }),
+      { status: 200, headers: { "Content-Type": "text/event-stream" } }
+    );
+    const fetcher = vi.fn().mockResolvedValue(response);
+    const onText = vi.fn();
+
+    await expect(
+      streamSelectedDraftText(input, {
+        env: { ANTHROPIC_AUTH_TOKEN: "token" },
+        fetcher,
+        onText
+      })
+    ).resolves.toEqual({ replacementText: "第二句加入排期会细节。" });
+
+    const requestBody = JSON.parse(fetcher.mock.calls[0][1].body as string);
+    expect(requestBody.stream).toBe(true);
+    expect(onText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        partialReplacementText: "第二句"
+      })
+    );
+    expect(onText).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        partialReplacementText: "第二句加入排期会细节。"
+      })
     );
   });
 });

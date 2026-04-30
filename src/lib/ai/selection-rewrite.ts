@@ -6,6 +6,7 @@ import {
   getDirectorModel,
   parseDirectorJsonObject
 } from "./director";
+import { parseAnthropicSseTextDeltas } from "./director-stream";
 import { formatEnabledSkills, type DirectorMessage } from "./prompts";
 
 export type SelectionRewriteField = "body";
@@ -38,6 +39,7 @@ type SelectionRewriteFetch = (input: string | URL | Request, init?: RequestInit)
 type RewriteSelectedDraftTextOptions = {
   env?: Record<string, string | undefined>;
   fetcher?: SelectionRewriteFetch;
+  onText?: (event: { accumulatedText: string; delta: string; partialReplacementText: string }) => void;
   signal?: AbortSignal;
 };
 
@@ -143,6 +145,65 @@ export async function rewriteSelectedDraftText(
   return parseSelectionRewriteText(readAnthropicTextContent(payload));
 }
 
+export async function streamSelectedDraftText(
+  input: SelectionRewriteInput,
+  options: RewriteSelectedDraftTextOptions = {}
+): Promise<SelectionRewriteOutput> {
+  const request = buildSelectionRewriteRequest(input, options.env);
+  const fetcher = options.fetcher ?? fetch;
+  const response = await fetcher(request.url, {
+    method: "POST",
+    headers: request.headers,
+    body: JSON.stringify({
+      ...request.body,
+      stream: true
+    }),
+    signal: options.signal
+  });
+
+  if (!response.ok) {
+    throw await createDirectorStreamHttpError(response);
+  }
+
+  if (!response.body) {
+    throw new Error("AI rewrite stream returned no response body.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pendingSseText = "";
+  let accumulatedText = "";
+  let lastPartialReplacementText = "";
+
+  const emitSseBlocks = (blocks: string[]) => {
+    for (const delta of parseAnthropicSseTextDeltas(blocks.join("\n\n"))) {
+      accumulatedText += delta;
+      const partialReplacementText = extractPartialSelectionRewriteText(accumulatedText);
+      if (partialReplacementText && partialReplacementText !== lastPartialReplacementText) {
+        lastPartialReplacementText = partialReplacementText;
+        options.onText?.({ accumulatedText, delta, partialReplacementText });
+      }
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    pendingSseText += decoder.decode(value, { stream: true });
+    const parsed = takeCompleteSseBlocks(pendingSseText);
+    pendingSseText = parsed.remainder;
+    emitSseBlocks(parsed.blocks);
+  }
+
+  pendingSseText += decoder.decode();
+  if (pendingSseText.trim().length > 0) {
+    emitSseBlocks([pendingSseText]);
+  }
+
+  return parseSelectionRewriteText(accumulatedText);
+}
+
 export function parseSelectionRewriteText(text: string): SelectionRewriteOutput {
   const parsed = parseDirectorJsonObject(text);
   if (!isRecord(parsed) || typeof parsed.replacementText !== "string") {
@@ -154,6 +215,13 @@ export function parseSelectionRewriteText(text: string): SelectionRewriteOutput 
   }
 
   return { replacementText: parsed.replacementText };
+}
+
+export function extractPartialSelectionRewriteText(text: string) {
+  const match = /"replacementText"\s*:\s*"/.exec(text);
+  if (!match) return "";
+
+  return readVisibleJsonString(text, match.index + match[0].length);
 }
 
 function readAnthropicTextContent(payload: unknown) {
@@ -169,4 +237,61 @@ function readAnthropicTextContent(payload: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function splitSseBlocks(text: string) {
+  return text.split(/\r?\n\r?\n/).filter((block) => block.trim().length > 0);
+}
+
+function takeCompleteSseBlocks(text: string) {
+  const blocks = splitSseBlocks(text);
+  const endsWithSeparator = /\r?\n\r?\n$/.test(text);
+  if (endsWithSeparator) {
+    return { blocks, remainder: "" };
+  }
+
+  return {
+    blocks: blocks.slice(0, -1),
+    remainder: blocks.at(-1) ?? ""
+  };
+}
+
+function readVisibleJsonString(text: string, startIndex: number) {
+  let rawValue = "";
+  let isEscaped = false;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (isEscaped) {
+      rawValue += `\\${char}`;
+      isEscaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      isEscaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      return parseJsonString(rawValue);
+    }
+
+    rawValue += char;
+  }
+
+  if (isEscaped) {
+    rawValue += "\\";
+  }
+
+  return parseJsonString(rawValue);
+}
+
+function parseJsonString(rawValue: string) {
+  try {
+    return JSON.parse(`"${rawValue}"`) as string;
+  } catch {
+    return rawValue;
+  }
 }

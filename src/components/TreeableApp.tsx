@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import {
   SessionStateSchema,
   type BranchOption,
+  CUSTOM_OPTION_ID_PREFIX,
+  type CustomBranchOptionId,
   type Draft,
   type OptionGenerationMode,
   type RootMemory,
@@ -29,7 +31,7 @@ type NodeGenerationStage = { nodeId: string; stage: "draft" | "options" };
 type RootSetupDefaults = { seed: string; enabledSkillIds?: string[] };
 type DraftStreamField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDraftStreamingField = "body" | "imagePrompt";
-type StreamingDraftEntry = { nodeId: string; draft: Draft; streamingField: DraftStreamField | null };
+type StreamingDraftEntry = { nodeId: string; draft: Draft; previousDraft?: Draft | null; streamingField: DraftStreamField | null };
 type StreamingOptionsEntry = { nodeId: string; options: BranchOption[] };
 type DraftSelectionRewriteRequest = {
   draft: Draft;
@@ -274,10 +276,30 @@ function previousComparisonNodeId(entries: DraftComparisonEntry[], toNodeId: str
   return toIndex > 0 ? entries[toIndex - 1].nodeId : null;
 }
 
-function replaceDraftSelection(draft: Draft, selectionStart: number, selectionEnd: number, replacementText: string): Draft {
+function createCustomBranchOptionId(prefix: string): CustomBranchOptionId {
+  const randomId =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+  return `${CUSTOM_OPTION_ID_PREFIX}${prefix}-${randomId}`;
+}
+
+function deriveCustomOptionLabel(content: string) {
+  const normalized = content.replace(/\s+/g, " ").trim();
+  const [firstSegment = normalized] = normalized.split(/[。！？!?，,；;：:\n]/);
+  const label = firstSegment.trim() || normalized;
+  return Array.from(label).slice(0, 15).join("");
+}
+
+function createSelectionReferenceOption(request: DraftSelectionRewriteRequest): BranchOption {
+  const instruction = request.instruction.trim();
+  const selectedText = request.selectedText.trim();
   return {
-    ...draft,
-    body: `${draft.body.slice(0, selectionStart)}${replacementText}${draft.body.slice(selectionEnd)}`
+    id: createCustomBranchOptionId("reference"),
+    label: deriveCustomOptionLabel(instruction || selectedText || "引用选中文本"),
+    description: `引用选中文本继续生成：\n「${selectedText}」\n\n用户要求：${instruction}`,
+    impact: "按选中文本和用户要求作为自定义方向继续生成。",
+    kind: "reframe"
   };
 }
 
@@ -953,48 +975,15 @@ export function TreeableApp() {
     }
   }
 
-  async function rewriteDraftSelection(request: DraftSelectionRewriteRequest) {
+  function rewriteDraftSelection(request: DraftSelectionRewriteRequest) {
     if (isBusy) return;
     if (!sessionState?.currentNode) return;
-    const draftParentNodeId = viewNodeId ?? sessionState.currentNode.id;
-    setGeneratedDiffNodeId(null);
-    setIsBusy(true);
-    setMessage("");
-    try {
-      if (!isValidDraftSelectionRewriteRequest(request)) {
-        setMessage("选中文本已经变化，请重新选择。");
-        return;
-      }
-
-      const response = await fetch(`/api/sessions/${sessionState.session.id}/draft/rewrite-selection`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nodeId: draftParentNodeId,
-          draft: request.draft,
-          field: request.field,
-          selectedText: request.selectedText,
-          instruction: request.instruction
-        })
-      });
-      const data = (await response.json()) as { replacementText?: string; error?: string };
-      if (!response.ok || !data.replacementText) throw new Error(data.error ?? "无法修改选中文本。");
-      const updatedDraft = replaceDraftSelection(
-        request.draft,
-        request.selectionStart,
-        request.selectionEnd,
-        data.replacementText
-      );
-      await saveDraftForNode(updatedDraft, draftParentNodeId);
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "无法修改选中文本。";
-      setMessage(apiKeyMessage(text));
-    } finally {
-      setGenerationStage(null);
-      setStreamingDraft(null);
-      setStreamingOptions(null);
-      setIsBusy(false);
+    if (!isValidDraftSelectionRewriteRequest(request)) {
+      setMessage("选中文本已经变化，请重新选择。");
+      return;
     }
+
+    addAndChooseCustomOption(createSelectionReferenceOption(request));
   }
 
   if (loadState === "loading") return <main className="loading-screen">正在唤醒 Tritree...</main>;
@@ -1031,18 +1020,20 @@ export function TreeableApp() {
   const startButtonLabel = isBusy && !sessionState ? "生成方向中" : sessionState ? "重新开始" : "开始创作";
   const activeViewNodeId = viewNodeId ?? sessionState?.currentNode?.id ?? null;
   const activeViewNode = sessionState ? findTreeNode(sessionState, activeViewNodeId) : null;
-  const previousDraft =
+  const treePreviousDraft =
     activeViewNode?.parentId && sessionState
       ? sessionState.nodeDrafts.find((item) => item.nodeId === activeViewNode.parentId)?.draft ?? null
       : null;
+  const activeStreamingDraft = streamingDraft?.nodeId === activeViewNodeId ? streamingDraft : null;
+  const previousDraft = activeStreamingDraft?.previousDraft ?? treePreviousDraft;
   const persistedDraftForView = sessionState ? draftForNode(sessionState, activeViewNodeId) : null;
   const isDraftGenerationForView = Boolean(
     activeViewNodeId && generationStage?.nodeId === activeViewNodeId && generationStage.stage === "draft"
   );
-  const isStreamingDraftForView = Boolean(streamingDraft?.nodeId === activeViewNodeId && isDraftGenerationForView);
-  const streamedDraftForView = isStreamingDraftForView ? streamingDraft?.draft ?? null : null;
+  const isStreamingDraftForView = Boolean(activeStreamingDraft && isDraftGenerationForView);
+  const streamedDraftForView = isStreamingDraftForView ? activeStreamingDraft?.draft ?? null : null;
   const liveDiffStreamingField = isStreamingDraftForView
-    ? liveDraftStreamingFieldFor(streamingDraft?.streamingField)
+    ? liveDraftStreamingFieldFor(activeStreamingDraft?.streamingField)
     : undefined;
   const viewedDraft = streamedDraftForView ?? (isDraftGenerationForView ? previousDraft : persistedDraftForView);
   const isGeneratedDiffReview = Boolean(

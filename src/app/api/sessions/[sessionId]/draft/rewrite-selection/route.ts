@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { rewriteSelectedDraftText } from "@/lib/ai/selection-rewrite";
+import { rewriteSelectedDraftText, streamSelectedDraftText } from "@/lib/ai/selection-rewrite";
 import { badRequestResponse, isBadRequestError, publicServerErrorMessage } from "@/lib/api/errors";
 import { focusSessionStateForNode, summarizeSelectionRewriteForDirector } from "@/lib/app-state";
 import { getRepository } from "@/lib/db/repository";
 import { DraftSchema } from "@/lib/domain";
+import { encodeNdjson } from "@/lib/stream/ndjson";
 
 export const runtime = "nodejs";
 
@@ -20,8 +21,15 @@ const RewriteSelectionBodySchema = z.object({
     .string()
     .max(6000)
     .refine((value) => value.trim().length > 0),
-  instruction: z.string().trim().min(1).max(1200)
+  instruction: z.string().trim().min(1).max(1200),
+  stream: z.boolean().optional()
 });
+
+const ndjsonHeaders = {
+  "Content-Type": "application/x-ndjson; charset=utf-8",
+  "Cache-Control": "no-cache, no-transform",
+  "X-Content-Type-Options": "nosniff"
+};
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   let params: z.infer<typeof ParamsSchema>;
@@ -58,11 +66,37 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "没有找到要编辑的草稿节点。" }, { status: 404 });
   }
 
+  const input = summarizeSelectionRewriteForDirector(focusedState, body.draft, body.selectedText, body.instruction, body.field);
+  if (body.stream) {
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const send = (value: unknown) => {
+          controller.enqueue(encoder.encode(encodeNdjson(value)));
+        };
+
+        try {
+          const output = await streamSelectedDraftText(input, {
+            signal: request.signal,
+            onText(event) {
+              send({ type: "replacement", replacementText: event.partialReplacementText });
+            }
+          });
+          send({ type: "done", replacementText: output.replacementText });
+        } catch (error) {
+          console.error("[treeable:rewrite-selection]", error);
+          send({ type: "error", error: publicServerErrorMessage(error, "无法修改选中文本。") });
+        } finally {
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, { headers: ndjsonHeaders });
+  }
+
   try {
-    const output = await rewriteSelectedDraftText(
-      summarizeSelectionRewriteForDirector(focusedState, body.draft, body.selectedText, body.instruction, body.field),
-      { signal: request.signal }
-    );
+    const output = await rewriteSelectedDraftText(input, { signal: request.signal });
     return NextResponse.json(output);
   } catch (error) {
     console.error("[treeable:rewrite-selection]", error);
