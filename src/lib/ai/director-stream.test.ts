@@ -1,4 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mastraMocks = vi.hoisted(() => ({
+  streamTreeDraft: vi.fn(),
+  streamTreeOptions: vi.fn()
+}));
+
+vi.mock("./mastra-executor", () => ({
+  streamTreeDraft: mastraMocks.streamTreeDraft,
+  streamTreeOptions: mastraMocks.streamTreeOptions
+}));
+
 import {
   extractActiveDirectorDraftField,
   extractPartialDirectorOptions,
@@ -17,6 +28,11 @@ const directorInput = {
   selectedOptionLabel: "扩写",
   enabledSkills: []
 };
+
+beforeEach(() => {
+  mastraMocks.streamTreeDraft.mockReset();
+  mastraMocks.streamTreeOptions.mockReset();
+});
 
 describe("parseAnthropicSseTextDeltas", () => {
   it("extracts text_delta chunks and ignores non-text events", () => {
@@ -176,6 +192,51 @@ describe("extractPartialDirectorOptions", () => {
 });
 
 describe("streamDirectorDraft", () => {
+  it("uses the Mastra tree draft stream when no low-level fetcher is injected", async () => {
+    const output = {
+      roundIntent: "扩写",
+      draft: { title: "新标题", body: "新正文", hashtags: ["#AI"], imagePrompt: "新图" },
+      memoryObservation: "观察"
+    };
+    mastraMocks.streamTreeDraft.mockImplementation(async ({ onPartialObject }) => {
+      onPartialObject({ roundIntent: "扩写", draft: { title: "新标题" } });
+      onPartialObject({ roundIntent: "扩写", draft: { title: "新标题", body: "新正文" } });
+      return output;
+    });
+    const signal = new AbortController().signal;
+    const onText = vi.fn();
+
+    await expect(
+      streamDirectorDraft(directorInput, {
+        signal,
+        memory: { resource: "root", thread: "session-1" },
+        onText
+      })
+    ).resolves.toEqual(output);
+
+    expect(mastraMocks.streamTreeDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: directorInput,
+        signal,
+        memory: { resource: "root", thread: "session-1" }
+      })
+    );
+    expect(onText).toHaveBeenCalledTimes(3);
+    expect(onText).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        accumulatedText: JSON.stringify({ roundIntent: "扩写", draft: { title: "新标题" } }),
+        partialDraft: expect.objectContaining({ title: "新标题" })
+      })
+    );
+    expect(onText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accumulatedText: JSON.stringify(output),
+        partialDraft: output.draft
+      })
+    );
+  });
+
   it("calls onText with accumulated text and returns the final parsed draft", async () => {
     const encoder = new TextEncoder();
     const response = new Response(
@@ -258,6 +319,66 @@ describe("streamDirectorDraft", () => {
 });
 
 describe("streamDirectorOptions", () => {
+  it("uses the Mastra tree options stream when no low-level fetcher is injected", async () => {
+    const output = {
+      roundIntent: "下一步",
+      options: [
+        { id: "a", label: "补场景", description: "A", impact: "A", kind: "explore" },
+        { id: "b", label: "深挖", description: "B", impact: "B", kind: "deepen" },
+        { id: "c", label: "换角度", description: "C", impact: "C", kind: "reframe" }
+      ],
+      memoryObservation: "偏好具体表达。"
+    };
+    mastraMocks.streamTreeOptions.mockImplementation(async ({ onPartialObject }) => {
+      onPartialObject({ roundIntent: "下一步", options: [{ id: "a", label: "补场景" }] });
+      onPartialObject({
+        roundIntent: "下一步",
+        options: [
+          { id: "a", label: "补场景" },
+          { id: "b", label: "深挖" }
+        ]
+      });
+      return output;
+    });
+    const onText = vi.fn();
+
+    await expect(
+      streamDirectorOptions(directorInput, {
+        memory: { resource: "root", thread: "session-1" },
+        onText
+      })
+    ).resolves.toEqual(output);
+
+    expect(mastraMocks.streamTreeOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: directorInput,
+        memory: { resource: "root", thread: "session-1" }
+      })
+    );
+    expect(onText).toHaveBeenCalledTimes(3);
+    expect(onText).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        accumulatedText: JSON.stringify({ roundIntent: "下一步", options: [{ id: "a", label: "补场景" }] }),
+        partialOptions: [
+          {
+            id: "a",
+            label: "补场景",
+            description: "正在生成方向说明",
+            impact: "正在生成影响说明",
+            kind: "explore"
+          }
+        ]
+      })
+    );
+    expect(onText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accumulatedText: JSON.stringify(output),
+        partialOptions: output.options
+      })
+    );
+  });
+
   it("calls onText with partial options and returns the final parsed options", async () => {
     const encoder = new TextEncoder();
     const finalText = JSON.stringify({

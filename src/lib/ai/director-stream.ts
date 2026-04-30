@@ -5,6 +5,7 @@ import {
   parseDirectorDraftText,
   parseDirectorOptionsText
 } from "./director";
+import { streamTreeDraft, streamTreeOptions, type MemoryScope } from "./mastra-executor";
 import type { DirectorInputParts } from "./prompts";
 
 type DirectorDraftFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -13,6 +14,7 @@ export type DirectorDraftField = "title" | "body" | "hashtags" | "imagePrompt";
 type DirectorDraftStreamOptions = {
   env?: Record<string, string | undefined>;
   fetcher?: DirectorDraftFetch;
+  memory?: MemoryScope;
   onText?: (event: { delta: string; accumulatedText: string; partialDraft: Draft | null }) => void;
   signal?: AbortSignal;
 };
@@ -20,6 +22,7 @@ type DirectorDraftStreamOptions = {
 type DirectorOptionsStreamOptions = {
   env?: Record<string, string | undefined>;
   fetcher?: DirectorDraftFetch;
+  memory?: MemoryScope;
   onText?: (event: { delta: string; accumulatedText: string; partialOptions: BranchOption[] | null }) => void;
   signal?: AbortSignal;
 };
@@ -28,9 +31,32 @@ export async function streamDirectorDraft(
   parts: DirectorInputParts,
   options: DirectorDraftStreamOptions = {}
 ): Promise<DirectorDraftOutput> {
+  if (!options.fetcher) {
+    let accumulatedText = "";
+    const emit = (value: unknown) => {
+      const text = JSON.stringify(value);
+      if (!text || text === accumulatedText) return;
+      accumulatedText = text;
+      options.onText?.({
+        delta: text,
+        accumulatedText,
+        partialDraft: extractPartialDirectorDraft(accumulatedText)
+      });
+    };
+    const output = await streamTreeDraft({
+      parts,
+      env: options.env,
+      memory: options.memory,
+      signal: options.signal,
+      onPartialObject: emit
+    });
+    emit(output);
+    return output;
+  }
+
   const request = buildDirectorDraftStreamRequest(parts, options.env);
   logDirectorPrompt("draft", request.body);
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher;
   const response = await fetcher(request.url, {
     method: "POST",
     headers: request.headers,
@@ -75,6 +101,29 @@ export async function streamDirectorOptions(
   parts: DirectorInputParts,
   options: DirectorOptionsStreamOptions = {}
 ): Promise<DirectorOptionsOutput> {
+  if (!options.fetcher) {
+    let accumulatedText = "";
+    const emit = (value: unknown) => {
+      const text = JSON.stringify(value);
+      if (!text || text === accumulatedText) return;
+      accumulatedText = text;
+      options.onText?.({
+        delta: text,
+        accumulatedText,
+        partialOptions: extractPartialDirectorOptions(accumulatedText)
+      });
+    };
+    const output = await streamTreeOptions({
+      parts,
+      env: options.env,
+      memory: options.memory,
+      signal: options.signal,
+      onPartialObject: emit
+    });
+    emit(output);
+    return output;
+  }
+
   const request = buildDirectorOptionsStreamRequest(parts, options.env);
   logDirectorPrompt("options", request.body);
   const accumulatedText = await streamDirectorText(request, {

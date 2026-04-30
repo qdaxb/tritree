@@ -66,6 +66,7 @@ export async function POST(request: Request) {
               enabledSkills
             }),
             {
+              memory: { resource: rootMemory.id, thread: draftState.session.id },
               signal: request.signal,
               onText(event) {
                 if (event.partialOptions && draftState.currentNode) {

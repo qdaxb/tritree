@@ -110,7 +110,7 @@ describe("DirectorOutputSchema", () => {
         finishAvailable: false,
         publishPackage: null
       })
-    ).toThrow("AI Director must return exactly three options.");
+    ).toThrow("AI suggestions must include exactly three items.");
   });
 
   it("rejects responses with four options", () => {
@@ -141,7 +141,7 @@ describe("DirectorOutputSchema", () => {
         finishAvailable: false,
         publishPackage: null
       })
-    ).toThrow("AI Director must return exactly three options.");
+    ).toThrow("AI suggestions must include exactly three items.");
   });
 
   it("rejects duplicate option IDs", () => {
@@ -171,7 +171,7 @@ describe("DirectorOutputSchema", () => {
         finishAvailable: false,
         publishPackage: null
       })
-    ).toThrow("AI Director options must include IDs a, b, and c exactly once.");
+    ).toThrow("AI suggestions must include IDs a, b, and c exactly once.");
   });
 
   it("keeps custom branches out of AI director responses", () => {
@@ -201,7 +201,7 @@ describe("DirectorOutputSchema", () => {
         finishAvailable: false,
         publishPackage: null
       })
-    ).toThrow("AI Director options must include IDs a, b, and c exactly once.");
+    ).toThrow("AI suggestions must include IDs a, b, and c exactly once.");
   });
 });
 
@@ -215,7 +215,7 @@ describe("requireThreeOptions", () => {
       kind: "explore"
     });
 
-    expect(() => requireThreeOptions([option])).toThrow("AI Director must return exactly three options.");
+    expect(() => requireThreeOptions([option])).toThrow("AI suggestions must include exactly three items.");
   });
 });
 
@@ -281,11 +281,14 @@ describe("SkillSchema", () => {
     expect(workflowSkill?.prompt).toContain("结构成稿");
     expect(workflowSkill?.prompt).toContain("基本成稿");
     expect(workflowSkill?.prompt).toContain("发布前");
-    expect(workflowSkill?.prompt).toContain("用户手动编辑后");
     expect(workflowSkill?.prompt).toContain("草稿越完整，改动越克制");
     expect(workflowSkill?.prompt).toContain("有清楚主题、完整叙述链路、关键解释和自然收束");
+    expect(workflowSkill?.prompt).toContain("当任务是提出编辑建议时");
     expect(workflowSkill?.prompt).toContain("简单修改语病");
-    expect(workflowSkill?.prompt).toContain("避免三项都给重构、换角度、重写、扩写这类大改方向");
+    expect(workflowSkill?.prompt).toContain("避免所有建议都给重构、换角度、重写、扩写这类大改方向");
+    expect(workflowSkill?.prompt).not.toContain("下一步选项");
+    expect(workflowSkill?.prompt).not.toContain("用户手动编辑后");
+    expect(workflowSkill?.prompt).not.toContain("三项");
   });
 
   it("keeps every default system skill valid for runtime parsing", () => {

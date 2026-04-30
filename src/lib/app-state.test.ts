@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { summarizeCurrentDraftOptionsForDirector, summarizeSessionForDirector } from "./app-state";
+import {
+  summarizeCurrentDraftOptionsForDirector,
+  summarizeEditedDraftForDirector,
+  summarizeSessionForDirector
+} from "./app-state";
 import type { BranchOption, SessionState, TreeNode } from "./domain";
 
 describe("summarizeSessionForDirector", () => {
@@ -84,9 +88,9 @@ describe("summarizeSessionForDirector", () => {
     );
 
     expect(summary.selectedOptionLabel).toContain("职场黑话");
-    expect(summary.selectedOptionLabel).toContain("用户补充备注：请保留一点讽刺感。");
-    expect(summary.selectedOptionLabel).toContain("选项生成倾向：专注");
-    expect(summary.selectedOptionLabel).toContain("保持在创作决策或方向层级");
+    expect(summary.selectedOptionLabel).toContain("用户补充要求：请保留一点讽刺感。");
+    expect(summary.selectedOptionLabel).toContain("本轮写作倾向：专注");
+    expect(summary.selectedOptionLabel).toContain("围绕当前稿收窄和深化");
     expect(summary.selectedOptionLabel).not.toContain("细节深化");
   });
 
@@ -119,17 +123,17 @@ describe("summarizeSessionForDirector", () => {
 
     const summary = summarizeSessionForDirector(state, option("c", "重组为问题-解决结构"));
 
-    expect(summary.pathSummary).toContain("本轮选项：A 扩写成完整草稿；B 锁定写给谁看；C 重组为问题-解决结构");
-    expect(summary.pathSummary).toContain("已选择：B 锁定写给谁看");
-    expect(summary.pathSummary).toContain("进入本轮：B 锁定写给谁看");
-    expect(summary.pathSummary).toContain("本轮选项：A 展开值班全过程；B 锁定写给谁看；C 重组为问题-解决结构");
-    expect(summary.pathSummary).toContain("已出现过的选项标题（用于避开复用）");
+    expect(summary.pathSummary).toContain("已提出过的建议：扩写成完整草稿；锁定写给谁看；重组为问题-解决结构");
+    expect(summary.pathSummary).toContain("随后推进的写作意图：锁定写给谁看");
+    expect(summary.pathSummary).toContain("进入本版的写作意图：锁定写给谁看");
+    expect(summary.pathSummary).toContain("已提出过的建议：展开值班全过程；锁定写给谁看；重组为问题-解决结构");
+    expect(summary.pathSummary).toContain("已出现过的建议标题（用于避开复用）");
     expect(summary.pathSummary).toContain("展开值班全过程");
     expect(summary.foldedSummary).toContain("扩写成完整草稿");
     expect(summary.selectedOptionLabel).toContain("重组为问题-解决结构");
   });
 
-  it("represents path history as alternating user and assistant messages", () => {
+  it("represents draft history as writing intentions and version summaries", () => {
     const state = createStateWithPath([
       createNode({
         id: "root",
@@ -155,25 +159,43 @@ describe("summarizeSessionForDirector", () => {
         selectedOptionId: null
       })
     ]);
+    state.nodeDrafts = [
+      {
+        nodeId: "root",
+        draft: {
+          title: "旧版标题",
+          body: "这是一段旧版正文，应该只作为摘要来源，而不应该完整进入 draft 历史消息。",
+          hashtags: ["#旧版"],
+          imagePrompt: "旧图"
+        }
+      }
+    ];
 
     const summary = summarizeSessionForDirector(state, option("b", "分析做这个的动机"));
     const messages = (summary as any).messages as Array<{ role: string; content: string }>;
 
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
-    expect(messages[1].content).toContain("第 1 轮 AI 输出");
-    expect(messages[1].content).toContain("选项：A 扩写完整经历；B 分析为什么写；C 确定写给谁看");
-    expect(messages[2].content).toContain("用户选择：C 确定写给谁看");
-    expect(messages[3].content).toContain("第 2 轮 AI 输出");
-    expect(messages[3].content).toContain("选项：A 扩写完整故事线；B 分析做这个的动机；C 明确写给谁看");
-    expect(messages[4].content).toContain("用户刚刚选择：B 分析做这个的动机");
-    expect(messages[4].content).toContain("生成本轮更新后的 draft");
-    expect(messages[4].content).toContain("先按已选技能判断当前草稿状态和改动幅度");
-    expect(messages[4].content).toContain("保留当前草稿中已经成立的内容");
+    expect(messages[1].content).toContain("第 1 版已形成版本摘要");
+    expect(messages[1].content).toContain("采用的写作意图：第 1 轮意图");
+    expect(messages[1].content).toContain("旧版标题");
+    expect(messages[1].content).not.toContain("正文：这是一段旧版正文，应该只作为摘要来源，而不应该完整进入 draft 历史消息。");
+    expect(messages[1].content).not.toContain("选项：");
+    expect(messages[2].content).toContain("下一步写作意图：确定写给谁看");
+    expect(messages[2].content).not.toContain("用户选择");
+    expect(messages[3].content).toContain("第 2 版已形成版本摘要");
+    expect(messages[3].content).not.toContain("选项：");
+    expect(messages[4].content).toContain("用户想要完成的写作意图：分析做这个的动机");
+    expect(messages[4].content).not.toContain("请按本轮写作意图生成新的内容版本");
+    expect(messages[4].content).not.toContain("当前内容是本轮唯一写作基线");
+    expect(messages[4].content).not.toContain("先按已选技能判断当前内容状态和改动幅度");
+    expect(messages[4].content).not.toContain("保留当前内容中已经成立的部分");
+    expect(messages[4].content).not.toContain("已选技能是创作判断镜头");
     expect(messages[4].content).not.toContain("实质变化");
-    expect(messages[4].content).toContain("已选技能是创作判断镜头");
     expect(messages[4].content).not.toContain("会怎么改");
     expect(messages[4].content).toContain("配图提示");
-    expect(messages[4].content).not.toContain("已选择：未选择");
+    expect(messages[4].content).not.toContain("用户刚刚选择");
+    expect(messages[4].content).not.toContain("三选一");
+    expectNoProcessTerms(messages[4].content);
   });
 
   it("asks draft generation to apply the selected direction to the draft", () => {
@@ -195,14 +217,18 @@ describe("summarizeSessionForDirector", () => {
     const messages = (summary as any).messages as Array<{ role: string; content: string }>;
     const finalMessage = messages.at(-1)?.content ?? "";
 
-    expect(finalMessage).toContain("请把用户刚刚选择的方向落实到当前草稿");
-    expect(finalMessage).toContain("生成本轮更新后的 draft");
-    expect(finalMessage).toContain("先按已选技能判断当前草稿状态和改动幅度");
-    expect(finalMessage).toContain("保留当前草稿中已经成立的内容");
+    expect(finalMessage).toContain("用户想要完成的写作意图");
+    expect(finalMessage).toContain("选择读者视角");
+    expect(finalMessage).not.toContain("请按本轮写作意图生成新的内容版本");
+    expect(finalMessage).not.toContain("先按已选技能判断当前内容状态和改动幅度");
+    expect(finalMessage).not.toContain("保留当前内容中已经成立的部分");
     expect(finalMessage).not.toContain("实质变化");
-    expect(finalMessage).toContain("用户补充备注：写给独立开发者");
+    expect(finalMessage).toContain("用户补充要求：写给独立开发者");
     expect(finalMessage).not.toContain("提出三选一建议");
     expect(finalMessage).not.toContain("生成下一步三个创作方向");
+    expect(finalMessage).not.toContain("用户刚刚选择");
+    expect(finalMessage).not.toContain("选项");
+    expectNoProcessTerms(finalMessage);
   });
 
   it("includes current node option labels when regenerating options for an existing draft", () => {
@@ -217,12 +243,12 @@ describe("summarizeSessionForDirector", () => {
 
     const summary = summarizeCurrentDraftOptionsForDirector(state);
 
-    expect(summary.pathSummary).toContain("本轮选项：A 展开值班全过程；B 锁定写给谁看；C 重组为问题-解决结构");
-    expect(summary.pathSummary).toContain("已出现过的选项标题（用于避开复用）");
+    expect(summary.pathSummary).toContain("已提出过的建议：展开值班全过程；锁定写给谁看；重组为问题-解决结构");
+    expect(summary.pathSummary).toContain("已出现过的建议标题（用于避开复用）");
     expect(summary.selectedOptionLabel).toContain("避免重复已有方向");
   });
 
-  it("uses a single user message for first-round options after the initial draft", () => {
+  it("asks the editor agent for first-round suggestions with initial and current content", () => {
     const state = createStateWithPath([
       createNode({
         id: "current",
@@ -236,10 +262,92 @@ describe("summarizeSessionForDirector", () => {
     const messages = (summary as any).messages as Array<{ role: string; content: string }>;
 
     expect(messages.map((message) => message.role)).toEqual(["user"]);
-    expect(messages[0].content).toContain("创作 seed：");
-    expect(messages[0].content).toContain("当前草稿：");
-    expect(messages[0].content).toContain("请只基于这个草稿生成下一步三个创作方向");
+    expect(messages[0].content).toContain("初始内容：");
+    expect(messages[0].content).toContain("当前内容：");
+    expect(messages[0].content).toContain("本轮审稿材料：");
+    expect(messages[0].content).not.toContain("请作为责任编辑");
+    expect(messages[0].content).not.toContain("提出三个建议");
+    expect(messages[0].content).not.toContain("AI Director");
+    expect(messages[0].content).not.toContain("三选一");
     expect(messages[0].content).not.toContain("第 1 轮 AI 输出");
+    expectNoProcessTerms(messages[0].content);
+    expectNoProcessTerms(summary.selectedOptionLabel);
+  });
+
+  it("gives the editor agent revision history from an editorial perspective", () => {
+    const state = createStateWithPath([
+      createNode({
+        id: "root",
+        roundIndex: 1,
+        options: [
+          option("a", "扩写完整经历"),
+          option("b", "分析为什么写"),
+          option("c", "确定写给谁看")
+        ],
+        selectedOptionId: "c",
+        foldedOptions: [option("a", "扩写完整经历"), option("b", "分析为什么写")]
+      }),
+      createNode({
+        id: "current",
+        parentId: "root",
+        parentOptionId: "c",
+        roundIndex: 2,
+        options: [],
+        selectedOptionId: null
+      })
+    ]);
+
+    const summary = summarizeCurrentDraftOptionsForDirector(state);
+    const messages = (summary as any).messages as Array<{ role: string; content: string }>;
+    const finalMessage = messages.at(-1)?.content ?? "";
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user"]);
+    expect(messages[0].content).toContain("初始内容：");
+    expect(messages[1].content).toContain("第 1 次编辑建议摘要");
+    expect(messages[1].content).toContain("建议标题：扩写完整经历；分析为什么写；确定写给谁看");
+    expect(messages[1].content).not.toContain("扩写完整经历的说明");
+    expect(finalMessage).toContain("最近一次修改：确定写给谁看");
+    expect(finalMessage).not.toContain("确定写给谁看的说明");
+    expect(finalMessage).toContain("确定写给谁看");
+    expect(finalMessage).toContain("当前内容：");
+    expect(finalMessage).toContain("本轮审稿材料：");
+    expect(finalMessage).toContain("暂未采纳的建议标题：");
+    expect(finalMessage).toContain("扩写完整经历；分析为什么写");
+    expect(finalMessage).not.toContain("扩写完整经历的说明");
+    expect(finalMessage.indexOf("当前内容：")).toBeLessThan(finalMessage.indexOf("最近一次修改："));
+    expect(finalMessage).not.toContain("请作为责任编辑");
+    expect(finalMessage).not.toContain("提出三个建议");
+    expect(finalMessage).not.toContain("用户刚刚选择");
+    expect(finalMessage).not.toContain("用户选择");
+    expect(finalMessage).not.toContain("三选一");
+    expectNoProcessTerms(finalMessage);
+  });
+
+  it("asks for editorial suggestions after edited content without UI process language", () => {
+    const state = createStateWithPath([
+      createNode({
+        id: "current",
+        roundIndex: 1,
+        options: [option("a", "展开值班全过程"), option("b", "锁定写给谁看"), option("c", "重组为问题-解决结构")],
+        selectedOptionId: null
+      })
+    ]);
+
+    const summary = summarizeEditedDraftForDirector(state, {
+      title: "Edited",
+      body: "Edited body",
+      hashtags: ["#edit"],
+      imagePrompt: "Edited image"
+    });
+    const messages = (summary as any).messages as Array<{ role: string; content: string }>;
+    const finalMessage = messages.at(-1)?.content ?? "";
+
+    expect(finalMessage).toContain("审稿材料：");
+    expect(finalMessage).toContain("当前内容：");
+    expect(finalMessage).not.toContain("请作为责任编辑");
+    expect(finalMessage).not.toContain("提出三个建议");
+    expectNoProcessTerms(finalMessage);
+    expectNoProcessTerms(summary.selectedOptionLabel);
   });
 
   it("excludes folded branches that are outside the current path", () => {
@@ -269,6 +377,37 @@ describe("summarizeSessionForDirector", () => {
     expect(summary.pathSummary).not.toContain("旧路线里的选项");
   });
 });
+
+function expectNoProcessTerms(text: string) {
+  const forbiddenTerms = [
+    "当前草稿已经展示",
+    "展示给用户",
+    "用户手动编辑",
+    "保存了当前草稿",
+    "用户刚刚",
+    "用户选择",
+    "三选一",
+    "AI Director",
+    "Tritree",
+    "Treeable",
+    "产品机制",
+    "整体流程",
+    "工作台",
+    "页面",
+    "界面",
+    "下一步三个创作方向",
+    "当前路径",
+    "已选路径",
+    "未选方向",
+    "请作为责任编辑",
+    "提出三个建议",
+    "请按本轮写作意图生成新的内容版本"
+  ];
+
+  for (const term of forbiddenTerms) {
+    expect(text).not.toContain(term);
+  }
+}
 
 function option(id: BranchOption["id"], label: string): BranchOption {
   return {
