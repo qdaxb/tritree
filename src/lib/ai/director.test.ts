@@ -25,7 +25,7 @@ describe("parseDirectorOutput", () => {
         finishAvailable: false,
         publishPackage: null
       })
-    ).toThrow("AI Director must return exactly three options.");
+    ).toThrow("AI suggestions must include exactly three items.");
   });
 
   it("rejects duplicate option IDs", () => {
@@ -50,7 +50,7 @@ describe("parseDirectorOutput", () => {
         finishAvailable: false,
         publishPackage: null
       })
-    ).toThrow("AI Director options must include IDs a, b, and c exactly once.");
+    ).toThrow("AI suggestions must include IDs a, b, and c exactly once.");
   });
 });
 
@@ -85,7 +85,7 @@ describe("parseDirectorOptionsOutput", () => {
         options: [option, { ...option, label: "深挖原因" }, { ...option, label: "换角度" }],
         memoryObservation: ""
       })
-    ).toThrow("AI Director options must include IDs a, b, and c exactly once.");
+    ).toThrow("AI suggestions must include IDs a, b, and c exactly once.");
   });
 });
 

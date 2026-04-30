@@ -27,7 +27,7 @@ export const DEFAULT_SYSTEM_SKILLS = [
     category: "方向",
     description: "判断内容所处阶段，并控制改动幅度。",
     prompt:
-      "帮助创作者判断当前内容处于哪种创作阶段，并据此控制 AI 介入强度。种子或零散想法阶段：只有概念、情绪、判断或材料清单，可以大幅组织材料、补上下文、生成初稿骨架。半成稿阶段：已有若干段落或素材，但主线、顺序、读者对象、开头结尾还不稳，可以中等调整，补主线、调顺序、增加过渡，但要保留主要素材和语气。结构成稿阶段：已经有开头、展开、解释或例子，但局部逻辑、转折、段落节奏仍可优化，优先做局部调整和小范围补齐。基本成稿阶段：有清楚主题、完整叙述链路、关键解释和自然收束，进入成稿保护，保留原有结构、段落和主要句子，只做必要的局部优化；下一步选项应至少包含一个轻量收尾方向，例如简单修改语病、校对错别字、整理标题话题、生成配图提示或发布检查，避免三项都给重构、换角度、重写、扩写这类大改方向。发布前阶段：只做标题、话题、配图提示、错别字、风险表达、结尾收束等轻量整理。用户手动编辑后：用户编辑内容优先，基于新稿判断下一步，保留用户刚确认过的表达。草稿越完整，改动越克制；用户表达越明确，保留越多；只有用户明确选择重构、换角度或大改方向时，才允许明显重写。",
+      "帮助创作者判断当前内容处于哪种创作阶段，并据此控制 AI 介入强度。种子或零散想法阶段：只有概念、情绪、判断或材料清单，可以大幅组织材料、补上下文、生成初稿骨架。半成稿阶段：已有若干段落或素材，但主线、顺序、读者对象、开头结尾还不稳，可以中等调整，补主线、调顺序、增加过渡，但要保留主要素材和语气。结构成稿阶段：已经有开头、展开、解释或例子，但局部逻辑、转折、段落节奏仍可优化，优先做局部调整和小范围补齐。基本成稿阶段：有清楚主题、完整叙述链路、关键解释和自然收束，进入成稿保护，保留原有结构、段落和主要句子，只做必要的局部优化；当任务是提出编辑建议时，应至少包含一个轻量收尾方向，例如简单修改语病、校对错别字、整理标题话题、生成配图提示或发布检查，避免所有建议都给重构、换角度、重写、扩写这类大改方向。发布前阶段：只做标题、话题、配图提示、错别字、风险表达、结尾收束等轻量整理。当前内容优先，保留用户已经确认过的表达。草稿越完整，改动越克制；用户表达越明确，保留越多；只有用户明确要求重构、换角度或大改方向时，才允许明显重写。",
     defaultEnabled: true
   },
   {
@@ -178,12 +178,12 @@ export const BranchOptionSchema = z.object({
 export const CUSTOM_EDIT_OPTION = {
   id: "custom-edit",
   label: "自定义编辑",
-  description: "根据用户手动编辑后的草稿继续。",
+  description: "根据最新当前内容继续。",
   impact: "保留这次手动修改，并从修改后的版本生成新的下一步方向。",
   kind: "reframe"
 } satisfies z.infer<typeof BranchOptionSchema>;
 
-export const DIRECTOR_OPTION_IDS_ERROR = "AI Director options must include IDs a, b, and c exactly once.";
+export const DIRECTOR_OPTION_IDS_ERROR = "AI suggestions must include IDs a, b, and c exactly once.";
 
 function includesDirectorOptionIdsOnce(options: Array<{ id: string }>) {
   return options
@@ -208,7 +208,7 @@ export const NodeDraftSchema = z.object({
 
 export const DirectorOutputSchema = z.object({
   roundIntent: z.string().min(1),
-  options: z.array(BranchOptionSchema).length(3, "AI Director must return exactly three options."),
+  options: z.array(BranchOptionSchema).length(3, "AI suggestions must include exactly three items."),
   draft: DraftSchema,
   memoryObservation: z.string(),
   finishAvailable: z.boolean().optional(),
@@ -225,7 +225,7 @@ export const DirectorOutputSchema = z.object({
 
 export const DirectorOptionsOutputSchema = z.object({
   roundIntent: z.string().min(1),
-  options: z.array(BranchOptionSchema).length(3, "AI Director must return exactly three options."),
+  options: z.array(BranchOptionSchema).length(3, "AI suggestions must include exactly three items."),
   memoryObservation: z.string()
 }).superRefine((output, context) => {
   if (!includesDirectorOptionIdsOnce(output.options)) {
@@ -308,7 +308,7 @@ export type SessionState = z.input<typeof SessionStateSchema> & {
 
 export function requireThreeOptions(options: BranchOption[]) {
   if (options.length !== 3) {
-    throw new Error("AI Director must return exactly three options.");
+    throw new Error("AI suggestions must include exactly three items.");
   }
 }
 
