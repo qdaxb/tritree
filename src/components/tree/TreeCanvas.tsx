@@ -1218,9 +1218,12 @@ function BranchOptionCard({
   optionMode: OptionGenerationMode;
   variant?: "primary" | "side";
 }) {
+  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const displayLabel = displayBranchLabel(option.label);
   const choiceLabel = isCustomBranchOptionId(option.id) && variant === "side" ? "自定义" : option.id.toUpperCase();
+  const descriptionToggleLabel = isDescriptionOpen ? `${choiceLabel} 收起详情` : `${choiceLabel} 展开详情`;
+  const canShowNoteAction = isDescriptionOpen || note.trim().length > 0;
 
   return (
     <div
@@ -1247,35 +1250,65 @@ function BranchOptionCard({
               {displayLabel}
               {isPending ? " 生成中" : ""}
             </span>
-            <span className="branch-card__description">{option.description}</span>
+            <span className={clsx("branch-card__description", isDescriptionOpen && "branch-card__description--expanded")}>
+              {option.description}
+            </span>
           </span>
         </span>
       </button>
       <div className="branch-card__meta">
         <button
-          aria-expanded={isNoteOpen}
-          aria-label={`${choiceLabel} 更多备注`}
-          className={clsx("branch-card__more", note.trim() && "branch-card__more--active")}
+          aria-expanded={isDescriptionOpen}
+          aria-label={descriptionToggleLabel}
           disabled={isBusy}
-          onClick={() => setIsNoteOpen((open) => !open)}
+          className="branch-card__more"
+          onClick={() => setIsDescriptionOpen((open) => !open)}
           type="button"
         >
-          更多
+          {isDescriptionOpen ? (
+            <ChevronUp aria-hidden="true" size={13} strokeWidth={2.4} />
+          ) : (
+            <ChevronDown aria-hidden="true" size={13} strokeWidth={2.4} />
+          )}
+          <span>{isDescriptionOpen ? "收起" : "详情"}</span>
         </button>
+        {canShowNoteAction ? (
+          <button
+            aria-expanded={isNoteOpen}
+            aria-label={`${choiceLabel} 补充要求`}
+            className={clsx("branch-card__more", note.trim() && "branch-card__more--active")}
+            disabled={isBusy}
+            onClick={() => setIsNoteOpen((open) => !open)}
+            type="button"
+          >
+            {note.trim() ? "编辑要求" : "补充要求"}
+          </button>
+        ) : null}
       </div>
       {isNoteOpen ? (
         <div className="branch-card__more-panel">
           <label className="branch-card__note">
-            <span>更多备注</span>
+            <span>补充要求</span>
             <textarea
-              aria-label={`更多备注 ${choiceLabel}`}
+              aria-label={`补充要求 ${choiceLabel}`}
               disabled={isBusy}
               onChange={(event) => onNoteChange(event.target.value)}
-              placeholder="给模型一点补充"
+              placeholder="比如语气、保留点、避开点"
               rows={2}
               value={note}
             />
           </label>
+          <div className="branch-card__note-actions">
+            <button
+              aria-label={`${choiceLabel} 按此方向生成`}
+              className="branch-card__note-submit"
+              disabled={isBusy}
+              onClick={() => onChoose(option.id, note.trim(), optionMode)}
+              type="button"
+            >
+              按此方向生成
+            </button>
+          </div>
         </div>
       ) : null}
     </div>

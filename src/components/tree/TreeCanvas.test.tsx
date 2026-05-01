@@ -166,7 +166,7 @@ describe("TreeCanvas", () => {
     expect(main.querySelectorAll('[data-choice-button="true"]')).toHaveLength(3);
     expect(within(main).getByRole("button", { name: /具体场景/ })).toBeEnabled();
     expect(within(controls).getByRole("button", { name: "更多方向" })).toBeEnabled();
-    expect(screen.queryByLabelText("更多备注 A")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("补充要求 A")).not.toBeInTheDocument();
     expect(tray.querySelector("foreignObject")).toBeNull();
   });
 
@@ -214,7 +214,55 @@ describe("TreeCanvas", () => {
     );
   });
 
-  it("passes per-option notes to the chosen branch", () => {
+  it("keeps long option copy clipped inside the existing three-card layout", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const mainRule = css.match(/\.branch-option-main\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const descriptionRule =
+      css.match(/\.branch-card--option:not\(\.branch-card--side\) \.branch-card__description\s*\{(?<body>[^}]+)\}/)
+        ?.groups?.body ?? "";
+    const expandedDescriptionRule =
+      css.match(
+        /\.branch-card--option:not\(\.branch-card--side\) \.branch-card__description--expanded\s*\{(?<body>[^}]+)\}/
+      )?.groups?.body ?? "";
+    const metaRule = css.match(/\.branch-card__meta\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const moreRule = css.match(/\.branch-card__more\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(mainRule).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
+    expect(mainRule).toContain("align-items: start");
+    expect(descriptionRule).toContain("overflow: hidden");
+    expect(descriptionRule).toContain("-webkit-line-clamp: 3");
+    expect(expandedDescriptionRule).toContain("-webkit-line-clamp: unset");
+    expect(metaRule).toContain("justify-content: flex-start");
+    expect(metaRule).toContain("border-top: 1px solid");
+    expect(moreRule).toContain("background: transparent");
+    expect(moreRule).toContain("border: 0");
+  });
+
+  it("uses a quiet details action to expand option text before showing notes", () => {
+    const longDescription =
+      "把当前内容重构为面向计划去青岛的读者的实用攻略，保留行程骨架，但增加交通建议、预算参考、排队避坑技巧、餐厅具体位置等实用信息。";
+    render(
+      <BranchOptionTray
+        isBusy={false}
+        onChoose={vi.fn()}
+        options={[{ ...currentNode.options[0], description: longDescription }, ...currentNode.options.slice(1)]}
+        pendingChoice={null}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "A 展开详情" })).toHaveTextContent("详情");
+    expect(screen.queryByRole("button", { name: "A 补充要求" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "A 展开详情" }));
+
+    expect(screen.getByText(longDescription)).toHaveClass("branch-card__description--expanded");
+    expect(screen.getByRole("button", { name: "A 收起详情" })).toHaveTextContent("收起");
+    expect(screen.getByRole("button", { name: "A 补充要求" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("补充要求 A")).not.toBeInTheDocument();
+    expect(screen.queryByText("更多备注")).not.toBeInTheDocument();
+  });
+
+  it("submits supplemental requests from inside the note panel", () => {
     const onChoose = vi.fn();
     render(
       <BranchOptionTray
@@ -225,11 +273,14 @@ describe("TreeCanvas", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "A 更多备注" }));
-    fireEvent.change(screen.getByLabelText("更多备注 A"), {
+    fireEvent.click(screen.getByRole("button", { name: "A 展开详情" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 补充要求" }));
+    fireEvent.change(screen.getByLabelText("补充要求 A"), {
       target: { value: "请用更尖锐一点的对比。" }
     });
-    fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
+    expect(onChoose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "A 按此方向生成" }));
 
     expect(onChoose).toHaveBeenCalledWith("a", "请用更尖锐一点的对比。", "balanced");
   });
@@ -309,7 +360,7 @@ describe("TreeCanvas", () => {
     expect(container.querySelector(".branch-card__mode-badge")).toBeNull();
   });
 
-  it("keeps expanded option panels focused on notes instead of duplicating mode controls", () => {
+  it("keeps supplemental request panels separate from mode controls", () => {
     render(
       <BranchOptionTray
         isBusy={false}
@@ -319,9 +370,11 @@ describe("TreeCanvas", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "A 更多备注" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 展开详情" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 补充要求" }));
 
-    expect(screen.getByLabelText("更多备注 A")).toBeInTheDocument();
+    expect(screen.getByLabelText("补充要求 A")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "A 按此方向生成" })).toBeInTheDocument();
     expect(screen.getAllByRole("group", { name: "发散度" })).toHaveLength(1);
     expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
   });
@@ -456,7 +509,8 @@ describe("TreeCanvas", () => {
     expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
     const range = screen.getByRole("group", { name: "发散度" });
     fireEvent.click(within(range).getByRole("button", { name: "专注" }));
-    fireEvent.click(screen.getByRole("button", { name: "A 更多备注" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 展开详情" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 补充要求" }));
     expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
