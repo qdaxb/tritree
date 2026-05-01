@@ -302,6 +302,7 @@ describe("TreeCanvas", () => {
             category: "方向",
             description: "优化语言。",
             prompt: "润色 prompt",
+            appliesTo: "editor",
             isSystem: true,
             defaultEnabled: true,
             isArchived: false,

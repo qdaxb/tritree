@@ -20,6 +20,7 @@ const resolvedSkills = [
     category: "方向",
     description: "拆解写作动机。",
     prompt: "先分析写作动机、读者和表达目标。",
+    appliesTo: "editor",
     isSystem: true,
     defaultEnabled: true,
     isArchived: false,
