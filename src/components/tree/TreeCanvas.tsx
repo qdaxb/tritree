@@ -1117,6 +1117,13 @@ function OptionModeControl({
   onModeChange: (mode: OptionGenerationMode) => void;
   onRegenerateOptions?: (mode: OptionGenerationMode) => void;
 }) {
+  function chooseMode(nextMode: OptionGenerationMode) {
+    onModeChange(nextMode);
+    if (nextMode !== mode) {
+      onRegenerateOptions?.(nextMode);
+    }
+  }
+
   return (
     <div className="option-mode-control-wrap">
       <span className="option-mode-control__label">方向范围</span>
@@ -1128,7 +1135,7 @@ function OptionModeControl({
             className={clsx("option-mode-control__button", mode === item.value && "option-mode-control__button--active")}
             disabled={disabled}
             key={item.value}
-            onClick={() => onModeChange(item.value)}
+            onClick={() => chooseMode(item.value)}
             type="button"
           >
             <span className="option-mode-control__button-label">{item.label}</span>
@@ -1253,7 +1260,6 @@ function BranchOptionCard({
         </span>
       </button>
       <div className="branch-card__meta">
-        {option.mode ? <span className="branch-card__mode-badge">{formatOptionModeLabel(option.mode)}</span> : null}
         <button
           aria-expanded={isNoteOpen}
           aria-label={`${choiceLabel} 更多备注`}
@@ -1282,15 +1288,6 @@ function BranchOptionCard({
       ) : null}
     </div>
   );
-}
-
-function formatOptionModeLabel(mode: OptionGenerationMode) {
-  const labels: Record<OptionGenerationMode, string> = {
-    divergent: "发散",
-    balanced: "平衡",
-    focused: "专注"
-  };
-  return labels[mode];
 }
 
 function MoreDirectionsCard({

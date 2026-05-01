@@ -289,9 +289,30 @@ describe("TreeCanvas", () => {
     expect(screen.queryByText("兼顾延展和当前稿推进")).not.toBeInTheDocument();
 
     fireEvent.click(within(range).getByRole("button", { name: "专注 围绕当前稿继续收窄" }));
+
+    expect(onRegenerateOptions).toHaveBeenCalledWith("focused");
+
+    onRegenerateOptions.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "换一组方向" }));
 
     expect(onRegenerateOptions).toHaveBeenCalledWith("focused");
+  });
+
+  it("does not render per-card mode badges that compete with the tray range control", () => {
+    const optionsWithModes = currentNode.options.map((option, index) => ({
+      ...option,
+      mode: index === 0 ? ("divergent" as const) : index === 1 ? ("balanced" as const) : ("focused" as const)
+    }));
+    const { container } = render(
+      <BranchOptionTray
+        isBusy={false}
+        onChoose={vi.fn()}
+        options={optionsWithModes}
+        pendingChoice={null}
+      />
+    );
+
+    expect(container.querySelector(".branch-card__mode-badge")).toBeNull();
   });
 
   it("keeps expanded option panels focused on notes instead of duplicating mode controls", () => {

@@ -1189,16 +1189,6 @@ button:disabled {
   margin-top: 6px;
 }
 
-.branch-card__mode-badge {
-  margin-right: auto;
-  padding: 2px 7px;
-  color: #075985;
-  background: #e0f2fe;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
 .branch-card__more-panel {
   display: grid;
   gap: 10px;
