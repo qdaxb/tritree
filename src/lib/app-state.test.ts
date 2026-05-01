@@ -90,8 +90,10 @@ describe("summarizeSessionForDirector", () => {
     expect(summary.selectedOptionLabel).toContain("职场黑话");
     expect(summary.selectedOptionLabel).toContain("用户补充要求：请保留一点讽刺感。");
     expect(summary.selectedOptionLabel).toContain("方向范围：专注");
-    expect(summary.selectedOptionLabel).toContain("围绕当前稿最重要的未解决写作判断");
-    expect(summary.selectedOptionLabel).toContain("避免改换前提、读者或结构的大跳转");
+    expect(summary.selectedOptionLabel).toContain("生成草稿时只围绕所选方向做近距离推进");
+    expect(summary.selectedOptionLabel).toContain("硬约束");
+    expect(summary.selectedOptionLabel).toContain("保留当前稿的前提、读者和结构");
+    expect(summary.selectedOptionLabel).not.toContain("三个选项");
     expect(summary.selectedOptionLabel).toContain("草稿改动幅度由所选方向决定");
     expect(summary.selectedOptionLabel).not.toContain("本轮写作倾向");
     expect(summary.selectedOptionLabel).not.toContain("收窄和深化");
@@ -118,7 +120,9 @@ describe("summarizeSessionForDirector", () => {
     expect(summary.selectedOptionLabel).toContain("当前内容；避免重复已有方向和已有建议。");
     expect(summary.selectedOptionLabel).toContain("方向范围：发散");
     expect(summary.selectedOptionLabel).toContain("拉开下一步方向之间的语义距离");
-    expect(summary.selectedOptionLabel).toContain("至少覆盖两个不同维度");
+    expect(summary.selectedOptionLabel).toContain("硬约束");
+    expect(summary.selectedOptionLabel).toContain("三个选项必须落在明显不同的创作维度");
+    expect(summary.selectedOptionLabel).toContain("至少一个选项改变读者、叙事前提或整体结构");
     expect(summary.selectedOptionLabel).toContain("草稿改动幅度由所选方向决定");
     expect(summary.selectedOptionLabel).not.toContain("大改");
     expect(summary.selectedOptionLabel).not.toContain("小改");

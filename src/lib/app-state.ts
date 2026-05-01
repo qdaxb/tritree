@@ -14,7 +14,7 @@ export function summarizeSessionForDirector(
   optionMode: OptionGenerationMode = "balanced"
 ): DirectorInputParts {
   const trimmedNote = selectedOptionNote?.trim();
-  const modeHint = formatDirectionRangeHint(optionMode);
+  const modeHint = formatDraftDirectionRangeHint(optionMode);
   const selectedOptionLabel = formatWritingIntentLabel(selectedOption, trimmedNote, modeHint);
 
   return {
@@ -37,16 +37,28 @@ export function summarizeSessionForDirector(
   };
 }
 
-function formatDirectionRangeHint(optionMode: OptionGenerationMode) {
+function formatOptionsDirectionRangeHint(optionMode: OptionGenerationMode) {
   if (optionMode === "divergent") {
-    return "方向范围：发散。拉开下一步方向之间的语义距离，三条方向至少覆盖两个不同维度，例如角度、读者、结构或前提变化；避免只给相近的局部微调。模式只影响方向范围；草稿改动幅度由所选方向决定。";
+    return "方向范围：发散。硬约束：拉开下一步方向之间的语义距离，三个选项必须落在明显不同的创作维度；至少一个选项改变读者、叙事前提或整体结构，避免只给相近的局部微调。模式只影响方向范围；草稿改动幅度由所选方向决定。";
   }
 
   if (optionMode === "focused") {
-    return "方向范围：专注。围绕当前稿最重要的未解决写作判断，给出更贴近当前稿的推进路线；避免改换前提、读者或结构的大跳转。模式只影响方向范围；草稿改动幅度由所选方向决定。";
+    return "方向范围：专注。硬约束：围绕当前稿最重要的未解决写作判断，三个选项必须共享同一个核心改写问题，只给近距离的三种处理办法；避免改换前提、读者或结构的大跳转。模式只影响方向范围；草稿改动幅度由所选方向决定。";
   }
 
-  return "方向范围：平衡。兼顾当前稿的延展和推进，给出既不太跳脱也不只做局部修补的路线。模式只影响方向范围；草稿改动幅度由所选方向决定。";
+  return "方向范围：平衡。硬约束：兼顾当前稿的延展和推进，三个选项应形成近、中、远的梯度：一个贴近当前稿，一个适度展开，一个提供替代角度。模式只影响方向范围；草稿改动幅度由所选方向决定。";
+}
+
+function formatDraftDirectionRangeHint(optionMode: OptionGenerationMode) {
+  if (optionMode === "divergent") {
+    return "方向范围：发散。硬约束：生成草稿时允许更明显改变表达角度、读者假设或结构组织，但仍必须服务用户选中的方向。模式只影响方向范围；草稿改动幅度由所选方向决定。";
+  }
+
+  if (optionMode === "focused") {
+    return "方向范围：专注。硬约束：生成草稿时只围绕所选方向做近距离推进，保留当前稿的前提、读者和结构，不要扩散成新主题。模式只影响方向范围；草稿改动幅度由所选方向决定。";
+  }
+
+  return "方向范围：平衡。硬约束：生成草稿时在保留当前稿主线的基础上适度推进，可补一个新角度或结构调整，但不要跳到全新主题。模式只影响方向范围；草稿改动幅度由所选方向决定。";
 }
 
 function formatWritingIntentLabel(
@@ -84,7 +96,7 @@ export function summarizeCurrentDraftOptionsForDirector(
   state: SessionState,
   optionMode: OptionGenerationMode = "balanced"
 ): DirectorInputParts {
-  const selectedOptionLabel = ["当前内容；避免重复已有方向和已有建议。", formatDirectionRangeHint(optionMode)].join("\n");
+  const selectedOptionLabel = ["当前内容；避免重复已有方向和已有建议。", formatOptionsDirectionRangeHint(optionMode)].join("\n");
 
   return {
     rootSummary: state.rootMemory.summary,

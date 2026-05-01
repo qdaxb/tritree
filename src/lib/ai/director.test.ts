@@ -487,6 +487,8 @@ describe("buildDirectorOptionsStreamRequest", () => {
     expect(request.body.messages[0].content).toContain("每次生成都要遵守所有已选技能的提示词");
     expect(request.body.messages[0].content).toContain("把适合当前草稿状态的技能转化成下一步判断");
     expect(request.body.messages[0].content).toContain("先按已选技能判断当前草稿状态、改动幅度和下一步方向");
+    expect(request.body.messages[0].content).toContain("方向范围是硬约束");
+    expect(request.body.messages[0].content).toContain("通用差异要求要按发散度解释");
     expect(request.body.messages[0].content).toContain("下一轮保持在合适的创作层级");
     expect(request.body.messages[0].content).toContain("选项以创作决策或方向为主");
     expect(request.body.messages[0].content).toContain("选项标题优先避开已选路径、未选方向历史和刚刚选择过的选项标题");

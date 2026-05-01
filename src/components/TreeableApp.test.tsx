@@ -19,6 +19,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
     onActivateBranch,
     onAddCustomOption,
     onChoose,
+    onRegenerateOptions,
     onSelectComparisonNode,
     onViewNode,
     skills
@@ -32,6 +33,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
     onActivateBranch?: (nodeId: string, optionId: "a") => void;
     onAddCustomOption?: (option: { id: string; label: string; description: string; impact: string; kind: "reframe" }) => void;
     onChoose?: (optionId: "a") => void;
+    onRegenerateOptions?: (optionMode: "focused") => void;
     onSelectComparisonNode?: (nodeId: string) => void;
     onViewNode?: (nodeId: string) => void;
     skills?: Skill[];
@@ -46,6 +48,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
       onActivateBranch,
       onAddCustomOption,
       onChoose,
+      onRegenerateOptions,
       onSelectComparisonNode,
       onViewNode,
       skills
@@ -67,6 +70,9 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
         </button>
         <button onClick={() => onChoose?.("a")} type="button">
           choose displayed option
+        </button>
+        <button onClick={() => onRegenerateOptions?.("focused")} type="button">
+          regenerate focused options
         </button>
         <button
           onClick={() =>
@@ -1131,6 +1137,67 @@ describe("TreeableApp", () => {
 
     await vi.waitFor(() => {
       expect(screen.getByTestId("canvas-options").textContent).toBe("First A|Second B|Third C");
+      expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("idle");
+    });
+  });
+
+  it("streams regenerated options over an existing option set", async () => {
+    const finalOptions = [
+      { id: "a", label: "Focused A", description: "A", impact: "A", kind: "deepen" },
+      { id: "b", label: "Focused B", description: "B", impact: "B", kind: "explore" },
+      { id: "c", label: "Focused C", description: "C", impact: "C", kind: "finish" }
+    ];
+    const optionsState = {
+      ...activeState,
+      currentNode: {
+        ...activeState.currentNode,
+        options: finalOptions
+      }
+    };
+    const optionsStream = controlledNdjsonResponse();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce(optionsStream.response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("tree-canvas");
+    expect(screen.getByTestId("canvas-options").textContent).toBe("A|B|C");
+
+    await userEvent.click(screen.getByRole("button", { name: "regenerate focused options" }));
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        4,
+        "/api/sessions/session-1/options",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ nodeId: "node-1", optionMode: "focused", force: true })
+        })
+      );
+      expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("node-1:options");
+      expect(screen.getByTestId("canvas-options")).toBeEmptyDOMElement();
+    });
+
+    act(() => {
+      optionsStream.push({ type: "options", nodeId: "node-1", options: [finalOptions[0]] });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("canvas-options").textContent).toBe("Focused A");
+    });
+
+    act(() => {
+      optionsStream.push({ type: "done", state: optionsState });
+      optionsStream.close();
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("canvas-options").textContent).toBe("Focused A|Focused B|Focused C");
       expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("idle");
     });
   });

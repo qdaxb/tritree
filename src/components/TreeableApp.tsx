@@ -197,7 +197,7 @@ function withCustomOption(node: TreeNode, customOption: BranchOption | null) {
 }
 
 function withStreamingOptions(node: TreeNode, streamingOptions: StreamingOptionsEntry | null) {
-  if (!streamingOptions || streamingOptions.nodeId !== node.id || node.options.length >= 3) return node;
+  if (!streamingOptions || streamingOptions.nodeId !== node.id) return node;
 
   return {
     ...node,
