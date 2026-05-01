@@ -160,12 +160,12 @@ describe("TreeCanvas", () => {
     );
 
     const tray = screen.getByRole("group", { name: "下一步方向选项" });
+    const controls = within(tray).getByRole("group", { name: "方向控制" });
     const main = within(tray).getByRole("group", { name: "三个主选项" });
-    const side = within(tray).getByRole("group", { name: "旁路设置" });
 
     expect(main.querySelectorAll('[data-choice-button="true"]')).toHaveLength(3);
     expect(within(main).getByRole("button", { name: /具体场景/ })).toBeEnabled();
-    expect(within(side).getByRole("button", { name: "更多方向" })).toBeEnabled();
+    expect(within(controls).getByRole("button", { name: "更多方向" })).toBeEnabled();
     expect(screen.queryByLabelText("更多备注 A")).not.toBeInTheDocument();
     expect(tray.querySelector("foreignObject")).toBeNull();
   });
@@ -246,30 +246,25 @@ describe("TreeCanvas", () => {
     );
 
     const tray = screen.getByRole("group", { name: "下一步方向选项" });
-    const range = within(tray).getByRole("group", { name: "方向范围" });
+    const range = within(tray).getByRole("group", { name: "发散度" });
 
-    expect(within(range).getByRole("button", { name: "发散 给我更远、更不一样的路线" })).toHaveAttribute(
-      "aria-pressed",
-      "false"
-    );
-    expect(within(range).getByRole("button", { name: "平衡 兼顾延展和当前稿推进" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(within(range).getByRole("button", { name: "发散" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(range).getByRole("button", { name: "平衡" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(range).getByRole("button", { name: "专注" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(range).queryByText("更远")).not.toBeInTheDocument();
+    expect(within(range).queryByText("适中")).not.toBeInTheDocument();
+    expect(within(range).queryByText("更近")).not.toBeInTheDocument();
 
-    fireEvent.click(within(range).getByRole("button", { name: "发散 给我更远、更不一样的路线" }));
+    fireEvent.click(within(range).getByRole("button", { name: "发散" }));
 
-    expect(within(range).getByRole("button", { name: "发散 给我更远、更不一样的路线" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(within(range).getByRole("button", { name: "发散" })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
     expect(onChoose).toHaveBeenCalledWith("a", "", "divergent");
   });
 
-  it("regenerates the visible option set with the selected direction range", () => {
+  it("keeps direction range changes for the next interaction until refresh is clicked", () => {
     const onRegenerateOptions = vi.fn();
     render(
       <BranchOptionTray
@@ -281,18 +276,17 @@ describe("TreeCanvas", () => {
       />
     );
 
-    const range = screen.getByRole("group", { name: "方向范围" });
+    const range = screen.getByRole("group", { name: "发散度" });
 
-    expect(within(range).getByText("更远")).toBeInTheDocument();
-    expect(within(range).getByText("适中")).toBeInTheDocument();
-    expect(within(range).getByText("更近")).toBeInTheDocument();
+    expect(within(range).getByRole("button", { name: "发散" })).toBeInTheDocument();
+    expect(within(range).getByRole("button", { name: "平衡" })).toBeInTheDocument();
+    expect(within(range).getByRole("button", { name: "专注" })).toBeInTheDocument();
     expect(screen.queryByText("兼顾延展和当前稿推进")).not.toBeInTheDocument();
 
-    fireEvent.click(within(range).getByRole("button", { name: "专注 围绕当前稿继续收窄" }));
+    fireEvent.click(within(range).getByRole("button", { name: "专注" }));
 
-    expect(onRegenerateOptions).toHaveBeenCalledWith("focused");
+    expect(onRegenerateOptions).not.toHaveBeenCalled();
 
-    onRegenerateOptions.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "换一组方向" }));
 
     expect(onRegenerateOptions).toHaveBeenCalledWith("focused");
@@ -328,7 +322,7 @@ describe("TreeCanvas", () => {
     fireEvent.click(screen.getByRole("button", { name: "A 更多备注" }));
 
     expect(screen.getByLabelText("更多备注 A")).toBeInTheDocument();
-    expect(screen.getAllByRole("group", { name: "方向范围" })).toHaveLength(1);
+    expect(screen.getAllByRole("group", { name: "发散度" })).toHaveLength(1);
     expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
   });
 
@@ -345,10 +339,11 @@ describe("TreeCanvas", () => {
     );
 
     const tray = screen.getByRole("group", { name: "下一步方向选项" });
-    const side = within(tray).getByRole("group", { name: "旁路设置" });
+    const controls = within(tray).getByRole("group", { name: "方向控制" });
 
-    expect(within(side).getByRole("button", { name: "更多方向" })).toBeEnabled();
-    expect(within(side).queryByRole("button", { name: /自定义视角/ })).not.toBeInTheDocument();
+    expect(within(controls).getByRole("button", { name: "更多方向" })).toBeEnabled();
+    expect(within(controls).getByText("自定义")).toBeInTheDocument();
+    expect(within(controls).queryByRole("button", { name: /自定义视角/ })).not.toBeInTheDocument();
   });
 
   it("lets the user add and close a custom branch from a single field", () => {
@@ -459,14 +454,14 @@ describe("TreeCanvas", () => {
     );
 
     expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
-    const range = screen.getByRole("group", { name: "方向范围" });
-    fireEvent.click(within(range).getByRole("button", { name: "专注 围绕当前稿继续收窄" }));
+    const range = screen.getByRole("group", { name: "发散度" });
+    fireEvent.click(within(range).getByRole("button", { name: "专注" }));
     fireEvent.click(screen.getByRole("button", { name: "A 更多备注" }));
     expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
     expect(onChoose).toHaveBeenCalledWith("a", "", "focused");
-    expect(within(screen.getByRole("group", { name: "旁路设置" })).queryByText("专注")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "方向控制" })).queryAllByText("专注")).toHaveLength(1);
   });
 
   it("compacts visible branch labels to at most fifteen characters", () => {
@@ -891,6 +886,17 @@ describe("TreeCanvas", () => {
     expect(canvasRule).toContain("padding: 0");
     expect(viewportRule).toContain("padding: var(--tree-canvas-inset) 0 0 var(--tree-canvas-inset)");
     expect(trayRule).toContain("margin: 16px var(--tree-canvas-inset) var(--tree-canvas-inset)");
+  });
+
+  it("lets the left panel scroll instead of clipping a tall option tray", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const shellRule = css.match(/\.app-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const canvasRegionRule = css.match(/\.canvas-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const canvasRule = css.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(shellRule).toContain("min-height: 0");
+    expect(canvasRegionRule).toContain("overflow: auto");
+    expect(canvasRule).toContain("overflow: auto");
   });
 
   it("keeps the More Directions editor inside the bottom tray bounds", () => {

@@ -1059,13 +1059,14 @@ export function BranchOptionTray({
   return (
     <div aria-label="下一步方向选项" className="branch-option-tray" role="group">
       {primaryAllVisible ? (
-        <div className="branch-option-tray__controls">
+        <div aria-label="方向控制" className="branch-option-tray__controls" role="group">
           <OptionModeControl
             disabled={isBusy}
             mode={optionMode}
             onModeChange={setOptionMode}
             onRegenerateOptions={onRegenerateOptions}
           />
+          <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} skills={skills} />
         </div>
       ) : null}
       <div aria-label="三个主选项" className="branch-option-main branch-option-main--horizontal" role="group">
@@ -1086,24 +1087,18 @@ export function BranchOptionTray({
           )
         )}
       </div>
-      <div aria-label="旁路设置" className="branch-option-side" role="group">
-        {primaryAllVisible ? (
-          <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} skills={skills} />
-        ) : null}
-      </div>
     </div>
   );
 }
 
 const DIRECTION_RANGE_OPTIONS: Array<{
-  caption: string;
   description: string;
   label: string;
   value: OptionGenerationMode;
 }> = [
-  { label: "发散", caption: "更远", value: "divergent", description: "给我更远、更不一样的路线" },
-  { label: "平衡", caption: "适中", value: "balanced", description: "兼顾延展和当前稿推进" },
-  { label: "专注", caption: "更近", value: "focused", description: "围绕当前稿继续收窄" }
+  { label: "发散", value: "divergent", description: "拓宽下一轮候选方向" },
+  { label: "平衡", value: "balanced", description: "保持适中的候选范围" },
+  { label: "专注", value: "focused", description: "收束下一轮候选方向" }
 ];
 
 function OptionModeControl({
@@ -1119,27 +1114,24 @@ function OptionModeControl({
 }) {
   function chooseMode(nextMode: OptionGenerationMode) {
     onModeChange(nextMode);
-    if (nextMode !== mode) {
-      onRegenerateOptions?.(nextMode);
-    }
   }
 
   return (
     <div className="option-mode-control-wrap">
-      <span className="option-mode-control__label">方向范围</span>
-      <div aria-label="方向范围" className="option-mode-control" role="group">
+      <span className="option-mode-control__label">发散度</span>
+      <div aria-label="发散度" className="option-mode-control" role="group">
         {DIRECTION_RANGE_OPTIONS.map((item) => (
           <button
-            aria-label={`${item.label} ${item.description}`}
+            aria-label={item.label}
             aria-pressed={mode === item.value}
             className={clsx("option-mode-control__button", mode === item.value && "option-mode-control__button--active")}
             disabled={disabled}
             key={item.value}
             onClick={() => chooseMode(item.value)}
+            title={`${item.description}；点换一组才会刷新当前选项`}
             type="button"
           >
             <span className="option-mode-control__button-label">{item.label}</span>
-            <span className="option-mode-control__button-caption">{item.caption}</span>
           </button>
         ))}
       </div>
@@ -1318,9 +1310,10 @@ function MoreDirectionsCard({
         className="branch-side-action"
         disabled={disabled}
         onClick={() => setIsEditing(true)}
+        title="添加自定义方向"
         type="button"
       >
-        + 更多方向
+        自定义
       </button>
     );
   }

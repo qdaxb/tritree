@@ -326,7 +326,7 @@ button:disabled {
 
 .app-shell {
   height: 100dvh;
-  min-height: 720px;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
   grid-template-rows: 72px minmax(0, 1fr);
@@ -584,7 +584,7 @@ button:disabled {
   min-height: 0;
   display: grid;
   gap: 12px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .tree-canvas {
@@ -596,7 +596,7 @@ button:disabled {
   grid-template-rows: minmax(360px, 1fr) auto;
   gap: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: auto;
   background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.26);
   border-radius: 8px;
@@ -1059,15 +1059,6 @@ button:disabled {
   align-items: stretch;
 }
 
-.branch-option-side {
-  min-height: 30px;
-  min-width: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .branch-card {
   width: 100%;
   min-height: 58px;
@@ -1194,14 +1185,25 @@ button:disabled {
   gap: 10px;
 }
 
-.branch-card__more,
-.branch-side-action {
+.branch-card__more {
   padding: 0;
   color: rgba(71, 85, 105, 0.66);
   background: transparent;
   border: 0;
   font-size: 0.74rem;
   font-weight: 760;
+}
+
+.branch-side-action {
+  min-height: 32px;
+  padding: 0 10px;
+  color: rgba(71, 85, 105, 0.72);
+  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 820;
+  white-space: nowrap;
 }
 
 .branch-card__more:hover,
@@ -1214,7 +1216,13 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  gap: 8px;
   min-height: 36px;
+  flex-wrap: wrap;
+}
+
+.branch-option-tray__controls > .branch-side-action {
+  margin-left: auto;
 }
 
 .option-mode-control-wrap {
@@ -1243,17 +1251,18 @@ button:disabled {
 }
 
 .option-mode-control__button {
-  display: grid;
-  gap: 1px;
-  min-height: 34px;
-  min-width: 54px;
-  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  min-width: 58px;
+  padding: 0 12px;
   color: rgba(71, 85, 105, 0.72);
   background: transparent;
   border: 0;
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   font-weight: 800;
-  line-height: 1.05;
+  line-height: 1;
 }
 
 .option-mode-control__button--active {
@@ -1261,19 +1270,8 @@ button:disabled {
   background: #ccfbf1;
 }
 
-.option-mode-control__button-label,
-.option-mode-control__button-caption {
+.option-mode-control__button-label {
   display: block;
-}
-
-.option-mode-control__button-caption {
-  color: rgba(71, 85, 105, 0.58);
-  font-size: 0.62rem;
-  font-weight: 760;
-}
-
-.option-mode-control__button--active .option-mode-control__button-caption {
-  color: rgba(15, 118, 110, 0.72);
 }
 
 .option-mode-refresh {
