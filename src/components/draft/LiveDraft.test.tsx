@@ -1312,6 +1312,14 @@ describe("LiveDraft", () => {
     expect(scrollArea).not.toContainElement(screen.getByText("技能弹层"));
   });
 
+  it("keeps the publish assistant scrollable inside the draft panel", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const publishRule = css.match(/\.draft-publish-panel\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(publishRule).toContain("max-height: calc(100% - 66px)");
+    expect(publishRule).toContain("overflow: auto");
+  });
+
   it("opens a publish assistant with Weibo and Xiaohongshu tabs", async () => {
     render(
       <LiveDraft
@@ -1332,16 +1340,21 @@ describe("LiveDraft", () => {
     expect(screen.getByRole("button", { name: "微博" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "小红书" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("微博版预览")).toBeInTheDocument();
-    expect(screen.getByText(/#产品思考 #沟通效率/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "微博发布文案" })).toHaveValue(
+      "把复杂工作讲成一句人话\n\n先给对方一条主线，再补细节。\n\n#产品思考# #沟通效率#"
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "小红书" }));
 
     expect(screen.getByRole("button", { name: "微博" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "小红书" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("小红书版预览")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "小红书发布文案" })).toHaveValue(
+      "把复杂工作讲成一句人话\n\n先给对方一条主线，再补细节。\n\n#产品思考 #沟通效率"
+    );
   });
 
-  it("copies the formatted Weibo text with normalized hashtags", async () => {
+  it("copies the edited Weibo text with double-hash topics", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -1362,9 +1375,16 @@ describe("LiveDraft", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: "发布" }));
+    expect(screen.getByRole("textbox", { name: "微博发布文案" })).toHaveValue(
+      "标题\n\n正文第一句。\n正文第二句。\n\n#产品思考# #沟通效率#"
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "微博发布文案" }), {
+      target: { value: "手动改过的微博文案\n\n#产品思考#" }
+    });
     await userEvent.click(screen.getByRole("button", { name: "复制微博文案" }));
 
-    expect(writeText).toHaveBeenCalledWith("标题\n\n正文第一句。\n正文第二句。\n\n#产品思考 #沟通效率");
+    expect(writeText).toHaveBeenCalledWith("手动改过的微博文案\n\n#产品思考#");
     expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
   });
 
@@ -1393,6 +1413,29 @@ describe("LiveDraft", () => {
     expect(screen.getByRole("button", { name: "复制小红书文案" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制正文" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制话题" })).toBeInTheDocument();
+  });
+
+  it("shows the image prompt in the publish assistant and copies it", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "正文", hashtags: ["#话题"], imagePrompt: "明亮桌面上的便签和手机" }}
+        isBusy={false}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+
+    expect(screen.getByRole("textbox", { name: "配图提示" })).toHaveValue("明亮桌面上的便签和手机");
+    await userEvent.click(screen.getByRole("button", { name: "复制配图提示" }));
+
+    expect(writeText).toHaveBeenCalledWith("明亮桌面上的便签和手机");
   });
 
   it("shows platform-specific publish checks without blocking copy", async () => {

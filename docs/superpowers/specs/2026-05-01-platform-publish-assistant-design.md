@@ -10,7 +10,7 @@ The entry point is a single `发布` button in the `LiveDraft` header. Clicking 
 
 - Make generated content fast to move into Weibo or Xiaohongshu.
 - Keep the current writing, editing, diff, and skill controls uncluttered.
-- Show the exact text that will be copied before copying.
+- Show the exact editable text that will be copied before copying.
 - Provide lightweight platform-specific readiness checks without blocking the user.
 - Avoid direct posting, login, permissions, account linking, or uploading.
 
@@ -21,12 +21,13 @@ The entry point is a single `发布` button in the `LiveDraft` header. Clicking 
 3. A `发布助手` dialog opens.
 4. The dialog defaults to the `微博` tab.
 5. User can switch between `微博` and `小红书`.
-6. Each tab shows a formatted preview for that platform.
-7. User clicks the primary copy action:
+6. Each tab shows an editable formatted text box for that platform.
+7. User can lightly edit the platform text in the dialog.
+8. User clicks the primary copy action:
    - `复制微博文案` on the Weibo tab.
    - `复制小红书文案` on the Xiaohongshu tab.
-8. The copied button temporarily changes to `已复制`.
-9. User pastes the copied text into the target platform manually.
+9. The copied button temporarily changes to `已复制`.
+10. User pastes the copied text into the target platform manually.
 
 ## Live Draft Header
 
@@ -48,7 +49,8 @@ Dialog structure:
 
 - Header: `发布助手`, short subcopy `生成适合平台的复制版本`, close button.
 - Platform tabs: `微博`, `小红书`.
-- Preview panel: exact formatted text for the active tab.
+- Editable platform text box: exact text that will be copied for the active tab.
+- Image prompt box: visible `配图提示` content with a copy action when present.
 - Copy actions for the active tab.
 - Platform checks for the active tab.
 
@@ -70,7 +72,7 @@ Weibo formatted text:
 
 {body}
 
-{hashtags separated by spaces}
+{Weibo topics separated by spaces, formatted as #话题#}
 ```
 
 If the title is empty after fallback resolution, omit the title block. If there are no hashtags, omit the hashtag block.
@@ -82,16 +84,16 @@ Xiaohongshu formatted text:
 
 {body}
 
-{hashtags separated by spaces}
+{Xiaohongshu topics separated by spaces, formatted as #话题}
 ```
 
 The initial formatting can match Weibo structurally, but Xiaohongshu gets different checks and copy actions because title and topic handling matter more there. Future iterations can add Xiaohongshu-specific title/body splitting if the product starts storing platform variants.
 
 Hashtag normalization:
 
-- Trim empty tags.
-- Preserve tags already beginning with `#`.
-- Prefix tags without `#` with `#`.
+- Trim empty tags and remove leading/trailing `#` before formatting.
+- Format Weibo topics as `#话题#`.
+- Format Xiaohongshu topics as `#话题`.
 - Join tags with a single space.
 
 ## Copy Actions
@@ -101,6 +103,7 @@ Weibo tab:
 - Primary: `复制微博文案`.
 - Secondary: `复制正文`.
 - Secondary: `复制话题` when hashtags exist.
+- Separate image action: `复制配图提示` when an image prompt exists.
 
 Xiaohongshu tab:
 
@@ -108,9 +111,11 @@ Xiaohongshu tab:
 - Secondary: `复制标题` when a title exists.
 - Secondary: `复制正文`.
 - Secondary: `复制话题` when hashtags exist.
+- Separate image action: `复制配图提示` when an image prompt exists.
 
 Copy success state:
 
+- The primary platform copy action copies the current edited text box value, not the original generated text.
 - The clicked button label changes to `已复制`.
 - The success state resets after a short delay or when switching tabs.
 - Clipboard errors show a small inline message: `复制失败，请手动选中文案复制。`
@@ -124,12 +129,12 @@ Shared checks:
 - Title exists.
 - Body exists.
 - Hashtags exist.
-- Hashtags use `#`.
+- Hashtags use the active platform format.
 - Image prompt exists.
 
 Weibo checks:
 
-- Show approximate character count for the formatted text.
+- Show approximate character count for the current edited text box value.
 - Warn when formatted text is long for Weibo.
 - Treat missing image prompt as neutral, because Weibo can be text-only.
 
@@ -177,7 +182,10 @@ Add focused tests for:
 - Weibo primary copy writes the formatted Weibo text.
 - Xiaohongshu primary copy writes the formatted Xiaohongshu text.
 - Xiaohongshu shows `复制标题`; Weibo does not need that action.
-- Hashtags are normalized with `#`.
+- Weibo hashtags are normalized as `#话题#`.
+- Xiaohongshu hashtags are normalized as `#话题`.
+- The primary copy action uses user edits from the platform text box.
+- The image prompt is visible in the publish assistant and can be copied.
 - Copy success state appears after a successful copy.
 - The dialog closes when the draft changes or edit mode starts.
 - Clipboard failure shows an inline error message.

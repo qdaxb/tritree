@@ -85,6 +85,8 @@ export function LiveDraft({
   const [editingMode, setEditingMode] = useState<"normal" | null>(null);
   const [isPublishPanelOpen, setIsPublishPanelOpen] = useState(false);
   const [activePublishPlatform, setActivePublishPlatform] = useState<PublishPlatform>("weibo");
+  const [publishTexts, setPublishTexts] = useState<PublishTextByPlatform>({ weibo: "", xiaohongshu: "" });
+  const [publishImagePrompt, setPublishImagePrompt] = useState("");
   const [copiedPublishAction, setCopiedPublishAction] = useState<PublishCopyAction | null>(null);
   const [publishCopyError, setPublishCopyError] = useState("");
   const [showDiff, setShowDiff] = useState(false);
@@ -188,6 +190,7 @@ export function LiveDraft({
     setIsPublishPanelOpen(false);
     setCopiedPublishAction(null);
     setPublishCopyError("");
+    setPublishFieldsFromDraft(baseEditableDraft);
     closeSelectionEdit();
     setShowDiff(false);
     setEditorFieldsFromDraft(baseEditableDraft);
@@ -442,7 +445,12 @@ export function LiveDraft({
   async function copyPublishText(action: PublishCopyAction) {
     if (!content) return;
 
-    const value = publishCopyValue(content, activePublishPlatform, action);
+    const value =
+      action === "weibo" || action === "xiaohongshu"
+        ? publishTexts[activePublishPlatform].trim()
+        : action === "imagePrompt"
+          ? publishImagePrompt.trim()
+          : publishCopyValue(content, activePublishPlatform, action);
     if (!value) return;
 
     try {
@@ -494,6 +502,14 @@ export function LiveDraft({
     setImagePrompt(nextDraft?.imagePrompt ?? "");
   }
 
+  function setPublishFieldsFromDraft(nextDraft: Draft | null) {
+    setPublishTexts({
+      weibo: nextDraft ? formatPublishText(nextDraft, "weibo") : "",
+      xiaohongshu: nextDraft ? formatPublishText(nextDraft, "xiaohongshu") : ""
+    });
+    setPublishImagePrompt(nextDraft?.imagePrompt.trim() ?? "");
+  }
+
   return (
     <aside className="draft-panel">
       <div className="panel-heading">
@@ -509,6 +525,7 @@ export function LiveDraft({
               onClick={() => {
                 setPublishCopyError("");
                 setCopiedPublishAction(null);
+                if (!isPublishPanelOpen) setPublishFieldsFromDraft(content);
                 setIsPublishPanelOpen((open) => !open);
               }}
               type="button"
@@ -571,9 +588,40 @@ export function LiveDraft({
           <section className="draft-publish-preview" aria-label={`${publishPlatformLabel(activePublishPlatform)}版预览`}>
             <div className="draft-publish-preview__meta">
               <span>{publishPlatformLabel(activePublishPlatform)}版预览</span>
-              <span>约 {formatPublishText(content, activePublishPlatform).length} 字</span>
+              <span>约 {publishTexts[activePublishPlatform].length} 字</span>
             </div>
-            <pre>{formatPublishText(content, activePublishPlatform)}</pre>
+            <textarea
+              aria-label={`${publishPlatformLabel(activePublishPlatform)}发布文案`}
+              onChange={(event) =>
+                setPublishTexts((current) => ({
+                  ...current,
+                  [activePublishPlatform]: event.target.value
+                }))
+              }
+              rows={7}
+              value={publishTexts[activePublishPlatform]}
+            />
+          </section>
+          <section className="draft-publish-image-prompt">
+            <div className="draft-publish-image-prompt__meta">
+              <span>配图提示</span>
+              {publishImagePrompt.trim() ? (
+                <button onClick={() => void copyPublishText("imagePrompt")} type="button">
+                  <Copy aria-hidden="true" size={13} />
+                  <span>{copiedPublishAction === "imagePrompt" ? "已复制" : "复制配图提示"}</span>
+                </button>
+              ) : null}
+            </div>
+            <textarea
+              aria-label="配图提示"
+              onChange={(event) => {
+                setPublishImagePrompt(event.target.value);
+                setCopiedPublishAction(null);
+              }}
+              placeholder="还没有配图提示。"
+              rows={3}
+              value={publishImagePrompt}
+            />
           </section>
           <div className="draft-publish-actions">
             {[publishPrimaryActionFor(activePublishPlatform), ...secondaryPublishActionsFor(content, activePublishPlatform)].map(
@@ -598,7 +646,7 @@ export function LiveDraft({
             </p>
           ) : null}
           <div className="draft-publish-checks" aria-label={`${publishPlatformLabel(activePublishPlatform)}发布检查`}>
-            {buildPublishChecks(content, activePublishPlatform).map((check) => (
+            {buildPublishChecks(content, activePublishPlatform, publishTexts[activePublishPlatform], publishImagePrompt).map((check) => (
               <p className={`draft-publish-check draft-publish-check--${check.tone}`} key={check.text}>
                 <span aria-hidden="true">{check.tone === "ok" ? "✓" : check.tone === "warn" ? "!" : "•"}</span>
                 <span>{check.text}</span>
@@ -1094,18 +1142,24 @@ function parseHashtags(value: string) {
     .filter(Boolean);
 }
 
-function normalizedHashtags(hashtags: string[]) {
-  return hashtags
+function cleanHashtagLabel(tag: string) {
+  return tag.trim().replace(/^#+|#+$/g, "").trim();
+}
+
+function normalizedHashtags(hashtags: string[], platform: PublishPlatform) {
+  const labels = hashtags
     .map((tag) => tag.trim())
     .filter(Boolean)
-    .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
+    .map(cleanHashtagLabel)
+    .filter(Boolean);
+
+  return labels.map((tag) => (platform === "weibo" ? `#${tag}#` : `#${tag}`));
 }
 
 function formatPublishText(draft: Draft, platform: PublishPlatform) {
-  void platform;
   const title = resolveDraftTitle(draft.title, draft.body).trim();
   const body = draft.body.trim();
-  const hashtags = normalizedHashtags(draft.hashtags).join(" ");
+  const hashtags = normalizedHashtags(draft.hashtags, platform).join(" ");
   return [title, body, hashtags].filter(Boolean).join("\n\n");
 }
 
@@ -1116,7 +1170,8 @@ function publishPlatformLabel(platform: PublishPlatform) {
 function publishCopyValue(draft: Draft, platform: PublishPlatform, action: PublishCopyAction) {
   if (action === "body") return draft.body.trim();
   if (action === "title") return resolveDraftTitle(draft.title, draft.body).trim();
-  if (action === "hashtags") return normalizedHashtags(draft.hashtags).join(" ");
+  if (action === "hashtags") return normalizedHashtags(draft.hashtags, platform).join(" ");
+  if (action === "imagePrompt") return draft.imagePrompt.trim();
   return formatPublishText(draft, platform);
 }
 
@@ -1130,6 +1185,7 @@ function publishCopyLabel(platform: PublishPlatform, action: PublishCopyAction) 
   if (action === "xiaohongshu") return "复制小红书文案";
   if (action === "title") return "复制标题";
   if (action === "body") return "复制正文";
+  if (action === "imagePrompt") return "复制配图提示";
   return "复制话题";
 }
 
@@ -1137,16 +1193,16 @@ function secondaryPublishActionsFor(draft: Draft, platform: PublishPlatform): Pu
   const actions: PublishCopyAction[] = [];
   if (platform === "xiaohongshu" && resolveDraftTitle(draft.title, draft.body).trim()) actions.push("title");
   if (draft.body.trim()) actions.push("body");
-  if (normalizedHashtags(draft.hashtags).length) actions.push("hashtags");
+  if (normalizedHashtags(draft.hashtags, platform).length) actions.push("hashtags");
   return actions;
 }
 
-function buildPublishChecks(draft: Draft, platform: PublishPlatform): PublishCheck[] {
+function buildPublishChecks(draft: Draft, platform: PublishPlatform, publishText?: string, imagePrompt?: string): PublishCheck[] {
   const title = resolveDraftTitle(draft.title, draft.body).trim();
   const hasExplicitTitle = Boolean(draft.title.trim());
-  const hashtags = normalizedHashtags(draft.hashtags);
-  const formattedText = formatPublishText(draft, platform);
-  const hasImagePrompt = Boolean(draft.imagePrompt.trim());
+  const hashtags = normalizedHashtags(draft.hashtags, platform);
+  const formattedText = publishText ?? formatPublishText(draft, platform);
+  const hasImagePrompt = Boolean((imagePrompt ?? draft.imagePrompt).trim());
 
   const shared: PublishCheck[] = [
     title
@@ -1179,11 +1235,12 @@ type DiffToken = {
 type DiffField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDiffStreamingField = Extract<DiffField, "body" | "imagePrompt">;
 type PublishPlatform = "weibo" | "xiaohongshu";
-type PublishCopyAction = "weibo" | "xiaohongshu" | "title" | "body" | "hashtags";
+type PublishCopyAction = "weibo" | "xiaohongshu" | "title" | "body" | "hashtags" | "imagePrompt";
 type PublishCheck = {
   text: string;
   tone: "ok" | "warn" | "neutral";
 };
+type PublishTextByPlatform = Record<PublishPlatform, string>;
 type SelectionMode = "actions" | "edit";
 type SelectionAnchor = { left: number; top: number };
 type SelectionRect = Pick<DOMRect, "bottom" | "height" | "left" | "right" | "top" | "width" | "x" | "y">;
