@@ -1,6 +1,8 @@
 import { nanoid } from "nanoid";
 import {
   type BranchOption,
+  type CreationRequestOption,
+  type CreationRequestOptionUpsert,
   type DirectorDraftOutput,
   type DirectorOptionsOutput,
   type DirectorOutput,
@@ -15,6 +17,9 @@ import {
   BranchOptionSchema,
   CUSTOM_EDIT_OPTION,
   CUSTOM_OPTION_ID_PREFIX,
+  CreationRequestOptionSchema,
+  CreationRequestOptionUpsertSchema,
+  DEFAULT_CREATION_REQUEST_OPTIONS,
   DEFAULT_SYSTEM_SKILLS,
   DraftSchema,
   RootPreferencesSchema,
@@ -93,6 +98,27 @@ type SkillRow = {
   updated_at: string;
 };
 
+type CreationRequestOptionRow = {
+  id: string;
+  label: string;
+  sort_order: number;
+  is_archived: number;
+  created_at: string;
+  updated_at: string;
+};
+
+const OLD_CREATION_REQUEST_OPTION_ORDER = [
+  "default-preserve-my-meaning",
+  "default-dont-expand-much",
+  "default-first-time-reader",
+  "default-friend-tone",
+  "default-english",
+  "default-no-ad-tone",
+  "default-experienced-reader",
+  "default-moments",
+  "default-short-version"
+];
+
 function now() {
   return new Date().toISOString();
 }
@@ -114,16 +140,23 @@ function withTransaction<T>(db: ReturnType<typeof createDatabase>, write: () => 
 }
 
 function summarizePreferences(preferences: RootPreferences) {
-  if (preferences.seed?.trim()) {
-    return `Seed：${preferences.seed.trim()}`;
+  const seed = preferences.seed?.trim();
+  const creationRequest = preferences.creationRequest?.trim();
+  const requestParts = [creationRequest ? `本次创作要求：${creationRequest}` : ""].filter(Boolean);
+
+  if (seed) {
+    return [`Seed：${seed}`, ...requestParts].join("\n");
   }
 
   return [
-    `领域：${preferences.domains.join("、")}`,
-    `语气：${preferences.tones.join("、")}`,
-    `表达：${preferences.styles.join("、")}`,
-    `视角：${preferences.personas.join("、")}`
-  ].join(" | ");
+    [
+      `领域：${preferences.domains.join("、")}`,
+      `语气：${preferences.tones.join("、")}`,
+      `表达：${preferences.styles.join("、")}`,
+      `视角：${preferences.personas.join("、")}`
+    ].join(" | "),
+    ...requestParts
+  ].join("\n");
 }
 
 function toRootMemory(row: RootMemoryRow): RootMemory {
@@ -182,6 +215,17 @@ function toSkill(row: SkillRow): Skill {
   });
 }
 
+function toCreationRequestOption(row: CreationRequestOptionRow): CreationRequestOption {
+  return CreationRequestOptionSchema.parse({
+    id: row.id,
+    label: row.label,
+    sortOrder: row.sort_order,
+    isArchived: Boolean(row.is_archived),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+}
+
 function uniqueSkillIds(skillIds: string[]) {
   return Array.from(new Set(skillIds.filter((id) => id.trim().length > 0)));
 }
@@ -212,6 +256,7 @@ function activePathFor(nodes: TreeNode[], currentNode: TreeNode | null) {
 export function createTreeableRepository(dbPath = defaultDbPath()) {
   const db = createDatabase(dbPath);
   ensureSystemSkills();
+  ensureDefaultCreationRequestOptions();
 
   function ensureSystemSkills() {
     const timestamp = now();
@@ -256,6 +301,192 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         );
       }
     }
+  }
+
+  function ensureDefaultCreationRequestOptions() {
+    const timestamp = now();
+
+    DEFAULT_CREATION_REQUEST_OPTIONS.forEach((option, index) => {
+      const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(option.id) as
+        | CreationRequestOptionRow
+        | undefined;
+      if (existing) {
+        const legacyDefaultLabels: Record<string, string> = {
+          "default-first-time-reader": "写给第一次接触的人",
+          "default-moments": "适合发朋友圈"
+        };
+
+        if (existing.label === legacyDefaultLabels[option.id]) {
+          db.prepare(
+            `
+              UPDATE creation_request_options
+              SET label = ?, updated_at = ?
+              WHERE id = ?
+            `
+          ).run(option.label, timestamp, option.id);
+        }
+        return;
+      }
+
+      db.prepare(
+        `
+          INSERT INTO creation_request_options (id, label, sort_order, is_archived, created_at, updated_at)
+          VALUES (?, ?, ?, 0, ?, ?)
+        `
+      ).run(option.id, option.label, index, timestamp, timestamp);
+    });
+    migrateDefaultCreationRequestOptionOrderIfUntouched(timestamp);
+  }
+
+  function migrateDefaultCreationRequestOptionOrderIfUntouched(timestamp: string) {
+    const defaultIds = DEFAULT_CREATION_REQUEST_OPTIONS.map((option) => option.id);
+    const placeholders = defaultIds.map(() => "?").join(", ");
+    const rows = db
+      .prepare(
+        `
+          SELECT id, is_archived
+          FROM creation_request_options
+          WHERE id IN (${placeholders})
+          ORDER BY sort_order, created_at, rowid
+        `
+      )
+      .all(...defaultIds) as Array<Pick<CreationRequestOptionRow, "id" | "is_archived">>;
+
+    if (rows.length !== defaultIds.length || rows.some((row) => Boolean(row.is_archived))) return;
+    const currentDefaultOrder = rows.map((row) => row.id);
+    if (currentDefaultOrder.join("|") !== OLD_CREATION_REQUEST_OPTION_ORDER.join("|")) return;
+
+    const updateSortOrder = db.prepare("UPDATE creation_request_options SET sort_order = ?, updated_at = ? WHERE id = ?");
+    DEFAULT_CREATION_REQUEST_OPTIONS.forEach((option, index) => {
+      updateSortOrder.run(index, timestamp, option.id);
+    });
+  }
+
+  function listCreationRequestOptions({ includeArchived = false }: { includeArchived?: boolean } = {}) {
+    const rows = db
+      .prepare(
+        includeArchived
+          ? "SELECT * FROM creation_request_options ORDER BY sort_order, created_at, rowid"
+          : "SELECT * FROM creation_request_options WHERE is_archived = 0 ORDER BY sort_order, created_at, rowid"
+      )
+      .all() as CreationRequestOptionRow[];
+    return rows.map(toCreationRequestOption);
+  }
+
+  function nextCreationRequestOptionSortOrder() {
+    const row = db.prepare("SELECT MAX(sort_order) AS max_sort_order FROM creation_request_options").get() as
+      | { max_sort_order: number | null }
+      | undefined;
+    return typeof row?.max_sort_order === "number" ? row.max_sort_order + 1 : 0;
+  }
+
+  function createCreationRequestOption(input: CreationRequestOptionUpsert) {
+    const parsed = CreationRequestOptionUpsertSchema.parse(input);
+    const id = nanoid();
+    const timestamp = now();
+    const sortOrder = parsed.sortOrder ?? nextCreationRequestOptionSortOrder();
+
+    db.prepare(
+      `
+        INSERT INTO creation_request_options (id, label, sort_order, is_archived, created_at, updated_at)
+        VALUES (?, ?, ?, 0, ?, ?)
+      `
+    ).run(id, parsed.label, sortOrder, timestamp, timestamp);
+
+    return toCreationRequestOption(db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(id) as CreationRequestOptionRow);
+  }
+
+  function updateCreationRequestOption(optionId: string, input: Partial<CreationRequestOptionUpsert>) {
+    const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(optionId) as
+      | CreationRequestOptionRow
+      | undefined;
+    if (!existing) throw new Error("Creation request option was not found.");
+
+    const parsed = CreationRequestOptionUpsertSchema.parse({
+      label: input.label ?? existing.label,
+      sortOrder: input.sortOrder ?? existing.sort_order
+    });
+    const timestamp = now();
+
+    db.prepare(
+      `
+        UPDATE creation_request_options
+        SET label = ?, sort_order = ?, updated_at = ?
+        WHERE id = ?
+      `
+    ).run(parsed.label, parsed.sortOrder ?? existing.sort_order, timestamp, optionId);
+
+    return toCreationRequestOption(
+      db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(optionId) as CreationRequestOptionRow
+    );
+  }
+
+  function deleteCreationRequestOption(optionId: string) {
+    const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(optionId) as
+      | CreationRequestOptionRow
+      | undefined;
+    if (!existing) throw new Error("Creation request option was not found.");
+
+    db.prepare(
+      `
+        UPDATE creation_request_options
+        SET is_archived = 1, updated_at = ?
+        WHERE id = ?
+      `
+    ).run(now(), optionId);
+  }
+
+  function reorderCreationRequestOptions(orderedIds: string[]) {
+    const ids = Array.from(new Set(orderedIds));
+    const existingIds = new Set(listCreationRequestOptions().map((option) => option.id));
+    const timestamp = now();
+    const orderedKnownIds = ids.filter((id) => existingIds.has(id));
+    const remainingIds = listCreationRequestOptions()
+      .map((option) => option.id)
+      .filter((id) => !orderedKnownIds.includes(id));
+
+    [...orderedKnownIds, ...remainingIds].forEach((id, index) => {
+      db.prepare(
+        `
+          UPDATE creation_request_options
+          SET sort_order = ?, updated_at = ?
+          WHERE id = ?
+        `
+      ).run(index, timestamp, id);
+    });
+
+    return listCreationRequestOptions();
+  }
+
+  function resetCreationRequestOptions() {
+    const timestamp = now();
+
+    return withTransaction(db, () => {
+      db.prepare("UPDATE creation_request_options SET is_archived = 1, updated_at = ?").run(timestamp);
+
+      DEFAULT_CREATION_REQUEST_OPTIONS.forEach((option, index) => {
+        const existing = db.prepare("SELECT id FROM creation_request_options WHERE id = ?").get(option.id);
+        if (existing) {
+          db.prepare(
+            `
+              UPDATE creation_request_options
+              SET label = ?, sort_order = ?, is_archived = 0, updated_at = ?
+              WHERE id = ?
+            `
+          ).run(option.label, index, timestamp, option.id);
+          return;
+        }
+
+        db.prepare(
+          `
+            INSERT INTO creation_request_options (id, label, sort_order, is_archived, created_at, updated_at)
+            VALUES (?, ?, ?, 0, ?, ?)
+          `
+        ).run(option.id, option.label, index, timestamp, timestamp);
+      });
+
+      return listCreationRequestOptions();
+    });
   }
 
   function listSkills({ includeArchived = false }: { includeArchived?: boolean } = {}) {
@@ -1040,6 +1271,12 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   return {
     getRootMemory,
     saveRootMemory,
+    listCreationRequestOptions,
+    createCreationRequestOption,
+    updateCreationRequestOption,
+    deleteCreationRequestOption,
+    reorderCreationRequestOptions,
+    resetCreationRequestOptions,
     listSkills,
     createSkill,
     updateSkill,

@@ -15,6 +15,7 @@ beforeEach(() => {
 describe("/api/skills", () => {
   it("lists skills", async () => {
     getRepositoryMock.mockReturnValue({
+      listCreationRequestOptions: vi.fn().mockReturnValue([{ id: "request-preserve", label: "保留我的原意" }]),
       listSkills: vi.fn().mockReturnValue([{ id: "system-analysis", title: "分析" }])
     });
 
@@ -23,6 +24,7 @@ describe("/api/skills", () => {
 
     expect(response.status).toBe(200);
     expect(data.skills).toEqual([{ id: "system-analysis", title: "分析" }]);
+    expect(data.creationRequestOptions).toEqual([{ id: "request-preserve", label: "保留我的原意" }]);
   });
 
   it("creates a user skill", async () => {

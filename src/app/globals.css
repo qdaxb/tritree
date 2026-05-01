@@ -227,8 +227,8 @@ button:disabled {
 
 .seed-field {
   display: grid;
-  gap: 10px;
-  margin: 24px 0 16px;
+  gap: 8px;
+  margin: 18px 0 12px;
 }
 
 .seed-field span {
@@ -239,8 +239,8 @@ button:disabled {
 .seed-field textarea {
   width: 100%;
   resize: vertical;
-  min-height: 132px;
-  padding: 14px;
+  min-height: 104px;
+  padding: 12px;
   color: var(--ink);
   background: #fbfcfc;
   border: 1px solid rgba(148, 163, 184, 0.42);
@@ -250,6 +250,184 @@ button:disabled {
 }
 
 .seed-field textarea:focus {
+  border-color: rgba(37, 99, 235, 0.54);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.root-setup__request {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 14px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 8px;
+}
+
+.root-setup__request-copy {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.root-setup__request-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.root-setup__request-manage {
+  min-height: 36px;
+  padding: 7px 11px;
+}
+
+.root-setup__request-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.root-setup__request-error {
+  margin: 0;
+  color: #7c2d12;
+  font-size: 0.86rem;
+}
+
+.request-quick-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.request-chip {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+
+.request-chip--active {
+  color: #0f766e;
+  background: #d9f7f1;
+  border-color: rgba(15, 118, 110, 0.42);
+}
+
+.request-chip--more {
+  color: #475569;
+  background: #f8fafc;
+  font-weight: 750;
+}
+
+.request-manager {
+  display: grid;
+  gap: 10px;
+}
+
+.request-manager__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.request-manager__actions .secondary-button {
+  min-height: 36px;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 11px;
+}
+
+.request-manager__list {
+  display: grid;
+  gap: 8px;
+}
+
+.request-manager__row,
+.request-manager__new {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.request-manager__row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.request-manager__row input,
+.request-manager__new input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  border-radius: 8px;
+  outline: none;
+}
+
+.request-manager__row input:focus,
+.request-manager__new input:focus {
+  border-color: rgba(37, 99, 235, 0.54);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.request-manager__new .secondary-button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.creation-request-toggle {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 0;
+  color: #0f766e;
+  background: transparent;
+  border: 0;
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.creation-request-toggle--active {
+  color: #334155;
+}
+
+.creation-request-field {
+  display: grid;
+  gap: 6px;
+}
+
+.creation-request-field span {
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
+.creation-request-field textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 58px;
+  padding: 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  border-radius: 8px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.creation-request-field textarea:focus {
   border-color: rgba(37, 99, 235, 0.54);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
@@ -271,6 +449,7 @@ button:disabled {
 }
 
 .chip,
+.request-chip,
 .primary-action,
 .start-button,
 .secondary-button,
@@ -330,6 +509,7 @@ button:disabled {
 .start-button:disabled,
 .secondary-button:disabled,
 .icon-button:disabled,
+.request-chip:disabled,
 .branch-card:disabled {
   opacity: 0.55;
 }

@@ -26,6 +26,15 @@ export const skills = sqliteTable("skills", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
+export const creationRequestOptions = sqliteTable("creation_request_options", {
+  id: text("id").primaryKey(),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").notNull(),
+  isArchived: integer("is_archived").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+});
+
 export const sessions = sqliteTable(
   "sessions",
   {

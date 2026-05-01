@@ -354,6 +354,30 @@ describe("TreeableApp", () => {
     expect(screen.queryByLabelText("历史路径地图")).not.toBeInTheDocument();
   });
 
+  it("trims persisted root summary before flattening it in the topbar", async () => {
+    const rootMemoryWithPaddedSummary = {
+      ...rootMemory,
+      summary: [
+        "",
+        "  Seed：我想写 AI 产品经理的真实困境  ",
+        "  本次创作要求：改成英文的  ",
+        ""
+      ].join("\n")
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory: rootMemoryWithPaddedSummary }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    const topbar = await screen.findByText("Seed：我想写 AI 产品经理的真实困境 | 本次创作要求：改成英文的");
+    expect(topbar).toBeInTheDocument();
+    expect(topbar).toHaveTextContent(/^Seed：我想写 AI 产品经理的真实困境 \| 本次创作要求：改成英文的$/);
+  });
+
   it("opens the seed screen when no existing tree is available", async () => {
     const fetchMock = vi
       .fn()
@@ -373,19 +397,43 @@ describe("TreeableApp", () => {
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory: null }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          rootMemory: {
+            ...rootMemory,
+            preferences: {
+              ...rootMemory.preferences,
+              creationRequest: "改成英文的，保留口语感"
+            },
+            summary: [
+              "Seed：我想写 AI 产品经理的真实困境",
+              "本次创作要求：改成英文的，保留口语感"
+            ].join("\n")
+          }
+        })
+      })
       .mockResolvedValueOnce(optionsNdjsonResponse(finishedState));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<TreeableApp />);
 
     await userEvent.type(await screen.findByRole("textbox", { name: "创作 seed" }), "我想写 AI 产品经理的真实困境");
+    await userEvent.click(screen.getByRole("button", { name: "展开自定义创作要求" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "自定义创作要求" }), "改成英文的，保留口语感");
     await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
 
-    expect(await screen.findByText("Seed：我想写 AI 产品经理的真实困境")).toBeInTheDocument();
+    expect(await screen.findByText(/Seed：我想写 AI 产品经理的真实困境/)).toBeInTheDocument();
+    expect(await screen.findByText(/本次创作要求：改成英文的/)).toBeInTheDocument();
     expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
     expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("idle");
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/root-memory", expect.objectContaining({ method: "POST" }));
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toEqual(
+      expect.objectContaining({
+        seed: "我想写 AI 产品经理的真实困境",
+        creationRequest: "改成英文的，保留口语感"
+      })
+    );
     expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).not.toHaveProperty("initialOptionId");
     expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).not.toHaveProperty("initialOptionMode");
     expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/sessions", expect.objectContaining({ method: "POST" }));
@@ -414,6 +462,17 @@ describe("TreeableApp", () => {
   });
 
   it("restarts from the seed screen with the current seed and skills preselected", async () => {
+    const rootMemoryWithRequest = {
+      ...rootMemory,
+      preferences: {
+        ...rootMemory.preferences,
+        creationRequest: "从产品实践者视角写，改成英文的"
+      },
+      summary: [
+        "Seed：我想写 AI 产品经理的真实困境",
+        "本次创作要求：从产品实践者视角写，改成英文的"
+      ].join("\n")
+    };
     const currentSettingsState = {
       ...activeState,
       enabledSkillIds: ["system-no-hype-title"],
@@ -422,7 +481,7 @@ describe("TreeableApp", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory: rootMemoryWithRequest }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: currentSettingsState }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: currentSettingsState }) });
@@ -430,10 +489,14 @@ describe("TreeableApp", () => {
 
     render(<TreeableApp />);
 
-    expect(await screen.findByText("Seed：我想写 AI 产品经理的真实困境")).toBeInTheDocument();
+    expect(await screen.findByText(/Seed：我想写 AI 产品经理的真实困境/)).toBeInTheDocument();
     await userEvent.click(within(document.querySelector(".topbar") as HTMLElement).getByRole("button", { name: "重新开始" }));
 
     expect(screen.getByRole("textbox", { name: "创作 seed" })).toHaveValue("我想写 AI 产品经理的真实困境");
+    expect(screen.queryByRole("textbox", { name: "自定义创作要求" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "展开自定义创作要求" }));
+    expect(screen.getByRole("textbox", { name: "自定义创作要求" })).toHaveValue("从产品实践者视角写，改成英文的");
+    expect(screen.queryByRole("button", { name: "找表达角度" })).not.toBeInTheDocument();
     expect(screen.getByText("标题不要夸张")).toBeInTheDocument();
     expect(screen.queryByText("分析")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(3);

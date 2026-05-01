@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import {
   SessionStateSchema,
   type BranchOption,
+  DEFAULT_CREATION_REQUEST_OPTIONS,
   CUSTOM_OPTION_ID_PREFIX,
+  type CreationRequestOption,
   type CustomBranchOptionId,
   type Draft,
   type OptionGenerationMode,
@@ -28,7 +30,23 @@ type LoadState = "loading" | "root" | "ready" | "error";
 type DraftComparisonSelection = { fromNodeId: string | null; toNodeId: string | null };
 type DraftComparisonEntry = { nodeId: string; label: string; draft: Draft };
 type NodeGenerationStage = { nodeId: string; stage: "draft" | "options" };
-type RootSetupDefaults = { seed: string; enabledSkillIds?: string[] };
+type RootSetupDefaults = {
+  creationRequest?: string;
+  enabledSkillIds?: string[];
+  seed: string;
+};
+
+function defaultCreationRequestOptions(): CreationRequestOption[] {
+  const timestamp = new Date(0).toISOString();
+
+  return DEFAULT_CREATION_REQUEST_OPTIONS.map((option, index) => ({
+    ...option,
+    sortOrder: index,
+    isArchived: false,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  }));
+}
 type DraftStreamField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDraftStreamingField = "body" | "imagePrompt";
 type StreamingDraftEntry = { nodeId: string; draft: Draft; previousDraft?: Draft | null; streamingField: DraftStreamField | null };
@@ -81,6 +99,8 @@ function translatePreference(value: string) {
 
 function formatRootSummary(rootMemory: RootMemory | null) {
   if (!rootMemory) return "";
+  const summary = rootMemory.summary.trim();
+  if (summary) return summary.replace(/\s*\n\s*/g, " | ");
   if (rootMemory.preferences.seed.trim()) return `Seed：${rootMemory.preferences.seed.trim()}`;
 
   const { preferences } = rootMemory;
@@ -331,6 +351,9 @@ export function TreeableApp() {
   const [rootMemory, setRootMemory] = useState<RootMemory | null>(null);
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [creationRequestOptions, setCreationRequestOptions] = useState<CreationRequestOption[]>(
+    defaultCreationRequestOptions
+  );
   const [message, setMessage] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [pendingChoice, setPendingChoice] = useState<BranchOption["id"] | null>(null);
@@ -362,9 +385,14 @@ export function TreeableApp() {
   async function loadRoot() {
     try {
       const skillsResponse = await fetch("/api/skills");
-      const skillsData = (await skillsResponse.json()) as { skills?: Skill[]; error?: string };
+      const skillsData = (await skillsResponse.json()) as {
+        creationRequestOptions?: CreationRequestOption[];
+        error?: string;
+        skills?: Skill[];
+      };
       if (!skillsResponse.ok || !skillsData.skills) throw new Error(skillsData.error ?? "技能加载失败。");
       setSkills(skillsData.skills);
+      setCreationRequestOptions(skillsData.creationRequestOptions ?? defaultCreationRequestOptions());
 
       const response = await fetch("/api/root-memory");
       if (!response.ok) throw new Error("Seed 加载失败。");
@@ -956,8 +984,10 @@ export function TreeableApp() {
   }
 
   function restartFromCurrentSettings() {
+    const preferences = rootMemory?.preferences ?? sessionState?.rootMemory.preferences;
     openSeedSetup({
-      seed: rootMemory?.preferences.seed ?? sessionState?.rootMemory.preferences.seed ?? "",
+      seed: preferences?.seed ?? "",
+      creationRequest: preferences?.creationRequest ?? "",
       enabledSkillIds: sessionState?.enabledSkillIds ?? []
     });
   }
@@ -1027,10 +1057,13 @@ export function TreeableApp() {
     return (
       <>
         <RootMemorySetup
+          initialCreationRequest={rootSetupDefaults?.creationRequest}
+          initialCreationRequestOptions={creationRequestOptions}
           initialSeed={rootSetupDefaults?.seed}
           initialSkillIds={rootSetupDefaults?.enabledSkillIds}
           message={message}
           onBack={sessionState ? returnToCurrentWork : undefined}
+          onCreationRequestOptionsChange={setCreationRequestOptions}
           onManageSkills={() => setIsSkillLibraryOpen(true)}
           onSubmit={saveRoot}
           isSaving={isBusy}

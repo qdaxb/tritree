@@ -10,6 +10,7 @@ const TREEABLE_TABLES = [
   "tree_nodes",
   "session_enabled_skills",
   "sessions",
+  "creation_request_options",
   "skills",
   "root_memory"
 ];
@@ -72,6 +73,15 @@ function createSchema(sqlite: DatabaseSync) {
       applies_to TEXT NOT NULL DEFAULT 'both',
       is_system INTEGER NOT NULL,
       default_enabled INTEGER NOT NULL,
+      is_archived INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS creation_request_options (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      sort_order INTEGER NOT NULL,
       is_archived INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

@@ -22,6 +22,31 @@ export const SkillSchema = SkillUpsertSchema.extend({
   updatedAt: z.string()
 });
 
+export const DEFAULT_CREATION_REQUEST_OPTIONS = [
+  { id: "default-preserve-my-meaning", label: "保留我的原意" },
+  { id: "default-dont-expand-much", label: "不要扩写太多" },
+  { id: "default-moments", label: "适合发微博" },
+  { id: "default-short-version", label: "先给短版" },
+  { id: "default-first-time-reader", label: "写给新手" },
+  { id: "default-no-ad-tone", label: "别太像广告" },
+  { id: "default-friend-tone", label: "像发给朋友" },
+  { id: "default-experienced-reader", label: "写给懂行的人" },
+  { id: "default-english", label: "改成英文" }
+] as const;
+
+export const CreationRequestOptionUpsertSchema = z.object({
+  label: z.string().trim().min(1).max(40),
+  sortOrder: z.number().int().nonnegative().optional()
+});
+
+export const CreationRequestOptionSchema = CreationRequestOptionUpsertSchema.extend({
+  id: z.string().min(1),
+  sortOrder: z.number().int().nonnegative(),
+  isArchived: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
 export const DEFAULT_SYSTEM_SKILLS = [
   {
     id: "system-content-workflow",
@@ -199,6 +224,7 @@ export const DEFAULT_SYSTEM_SKILLS = [
 
 export const RootPreferencesSchema = z.object({
   seed: z.string().trim().default(""),
+  creationRequest: z.string().trim().max(240).default(""),
   domains: z.array(z.string().min(1)).min(1),
   tones: z.array(z.string().min(1)).min(1),
   styles: z.array(z.string().min(1)).min(1),
@@ -360,6 +386,8 @@ export const SessionStateSchema = z.object({
 });
 
 export type RootPreferences = z.input<typeof RootPreferencesSchema>;
+export type CreationRequestOption = z.infer<typeof CreationRequestOptionSchema>;
+export type CreationRequestOptionUpsert = z.input<typeof CreationRequestOptionUpsertSchema>;
 export type SkillCategory = z.infer<typeof SkillCategorySchema>;
 export type Skill = z.infer<typeof SkillSchema>;
 export type SkillUpsert = z.input<typeof SkillUpsertSchema>;
