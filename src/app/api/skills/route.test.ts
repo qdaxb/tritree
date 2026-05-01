@@ -36,7 +36,8 @@ describe("/api/skills", () => {
           title: "我的约束",
           category: "约束",
           description: "保持克制表达。",
-          prompt: "不要使用夸张表达。"
+          prompt: "不要使用夸张表达。",
+          appliesTo: "both"
         })
       })
     );
@@ -44,7 +45,7 @@ describe("/api/skills", () => {
 
     expect(response.status).toBe(200);
     expect(createSkill).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "我的约束", category: "约束" })
+      expect.objectContaining({ title: "我的约束", category: "约束", appliesTo: "both" })
     );
     expect(data.skill.id).toBe("user-skill");
   });

@@ -162,8 +162,55 @@ describe("Treeable repository", () => {
       "system-correct",
       "system-analysis",
       "system-expand",
-      "system-rewrite"
+      "system-rewrite",
+      "system-final-pass",
+      "system-reader-entry",
+      "system-logic-review"
     ]);
+  });
+
+  it("persists skill applicability for system and user skills", () => {
+    const repo = createTreeableRepository(testDbPath());
+
+    const logicSkill = repo.listSkills({ includeArchived: true }).find((skill) => skill.id === "system-logic-review");
+    expect(logicSkill?.appliesTo).toBe("editor");
+
+    const custom = repo.createSkill({
+      title: "朋友圈短句",
+      category: "风格",
+      description: "更像自然分享。",
+      prompt: "句子短一点。",
+      appliesTo: "writer"
+    });
+
+    expect(custom.appliesTo).toBe("writer");
+    expect(repo.listSkills().find((skill) => skill.id === custom.id)?.appliesTo).toBe("writer");
+  });
+
+  it("defaults legacy skill rows to shared applicability during migration", () => {
+    const dbPath = testDbPath();
+    const sqlite = new DatabaseSync(dbPath);
+    sqlite.exec(`
+      CREATE TABLE skills (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        category TEXT NOT NULL,
+        description TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        is_system INTEGER NOT NULL,
+        default_enabled INTEGER NOT NULL,
+        is_archived INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO skills (id, title, category, description, prompt, is_system, default_enabled, is_archived, created_at, updated_at)
+      VALUES ('legacy-user', '旧技能', '约束', '', '保留原意。', 0, 0, 0, '2026-05-01T00:00:00.000Z', '2026-05-01T00:00:00.000Z');
+    `);
+    sqlite.close();
+
+    const repo = createTreeableRepository(dbPath);
+
+    expect(repo.listSkills().find((skill) => skill.id === "legacy-user")?.appliesTo).toBe("both");
   });
 
   it("creates a session with default enabled skills", () => {

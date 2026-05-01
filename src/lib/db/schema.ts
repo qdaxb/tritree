@@ -18,6 +18,7 @@ export const skills = sqliteTable("skills", {
   category: text("category").notNull(),
   description: text("description").notNull(),
   prompt: text("prompt").notNull(),
+  appliesTo: text("applies_to").notNull().default("both"),
   isSystem: integer("is_system").notNull(),
   defaultEnabled: integer("default_enabled").notNull(),
   isArchived: integer("is_archived").notNull(),

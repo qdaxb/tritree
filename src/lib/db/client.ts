@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 const TREEABLE_TABLES = [
   "publish_packages",
   "branch_history",
@@ -69,6 +69,7 @@ function createSchema(sqlite: DatabaseSync) {
       category TEXT NOT NULL,
       description TEXT NOT NULL,
       prompt TEXT NOT NULL,
+      applies_to TEXT NOT NULL DEFAULT 'both',
       is_system INTEGER NOT NULL,
       default_enabled INTEGER NOT NULL,
       is_archived INTEGER NOT NULL,
@@ -138,6 +139,7 @@ function createSchema(sqlite: DatabaseSync) {
     );
   `);
   addColumnIfMissing(sqlite, "tree_nodes", "parent_option_id", "TEXT");
+  addColumnIfMissing(sqlite, "skills", "applies_to", "TEXT NOT NULL DEFAULT 'both'");
 }
 
 function addColumnIfMissing(sqlite: DatabaseSync, tableName: string, columnName: string, definition: string) {
