@@ -28,7 +28,12 @@ type LoadState = "loading" | "root" | "ready" | "error";
 type DraftComparisonSelection = { fromNodeId: string | null; toNodeId: string | null };
 type DraftComparisonEntry = { nodeId: string; label: string; draft: Draft };
 type NodeGenerationStage = { nodeId: string; stage: "draft" | "options" };
-type RootSetupDefaults = { seed: string; enabledSkillIds?: string[] };
+type RootSetupDefaults = {
+  creationGoal?: string;
+  creationGoalNote?: string;
+  enabledSkillIds?: string[];
+  seed: string;
+};
 type DraftStreamField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDraftStreamingField = "body" | "imagePrompt";
 type StreamingDraftEntry = { nodeId: string; draft: Draft; previousDraft?: Draft | null; streamingField: DraftStreamField | null };
@@ -81,6 +86,7 @@ function translatePreference(value: string) {
 
 function formatRootSummary(rootMemory: RootMemory | null) {
   if (!rootMemory) return "";
+  if (rootMemory.summary.trim()) return rootMemory.summary.replace(/\s*\n\s*/g, " | ");
   if (rootMemory.preferences.seed.trim()) return `Seed：${rootMemory.preferences.seed.trim()}`;
 
   const { preferences } = rootMemory;
@@ -920,8 +926,11 @@ export function TreeableApp() {
   }
 
   function restartFromCurrentSettings() {
+    const preferences = rootMemory?.preferences ?? sessionState?.rootMemory.preferences;
     openSeedSetup({
-      seed: rootMemory?.preferences.seed ?? sessionState?.rootMemory.preferences.seed ?? "",
+      seed: preferences?.seed ?? "",
+      creationGoal: preferences?.creationGoal ?? "",
+      creationGoalNote: preferences?.creationGoalNote ?? "",
       enabledSkillIds: sessionState?.enabledSkillIds ?? []
     });
   }
@@ -991,6 +1000,8 @@ export function TreeableApp() {
     return (
       <>
         <RootMemorySetup
+          initialCreationGoal={rootSetupDefaults?.creationGoal}
+          initialCreationGoalNote={rootSetupDefaults?.creationGoalNote}
           initialSeed={rootSetupDefaults?.seed}
           initialSkillIds={rootSetupDefaults?.enabledSkillIds}
           message={message}
