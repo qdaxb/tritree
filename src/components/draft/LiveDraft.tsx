@@ -185,6 +185,9 @@ export function LiveDraft({
     setDiffEditDraft(null);
     setSelectedDiffAction(null);
     setIsGeneratedDiffEditing(false);
+    setIsPublishPanelOpen(false);
+    setCopiedPublishAction(null);
+    setPublishCopyError("");
     closeSelectionEdit();
     setShowDiff(false);
     setEditorFieldsFromDraft(baseEditableDraft);
@@ -244,11 +247,14 @@ export function LiveDraft({
   function startEditing() {
     if (!content) return;
 
+    setIsPublishPanelOpen(false);
     setEditorFieldsFromDraft(content);
     setEditingMode("normal");
   }
 
   function toggleDiff() {
+    setIsPublishPanelOpen(false);
+
     if (canDismissLiveDiff) {
       onDismissLiveDiff?.();
       return;
@@ -591,6 +597,14 @@ export function LiveDraft({
               {publishCopyError}
             </p>
           ) : null}
+          <div className="draft-publish-checks" aria-label={`${publishPlatformLabel(activePublishPlatform)}发布检查`}>
+            {buildPublishChecks(content, activePublishPlatform).map((check) => (
+              <p className={`draft-publish-check draft-publish-check--${check.tone}`} key={check.text}>
+                <span aria-hidden="true">{check.tone === "ok" ? "✓" : check.tone === "warn" ? "!" : "•"}</span>
+                <span>{check.text}</span>
+              </p>
+            ))}
+          </div>
         </aside>
       ) : null}
       <div className="draft-panel__scroll">
@@ -1127,6 +1141,36 @@ function secondaryPublishActionsFor(draft: Draft, platform: PublishPlatform): Pu
   return actions;
 }
 
+function buildPublishChecks(draft: Draft, platform: PublishPlatform): PublishCheck[] {
+  const title = resolveDraftTitle(draft.title, draft.body).trim();
+  const hasExplicitTitle = Boolean(draft.title.trim());
+  const hashtags = normalizedHashtags(draft.hashtags);
+  const formattedText = formatPublishText(draft, platform);
+  const hasImagePrompt = Boolean(draft.imagePrompt.trim());
+
+  const shared: PublishCheck[] = [
+    title
+      ? { tone: hasExplicitTitle ? "ok" : "neutral", text: hasExplicitTitle ? "标题已生成" : "标题来自正文摘要" }
+      : { tone: "warn", text: "缺少标题" },
+    draft.body.trim() ? { tone: "ok", text: "正文已生成" } : { tone: "warn", text: "缺少正文" },
+    hashtags.length ? { tone: "ok", text: "话题已整理为平台格式" } : { tone: "warn", text: "缺少话题" }
+  ];
+
+  if (platform === "weibo") {
+    return [
+      { tone: "neutral", text: `微博字数约 ${formattedText.length}` },
+      ...shared,
+      hasImagePrompt ? { tone: "neutral", text: "配图提示可选用" } : { tone: "neutral", text: "微博可以不配图" }
+    ];
+  }
+
+  return [
+    { tone: "neutral", text: `标题约 ${title.length} 字` },
+    ...shared,
+    hasImagePrompt ? { tone: "ok", text: "配图提示可用于封面" } : { tone: "warn", text: "建议补充配图提示" }
+  ];
+}
+
 type DiffToken = {
   type: "same" | "added" | "removed";
   value: string;
@@ -1136,6 +1180,10 @@ type DiffField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDiffStreamingField = Extract<DiffField, "body" | "imagePrompt">;
 type PublishPlatform = "weibo" | "xiaohongshu";
 type PublishCopyAction = "weibo" | "xiaohongshu" | "title" | "body" | "hashtags";
+type PublishCheck = {
+  text: string;
+  tone: "ok" | "warn" | "neutral";
+};
 type SelectionMode = "actions" | "edit";
 type SelectionAnchor = { left: number; top: number };
 type SelectionRect = Pick<DOMRect, "bottom" | "height" | "left" | "right" | "top" | "width" | "x" | "y">;

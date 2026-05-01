@@ -1608,6 +1608,42 @@ button:disabled {
   line-height: 1.4;
 }
 
+.draft-publish-checks {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.draft-publish-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #475569;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.draft-publish-check span:first-child {
+  width: 14px;
+  flex: 0 0 auto;
+  font-weight: 900;
+  text-align: center;
+}
+
+.draft-publish-check--ok span:first-child {
+  color: #166534;
+}
+
+.draft-publish-check--warn span:first-child {
+  color: #b45309;
+}
+
+.draft-publish-check--neutral span:first-child {
+  color: #64748b;
+}
+
 .draft-panel__scroll {
   min-height: 0;
   overflow: auto;

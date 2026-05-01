@@ -1395,6 +1395,83 @@ describe("LiveDraft", () => {
     expect(screen.getByRole("button", { name: "复制话题" })).toBeInTheDocument();
   });
 
+  it("shows platform-specific publish checks without blocking copy", async () => {
+    render(
+      <LiveDraft draft={{ title: "", body: "只有正文", hashtags: [], imagePrompt: "" }} isBusy={false} publishPackage={null} />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+
+    expect(screen.getByText(/微博字数约/)).toBeInTheDocument();
+    expect(screen.getByText("缺少话题")).toBeInTheDocument();
+    expect(screen.getByText("微博可以不配图")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "小红书" }));
+
+    expect(screen.getByText("标题来自正文摘要")).toBeInTheDocument();
+    expect(screen.getByText("缺少话题")).toBeInTheDocument();
+    expect(screen.getByText("建议补充配图提示")).toBeInTheDocument();
+  });
+
+  it("closes the publish assistant when editing starts or the draft changes", async () => {
+    const { rerender } = render(
+      <LiveDraft
+        draft={{ title: "标题", body: "正文", hashtags: ["#话题"], imagePrompt: "画面" }}
+        isBusy={false}
+        isEditable
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+    expect(screen.getByRole("dialog", { name: "发布助手" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+    expect(screen.queryByRole("dialog", { name: "发布助手" })).not.toBeInTheDocument();
+
+    rerender(
+      <LiveDraft
+        draft={{ title: "标题", body: "正文", hashtags: ["#话题"], imagePrompt: "画面" }}
+        isBusy={false}
+        isEditable
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+    rerender(
+      <LiveDraft
+        draft={{ title: "新标题", body: "新正文", hashtags: ["#新话题"], imagePrompt: "新画面" }}
+        isBusy={false}
+        isEditable
+        publishPackage={null}
+      />
+    );
+
+    expect(screen.queryByRole("dialog", { name: "发布助手" })).not.toBeInTheDocument();
+  });
+
+  it("shows a clipboard error when publish copy fails", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "正文", hashtags: ["#话题"], imagePrompt: "画面" }}
+        isBusy={false}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+    await userEvent.click(screen.getByRole("button", { name: "复制微博文案" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("复制失败，请手动选中文案复制。");
+  });
+
   it("renders empty-state actions in the middle of the draft area instead of the header", () => {
     const { container } = render(
       <LiveDraft
