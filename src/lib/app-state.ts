@@ -14,7 +14,7 @@ export function summarizeSessionForDirector(
   optionMode: OptionGenerationMode = "balanced"
 ): DirectorInputParts {
   const trimmedNote = selectedOptionNote?.trim();
-  const modeHint = formatWritingModeHint(optionMode);
+  const modeHint = formatDirectionRangeHint(optionMode);
   const selectedOptionLabel = formatWritingIntentLabel(selectedOption, trimmedNote, modeHint);
 
   return {
@@ -37,16 +37,16 @@ export function summarizeSessionForDirector(
   };
 }
 
-function formatWritingModeHint(optionMode: OptionGenerationMode) {
+function formatDirectionRangeHint(optionMode: OptionGenerationMode) {
   if (optionMode === "divergent") {
-    return "本轮写作倾向：发散。可以拉开表达角度，尝试更明显的切入路径。";
+    return "方向范围：发散。拉开下一步方向之间的语义距离，可以尝试更明显的角度、读者、结构或前提变化。模式只影响方向范围；草稿改动幅度由所选方向决定。";
   }
 
   if (optionMode === "focused") {
-    return "本轮写作倾向：专注。围绕当前稿收窄和深化，减少不必要的发散。";
+    return "方向范围：专注。围绕当前稿最重要的未解决写作判断，给出更贴近当前稿的推进路线。模式只影响方向范围；草稿改动幅度由所选方向决定。";
   }
 
-  return "";
+  return "方向范围：平衡。兼顾当前稿的延展和推进，给出既不太跳脱也不只做局部修补的路线。模式只影响方向范围；草稿改动幅度由所选方向决定。";
 }
 
 function formatWritingIntentLabel(
@@ -80,8 +80,11 @@ export function summarizeEditedDraftForDirector(state: SessionState, draft: Draf
   };
 }
 
-export function summarizeCurrentDraftOptionsForDirector(state: SessionState): DirectorInputParts {
-  const selectedOptionLabel = "当前内容；避免重复已有方向和已有建议。";
+export function summarizeCurrentDraftOptionsForDirector(
+  state: SessionState,
+  optionMode: OptionGenerationMode = "balanced"
+): DirectorInputParts {
+  const selectedOptionLabel = ["当前内容；避免重复已有方向和已有建议。", formatDirectionRangeHint(optionMode)].join("\n");
 
   return {
     rootSummary: state.rootMemory.summary,

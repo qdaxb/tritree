@@ -89,9 +89,37 @@ describe("summarizeSessionForDirector", () => {
 
     expect(summary.selectedOptionLabel).toContain("职场黑话");
     expect(summary.selectedOptionLabel).toContain("用户补充要求：请保留一点讽刺感。");
-    expect(summary.selectedOptionLabel).toContain("本轮写作倾向：专注");
-    expect(summary.selectedOptionLabel).toContain("围绕当前稿收窄和深化");
+    expect(summary.selectedOptionLabel).toContain("方向范围：专注");
+    expect(summary.selectedOptionLabel).toContain("围绕当前稿最重要的未解决写作判断");
+    expect(summary.selectedOptionLabel).toContain("草稿改动幅度由所选方向决定");
+    expect(summary.selectedOptionLabel).not.toContain("本轮写作倾向");
+    expect(summary.selectedOptionLabel).not.toContain("收窄和深化");
     expect(summary.selectedOptionLabel).not.toContain("细节深化");
+  });
+
+  it("summarizes current-draft option generation with a direction range", () => {
+    const state = createStateWithPath([
+      createNode({
+        id: "root",
+        roundIndex: 1,
+        options: [
+          option("a", "确定表达主线"),
+          option("b", "选择读者视角"),
+          option("c", "整理故事推进")
+        ],
+        selectedOptionId: "b",
+        foldedOptions: [option("a", "确定表达主线"), option("c", "整理故事推进")]
+      })
+    ]);
+
+    const summary = summarizeCurrentDraftOptionsForDirector(state, "divergent");
+
+    expect(summary.selectedOptionLabel).toContain("当前内容；避免重复已有方向和已有建议。");
+    expect(summary.selectedOptionLabel).toContain("方向范围：发散");
+    expect(summary.selectedOptionLabel).toContain("拉开下一步方向之间的语义距离");
+    expect(summary.selectedOptionLabel).toContain("草稿改动幅度由所选方向决定");
+    expect(summary.selectedOptionLabel).not.toContain("大改");
+    expect(summary.selectedOptionLabel).not.toContain("小改");
   });
 
   it("includes previous and current option labels so the director can avoid repeats", () => {
