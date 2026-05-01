@@ -57,6 +57,56 @@ describe("RootMemorySetup", () => {
     });
   });
 
+  it("lets the user choose a creation goal and submit an optional goal note", async () => {
+    const onSubmit = vi.fn();
+    render(<RootMemorySetup onManageSkills={vi.fn()} onSubmit={onSubmit} isSaving={false} skills={skills} />);
+
+    await userEvent.type(screen.getByRole("textbox", { name: "创作 seed" }), "我想写 AI 产品经理的真实困境");
+    await userEvent.click(screen.getByRole("button", { name: "改成可发布" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "补充目标" }), "写给正在做 AI 产品的人，语气克制一点");
+    await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
+
+    expect(screen.getByRole("group", { name: "这次创作的目标" })).toBeInTheDocument();
+    expect(onSubmit).toHaveBeenCalledWith({
+      preferences: expect.objectContaining({
+        seed: "我想写 AI 产品经理的真实困境",
+        creationGoal: "改成可发布",
+        creationGoalNote: "写给正在做 AI 产品的人，语气克制一点"
+      }),
+      enabledSkillIds: ["system-analysis"]
+    });
+  });
+
+  it("can start with creation goal defaults already filled in", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <RootMemorySetup
+        initialSeed="继续写当前这个念头"
+        initialCreationGoal="找表达角度"
+        initialCreationGoalNote="从产品实践者视角写"
+        initialSkillIds={["system-no-hype-title"]}
+        onManageSkills={vi.fn()}
+        onSubmit={onSubmit}
+        isSaving={false}
+        skills={skills}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "找表达角度" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: "补充目标" })).toHaveValue("从产品实践者视角写");
+
+    await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      preferences: expect.objectContaining({
+        seed: "继续写当前这个念头",
+        creationGoal: "找表达角度",
+        creationGoalNote: "从产品实践者视角写"
+      }),
+      enabledSkillIds: ["system-no-hype-title"]
+    });
+  });
+
   it("can start with the current seed and selected skills already filled in", async () => {
     const onSubmit = vi.fn();
     render(

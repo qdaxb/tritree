@@ -12,8 +12,12 @@ const defaultPreferences = {
   personas: ["实践者"]
 } satisfies Omit<RootPreferences, "seed">;
 
+const creationGoalOptions = ["理清观点", "写成初稿", "改成可发布", "找表达角度", "面向特定读者"] as const;
+
 export function RootMemorySetup({
   initialSeed = "",
+  initialCreationGoal = "",
+  initialCreationGoalNote = "",
   initialSkillIds,
   onSubmit,
   isSaving,
@@ -23,6 +27,8 @@ export function RootMemorySetup({
   skills
 }: {
   initialSeed?: string;
+  initialCreationGoal?: string;
+  initialCreationGoalNote?: string;
   initialSkillIds?: string[];
   onSubmit: (payload: { preferences: RootPreferences; enabledSkillIds: string[] }) => void;
   isSaving: boolean;
@@ -32,11 +38,15 @@ export function RootMemorySetup({
   skills: Skill[];
 }) {
   const [seed, setSeed] = useState(initialSeed);
+  const [creationGoal, setCreationGoal] = useState(initialCreationGoal);
+  const [creationGoalNote, setCreationGoalNote] = useState(initialCreationGoalNote);
   const [selectedSkillIds, setSelectedSkillIds] = useState(() =>
     initialSkillIds ?? skills.filter((skill) => skill.defaultEnabled && !skill.isArchived).map((skill) => skill.id)
   );
   const [isSkillPickerOpen, setIsSkillPickerOpen] = useState(false);
   const trimmedSeed = seed.trim();
+  const trimmedCreationGoal = creationGoal.trim();
+  const trimmedCreationGoalNote = creationGoalNote.trim();
   const canSubmit = trimmedSeed.length > 0;
   const selectedSkills = useMemo(
     () => skills.filter((skill) => selectedSkillIds.includes(skill.id)),
@@ -75,6 +85,37 @@ export function RootMemorySetup({
             value={seed}
           />
         </label>
+        <section aria-label="这次创作的目标" className="root-setup__goal" role="group">
+          <div>
+            <p className="eyebrow">这次创作的目标</p>
+            <p className="root-setup__goal-copy">选一个方向感，AI 会按这个目标生成第一组三个分支。</p>
+          </div>
+          <div aria-label="目标选项" className="root-setup__goal-options" role="group">
+            {creationGoalOptions.map((option) => (
+              <button
+                aria-pressed={creationGoal === option}
+                className={`goal-chip${creationGoal === option ? " goal-chip--active" : ""}`}
+                disabled={isSaving}
+                key={option}
+                onClick={() => setCreationGoal(option)}
+                type="button"
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <label className="goal-note-field">
+            <span>补充目标</span>
+            <textarea
+              aria-label="补充目标"
+              disabled={isSaving}
+              onChange={(event) => setCreationGoalNote(event.target.value)}
+              placeholder="例如：写给正在做 AI 产品的人，语气克制一点"
+              rows={2}
+              value={creationGoalNote}
+            />
+          </label>
+        </section>
         <section aria-label="本作品启用技能" className="root-setup__skills">
           <div className="root-setup__skills-header">
             <div>
@@ -136,7 +177,9 @@ export function RootMemorySetup({
             onSubmit({
               preferences: {
                 ...defaultPreferences,
-                seed: trimmedSeed
+                seed: trimmedSeed,
+                creationGoal: trimmedCreationGoal,
+                creationGoalNote: trimmedCreationGoalNote
               },
               enabledSkillIds: selectedSkillIds
             })

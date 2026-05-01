@@ -244,6 +244,74 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
+.root-setup__goal {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 18px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 8px;
+}
+
+.root-setup__goal-copy {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.root-setup__goal-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.goal-chip {
+  min-height: 36px;
+  padding: 7px 11px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 8px;
+  font-weight: 750;
+  transition: transform 160ms ease, opacity 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.goal-chip--active {
+  color: #0f766e;
+  background: #d9f7f1;
+  border-color: rgba(15, 118, 110, 0.42);
+}
+
+.goal-note-field {
+  display: grid;
+  gap: 8px;
+}
+
+.goal-note-field span {
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
+.goal-note-field textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 74px;
+  padding: 12px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  border-radius: 8px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.goal-note-field textarea:focus {
+  border-color: rgba(37, 99, 235, 0.54);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
 .preference-group {
   padding: 18px 0;
   border-top: 1px solid var(--line);
