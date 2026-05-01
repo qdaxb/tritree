@@ -8,7 +8,8 @@ import {
   SessionStateSchema,
   SkillSchema,
   SkillUpsertSchema,
-  requireThreeOptions
+  requireThreeOptions,
+  skillsForTarget
 } from "./domain";
 
 describe("RootPreferencesSchema", () => {
@@ -249,6 +250,90 @@ describe("SkillSchema", () => {
     ).toThrow();
   });
 
+  it("accepts skill applicability and defaults custom skills to shared constraints", () => {
+    expect(
+      SkillUpsertSchema.parse({
+        title: "逻辑链审查",
+        category: "检查",
+        description: "检查论证跳跃。",
+        prompt: "检查因果链是否成立。",
+        appliesTo: "editor"
+      })
+    ).toMatchObject({
+      appliesTo: "editor",
+      defaultEnabled: false,
+      isArchived: false
+    });
+
+    expect(
+      SkillUpsertSchema.parse({
+        title: "保留原意",
+        category: "约束",
+        description: "不改掉用户原来的判断。",
+        prompt: "保留用户原意。"
+      }).appliesTo
+    ).toBe("both");
+  });
+
+  it("rejects invalid skill applicability", () => {
+    expect(() =>
+      SkillUpsertSchema.parse({
+        title: "错误技能",
+        category: "检查",
+        description: "",
+        prompt: "检查。",
+        appliesTo: "review"
+      })
+    ).toThrow();
+  });
+
+  it("routes skills by runtime target", () => {
+    const writerSkill = SkillSchema.parse({
+      id: "writer",
+      title: "自然短句",
+      category: "风格",
+      description: "让草稿更自然。",
+      prompt: "句子短一点。",
+      appliesTo: "writer",
+      isSystem: false,
+      defaultEnabled: false,
+      isArchived: false,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z"
+    });
+    const editorSkill = SkillSchema.parse({
+      ...writerSkill,
+      id: "editor",
+      title: "逻辑链审查",
+      appliesTo: "editor"
+    });
+    const sharedSkill = SkillSchema.parse({
+      ...writerSkill,
+      id: "shared",
+      title: "标题不要夸张",
+      appliesTo: "both"
+    });
+
+    expect(skillsForTarget([writerSkill, editorSkill, sharedSkill], "writer").map((skill) => skill.id)).toEqual([
+      "writer",
+      "shared"
+    ]);
+    expect(skillsForTarget([writerSkill, editorSkill, sharedSkill], "editor").map((skill) => skill.id)).toEqual([
+      "editor",
+      "shared"
+    ]);
+  });
+
+  it("assigns default system skills to writing, review, or shared effect groups", () => {
+    expect(DEFAULT_SYSTEM_SKILLS.find((skill) => skill.id === "system-content-workflow")?.appliesTo).toBe("both");
+    expect(DEFAULT_SYSTEM_SKILLS.find((skill) => skill.id === "system-analysis")?.appliesTo).toBe("editor");
+    expect(DEFAULT_SYSTEM_SKILLS.find((skill) => skill.id === "system-no-hype-title")?.appliesTo).toBe("both");
+    expect(DEFAULT_SYSTEM_SKILLS.find((skill) => skill.id === "system-logic-review")?.appliesTo).toBe("editor");
+    expect(DEFAULT_SYSTEM_SKILLS.find((skill) => skill.id === "system-natural-short-sentences")?.appliesTo).toBe(
+      "writer"
+    );
+  });
+
   it("ships default enabled creator decision skills", () => {
     expect(DEFAULT_SYSTEM_SKILLS.filter((skill) => skill.defaultEnabled).map((skill) => skill.title)).toEqual([
       "内容创作流程",
@@ -256,7 +341,10 @@ describe("SkillSchema", () => {
       "组织素材",
       "选择角度",
       "发布准备",
-      "明确读者"
+      "明确读者",
+      "逻辑链审查",
+      "读者进入感",
+      "发布前收口"
     ]);
     expect(
       DEFAULT_SYSTEM_SKILLS.filter((skill) => skill.isArchived).map((skill) => skill.title)
