@@ -112,4 +112,36 @@ describe("POST /api/sessions/:sessionId/options", () => {
     expect(text.indexOf('"type":"options"')).toBeLessThan(text.indexOf('"type":"done"'));
     expect(updateNodeOptions).toHaveBeenCalledWith({ sessionId: "session-1", nodeId: "node-1", output });
   });
+
+  it("passes option mode into current-draft option generation", async () => {
+    const output = {
+      roundIntent: "下一步",
+      options: [
+        { id: "a", label: "换角度", description: "A", impact: "A", kind: "reframe" },
+        { id: "b", label: "换读者", description: "B", impact: "B", kind: "explore" },
+        { id: "c", label: "换结构", description: "C", impact: "C", kind: "deepen" }
+      ],
+      memoryObservation: "偏好具体表达。"
+    };
+    const updateNodeOptions = vi.fn().mockReturnValue(state);
+    getRepositoryMock.mockReturnValue({
+      getSessionState: vi.fn().mockReturnValue(state),
+      updateNodeOptions
+    });
+    streamDirectorOptionsMock.mockResolvedValue(output);
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/options", {
+        method: "POST",
+        body: JSON.stringify({ nodeId: "node-1", optionMode: "divergent" })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+
+    await response.text();
+
+    expect(streamDirectorOptionsMock).toHaveBeenCalled();
+    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("方向范围：发散");
+    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("拉开下一步方向之间的语义距离");
+  });
 });

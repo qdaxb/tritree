@@ -725,7 +725,11 @@ export function TreeableApp() {
     return doneState;
   }
 
-  async function ensureNodeOptions(state: SessionState, nodeId: string | null) {
+  async function ensureNodeOptions(
+    state: SessionState,
+    nodeId: string | null,
+    optionMode: OptionGenerationMode = "balanced"
+  ) {
     if (!needsNodeOptions(state, nodeId)) return state;
     if (!nodeId) return state;
 
@@ -734,7 +738,10 @@ export function TreeableApp() {
     const response = await fetch(`/api/sessions/${state.session.id}/options`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId })
+      body: JSON.stringify({
+        nodeId,
+        ...(optionMode !== "balanced" ? { optionMode } : {})
+      })
     });
     if (!response.ok) {
       const data = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -833,7 +840,7 @@ export function TreeableApp() {
       await allowDraftRender();
     }
 
-    const optionsState = await ensureNodeOptions(nextState, nextState.currentNode?.id ?? nodeId);
+    const optionsState = await ensureNodeOptions(nextState, nextState.currentNode?.id ?? nodeId, optionMode);
     if (optionsState !== nextState) {
       setSessionState(optionsState);
       setViewNodeId(optionsState.currentNode?.id ?? null);
