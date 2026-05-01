@@ -166,6 +166,153 @@ describe("Treeable repository", () => {
     ]);
   });
 
+  it("stores editable creation request quick buttons in sqlite", () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+
+    expect(repo.listCreationRequestOptions().map((option) => option.label)).toEqual([
+      "保留我的原意",
+      "不要扩写太多",
+      "适合发微博",
+      "先给短版",
+      "写给新手",
+      "别太像广告",
+      "像发给朋友",
+      "写给懂行的人",
+      "改成英文"
+    ]);
+
+    const created = repo.createCreationRequestOption({ label: "面向海外游客" });
+    expect(repo.listCreationRequestOptions().at(-1)).toEqual(expect.objectContaining({ label: "面向海外游客" }));
+
+    const updated = repo.updateCreationRequestOption(created.id, { label: "写给第一次来的人" });
+    expect(updated.label).toBe("写给第一次来的人");
+
+    repo.deleteCreationRequestOption(created.id);
+    expect(repo.listCreationRequestOptions().map((option) => option.label)).not.toContain("写给第一次来的人");
+
+    const reopened = createTreeableRepository(dbPath);
+    expect(reopened.listCreationRequestOptions().map((option) => option.label)).not.toContain("写给第一次来的人");
+  });
+
+  it("sorts and resets creation request quick buttons", () => {
+    const repo = createTreeableRepository(testDbPath());
+    const original = repo.listCreationRequestOptions();
+
+    const sorted = repo.reorderCreationRequestOptions([original[1].id, original[0].id, ...original.slice(2).map((option) => option.id)]);
+    expect(sorted.slice(0, 2).map((option) => option.label)).toEqual(["不要扩写太多", "保留我的原意"]);
+
+    repo.updateCreationRequestOption(original[0].id, { label: "用户改过的默认项" });
+    repo.deleteCreationRequestOption(original[1].id);
+    repo.createCreationRequestOption({ label: "用户新增项" });
+
+    const reset = repo.resetCreationRequestOptions();
+    expect(reset.map((option) => option.label)).toEqual([
+      "保留我的原意",
+      "不要扩写太多",
+      "适合发微博",
+      "先给短版",
+      "写给新手",
+      "别太像广告",
+      "像发给朋友",
+      "写给懂行的人",
+      "改成英文"
+    ]);
+    expect(reset.map((option) => option.label)).not.toContain("用户新增项");
+    expect(reset.map((option) => option.label)).not.toContain("用户改过的默认项");
+  });
+
+  it("updates the old moments default request label to weibo without adding a duplicate", () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+
+    repo.updateCreationRequestOption("default-moments", { label: "适合发朋友圈" });
+
+    const reopened = createTreeableRepository(dbPath);
+    const labels = reopened.listCreationRequestOptions().map((option) => option.label);
+
+    expect(labels).toContain("适合发微博");
+    expect(labels).not.toContain("适合发朋友圈");
+    expect(reopened.listCreationRequestOptions().filter((option) => option.id === "default-moments")).toHaveLength(1);
+  });
+
+  it("updates the old first-time reader default request label without adding a duplicate", () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+
+    repo.updateCreationRequestOption("default-first-time-reader", { label: "写给第一次接触的人" });
+
+    const reopened = createTreeableRepository(dbPath);
+    const labels = reopened.listCreationRequestOptions().map((option) => option.label);
+
+    expect(labels).toContain("写给新手");
+    expect(labels).not.toContain("写给第一次接触的人");
+    expect(reopened.listCreationRequestOptions().filter((option) => option.id === "default-first-time-reader")).toHaveLength(1);
+  });
+
+  it("moves old untouched default creation request order to the new default order", () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    repo.reorderCreationRequestOptions([
+      "default-preserve-my-meaning",
+      "default-dont-expand-much",
+      "default-first-time-reader",
+      "default-friend-tone",
+      "default-english",
+      "default-no-ad-tone",
+      "default-experienced-reader",
+      "default-moments",
+      "default-short-version"
+    ]);
+
+    const reopened = createTreeableRepository(dbPath);
+
+    expect(reopened.listCreationRequestOptions().map((option) => option.id)).toEqual([
+      "default-preserve-my-meaning",
+      "default-dont-expand-much",
+      "default-moments",
+      "default-short-version",
+      "default-first-time-reader",
+      "default-no-ad-tone",
+      "default-friend-tone",
+      "default-experienced-reader",
+      "default-english"
+    ]);
+  });
+
+  it("preserves a custom creation request order after restart", () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    repo.reorderCreationRequestOptions([
+      "default-english",
+      "default-preserve-my-meaning",
+      "default-dont-expand-much",
+      "default-moments",
+      "default-short-version",
+      "default-first-time-reader",
+      "default-friend-tone",
+      "default-no-ad-tone",
+      "default-experienced-reader"
+    ]);
+
+    const reopened = createTreeableRepository(dbPath);
+
+    expect(reopened.listCreationRequestOptions().map((option) => option.id)[0]).toBe("default-english");
+  });
+
+  it("keeps deleted default creation request quick buttons hidden after restart", () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    const defaultOption = repo.listCreationRequestOptions().find((option) => option.label === "保留我的原意");
+
+    expect(defaultOption).toBeTruthy();
+
+    repo.deleteCreationRequestOption(defaultOption!.id);
+
+    const reopened = createTreeableRepository(dbPath);
+    expect(reopened.listCreationRequestOptions().map((option) => option.label)).not.toContain("保留我的原意");
+  });
+
   it("creates a session with default enabled skills", () => {
     const repo = createTreeableRepository(testDbPath());
     const root = repo.saveRootMemory({
@@ -287,13 +434,12 @@ describe("Treeable repository", () => {
     expect(repo.getRootMemory()?.preferences.domains).toEqual(["AI", "product"]);
   });
 
-  it("includes creation goal details in root memory summary", () => {
+  it("includes the creation request in root memory summary", () => {
     const repo = createTreeableRepository(testDbPath());
 
     const root = repo.saveRootMemory({
       seed: "我想写 AI 产品经理的真实困境",
-      creationGoal: "改成可发布",
-      creationGoalNote: "写给正在做 AI 产品的人，语气克制一点",
+      creationRequest: "改成英文的，保留口语感",
       domains: ["AI", "product"],
       tones: ["calm"],
       styles: ["opinion-driven"],
@@ -303,12 +449,10 @@ describe("Treeable repository", () => {
     expect(root.summary).toBe(
       [
         "Seed：我想写 AI 产品经理的真实困境",
-        "创作目标：改成可发布",
-        "目标补充：写给正在做 AI 产品的人，语气克制一点"
+        "本次创作要求：改成英文的，保留口语感"
       ].join("\n")
     );
-    expect(root.preferences.creationGoal).toBe("改成可发布");
-    expect(root.preferences.creationGoalNote).toBe("写给正在做 AI 产品的人，语气克制一点");
+    expect(root.preferences.creationRequest).toBe("改成英文的，保留口语感");
   });
 
   it("creates a session with an initial node and draft", () => {

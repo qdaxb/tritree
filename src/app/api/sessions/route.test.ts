@@ -203,13 +203,12 @@ describe("POST /api/sessions", () => {
     expect(text.indexOf('"type":"options"')).toBeLessThan(text.indexOf('"type":"done"'));
   });
 
-  it("keeps the seed draft body raw while passing goal context through root summary", async () => {
-    const rootMemoryWithGoal = {
+  it("keeps the seed draft body raw while passing creation request context through root summary", async () => {
+    const rootMemoryWithRequest = {
       id: "root",
       preferences: {
         seed: "写一篇解释为什么要写作的文章",
-        creationGoal: "改成可发布",
-        creationGoalNote: "写给想建立写作习惯的人",
+        creationRequest: "改成英文的，保留口语感",
         domains: ["创作"],
         tones: ["平静"],
         styles: ["观点型"],
@@ -217,15 +216,14 @@ describe("POST /api/sessions", () => {
       },
       summary: [
         "Seed：写一篇解释为什么要写作的文章",
-        "创作目标：改成可发布",
-        "目标补充：写给想建立写作习惯的人"
+        "本次创作要求：改成英文的，保留口语感"
       ].join("\n"),
       learnedSummary: "",
       createdAt: "2026-04-26T00:00:00.000Z",
       updatedAt: "2026-04-26T00:00:00.000Z"
     };
     const draftState = {
-      rootMemory: rootMemoryWithGoal,
+      rootMemory: rootMemoryWithRequest,
       session: {
         id: "session-1",
         title: "Draft",
@@ -268,7 +266,7 @@ describe("POST /api/sessions", () => {
       }
     });
     getRepositoryMock.mockReturnValue({
-      getRootMemory: () => rootMemoryWithGoal,
+      getRootMemory: () => rootMemoryWithRequest,
       defaultEnabledSkillIds: vi.fn(() => ["system-analysis"]),
       resolveSkillsByIds: vi.fn(() => resolvedSkills),
       createSessionDraft,
@@ -296,7 +294,7 @@ describe("POST /api/sessions", () => {
     );
     expect(streamDirectorOptionsMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        rootSummary: expect.stringContaining("创作目标：改成可发布")
+        rootSummary: expect.stringContaining("本次创作要求：改成英文的，保留口语感")
       }),
       expect.anything()
     );

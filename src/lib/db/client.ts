@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 const TREEABLE_TABLES = [
   "publish_packages",
   "branch_history",
@@ -10,6 +10,7 @@ const TREEABLE_TABLES = [
   "tree_nodes",
   "session_enabled_skills",
   "sessions",
+  "creation_request_options",
   "skills",
   "root_memory"
 ];
@@ -71,6 +72,15 @@ function createSchema(sqlite: DatabaseSync) {
       prompt TEXT NOT NULL,
       is_system INTEGER NOT NULL,
       default_enabled INTEGER NOT NULL,
+      is_archived INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS creation_request_options (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      sort_order INTEGER NOT NULL,
       is_archived INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

@@ -1,92 +1,99 @@
-# Creation Goal Design Spec
+# Creation Request Design Spec
 
 Date: 2026-05-01
 
 ## Summary
 
-Tritree should add a work-level creation goal on the Seed screen. The user chooses a broad goal for this work and may add one short custom note. The goal is saved with root preferences and included in root memory summary, so the first option generation and every later Director request can use it as a durable direction signal.
+Tritree should add an optional work-level creation request on the Seed screen. The request is a freeform instruction for this specific work, such as `保留我的原意`, `不要扩写太多`, `适合发微博`, `写给新手`, or `别太像广告`.
 
-The feature should stay lightweight. It should help the AI understand what the creator wants from this session without turning the start flow into a long questionnaire.
+This replaces the earlier fixed "这次创作的目标" selector. User feedback showed that the user's intent is not always one of a few initial goals, while common requests should still be quick to choose. The final interaction uses SQLite-backed quick request chips plus an optional collapsed custom textarea that write into the same persisted request field.
 
 ## Goals
 
-- Add a "这次创作的目标" area to the Seed screen.
-- Let the user pick one predefined goal quickly.
-- Let the user add an optional freeform goal note.
-- Persist the selected goal and note with root preferences.
-- Include the goal and note in root memory summary and the topbar summary.
-- Feed the goal into first-round option generation and later writing rounds through the existing root memory context.
-- Preserve the existing one-step start flow: seed, goal, skills, start.
+- Add a `本次创作要求` area to the Seed screen.
+- Let the user optionally choose quick request chips.
+- Let the user optionally enter or edit one freeform request.
+- Let the user add, rename, delete, sort, and reset quick request chips.
+- Persist the request with root preferences.
+- Persist the quick request chip library in SQLite for future multi-user scoping.
+- Include the request in root memory summary and topbar summary.
+- Feed the request into first-round option generation and later writing rounds through the existing root memory context.
+- Preserve the existing one-step start flow: seed, optional request, skills, start.
 
 ## Non-Goals
 
-- Do not add a multi-step onboarding wizard.
-- Do not make the goal required; a seed alone should still be enough to start.
-- Do not create per-branch goal state.
-- Do not infer or rewrite the selected goal through AI.
-- Do not introduce a new database table for goals.
+- Do not add predefined creation-goal buttons.
+- Do not require the user's request to match the quick choices.
+- Do not make the request required; a seed alone should still be enough to start.
+- Do not create per-branch request state.
+- Do not infer or rewrite the request through AI.
+- Do not store quick request chips in browser local storage.
 - Do not change the existing branch option mode control.
+- Do not make quick request chips duplicate the role of skills. Skills remain durable capabilities and rules; creation requests are per-work instructions.
 
 ## User Experience
 
-The Seed screen should show the goal area after the seed textarea and before the skill picker.
+The Seed screen should show the request area after the seed textarea and before the skill picker.
 
 The section should contain:
 
-- Title: `这次创作的目标`
-- Predefined goal buttons:
-  - `理清观点`
-  - `写成初稿`
-  - `改成可发布`
-  - `找表达角度`
-  - `面向特定读者`
-- Optional note textarea or compact input:
-  - Label: `补充目标`
-  - Placeholder: `例如：写给正在做 AI 产品的人，语气克制一点`
+- Title: `本次创作要求`
+- Helper copy: `可选。指定语言、读者、语气或限制。`
+- Quick request choices, in default/reset order: `保留我的原意`, `不要扩写太多`, `适合发微博`, `先给短版`, `写给新手`, `别太像广告`, `像发给朋友`, `写给懂行的人`, `改成英文`
+- Textarea label: `自定义创作要求`
+- Placeholder: `例如：保留我的原意，像发给朋友，不要扩写太多`
 
-The selected goal should behave like a single-choice segmented control. One selected value is enough; users do not need to rank or combine goals. A second click on the selected goal may leave it selected rather than toggling it off, because this is an orienting choice, not a filter.
+Clicking a quick choice toggles that phrase into or out of the request value. Multiple quick choices are joined with `，`. Choosing quick requests does not auto-expand the custom textarea; the user explicitly opens `自定义` when they want freeform input. The request is optional and capped at 240 characters to match server validation.
 
-The default selected goal should be empty. This keeps existing behavior for users who only want to enter a seed and start.
+The request area also has a management mode. In management mode, the user can:
+
+- Add a new quick request.
+- Rename an existing quick request.
+- Delete a quick request.
+- Move a quick request up or down.
+- Reset the list to the default quick requests.
 
 ## Data Model
 
-Extend `RootPreferences` with two optional string fields:
+Extend `RootPreferences` with one optional string field:
 
-- `creationGoal`: selected predefined goal label or empty string.
-- `creationGoalNote`: user-entered note or empty string.
+- `creationRequest`: user-entered request or empty string.
 
-`RootPreferencesSchema` should trim both fields and default them to empty strings. This preserves existing root memory JSON documents that do not have these fields.
+`RootPreferencesSchema` should trim the field, cap it at 240 characters, and default it to an empty string. This preserves existing root memory JSON documents that do not have the field.
 
-No storage migration is needed because `root_memory.preferences_json` already stores the preferences object as JSON. Existing rows should parse through the schema defaults.
+No storage migration is needed because `root_memory.preferences_json` already stores the preferences object as JSON.
+
+Add a SQLite table for quick request chips:
+
+- `creation_request_options.id`
+- `creation_request_options.label`
+- `creation_request_options.sort_order`
+- `creation_request_options.is_archived`
+- `creation_request_options.created_at`
+- `creation_request_options.updated_at`
+
+Default options are seeded into this table. Deleting a chip archives it so it does not reappear on restart; resetting restores the default set and hides custom chips. Untouched old default rows are migrated from earlier labels/order such as `写给第一次接触的人` or `适合发朋友圈` to the current defaults, while user-customized ordering is preserved.
 
 ## Summary Formatting
 
-`summarizePreferences` should include goal context when present. For a seed-based work, the summary should be multi-line:
+`summarizePreferences` should include request context when present. For a seed-based work, the summary should be multi-line:
 
 ```text
-Seed：我想写 AI 产品经理在真实项目里的困境
-创作目标：改成可发布
-目标补充：写给正在做 AI 产品的人，语气克制一点
+Seed：五一来青岛了
+本次创作要求：改成英文的
 ```
 
-If only the note is present, use:
+If no request is present, keep the existing summary format:
 
 ```text
-Seed：...
-目标补充：...
+Seed：五一来青岛了
 ```
 
-If no goal or note is present, keep the existing summary format:
-
-```text
-Seed：...
-```
-
-The topbar currently displays `formatRootSummary(rootMemory)`. It should use the persisted summary or equivalent formatting so the goal remains visible after reload. The topbar may show the multi-line summary flattened with separators if needed for compact layout.
+The topbar should use the persisted summary, trim it, and flatten newlines with ` | ` for compact display.
 
 ## AI Context
 
-The existing Director prompt already receives `rootMemory.summary` as `创作 seed`. Adding the goal to the summary is the narrowest path that feeds the goal into:
+The existing Director prompt already receives `rootMemory.summary` as context. Adding the request to the summary feeds it into:
 
 - First-round option generation.
 - Draft generation after a branch choice.
@@ -94,62 +101,53 @@ The existing Director prompt already receives `rootMemory.summary` as `创作 se
 - Edited draft option generation.
 - Selection rewrite context.
 
-No new prompt section is required for this pass. The summary labels `创作目标` and `目标补充` should be explicit enough for the model to treat them as durable session direction.
+The first seed draft body should remain the raw seed, not the combined summary. The request guides the AI, but it should not appear as user-authored draft text.
 
 ## API Flow
 
-`POST /api/root-memory` should keep accepting the root preferences payload. The schema extension handles new fields and defaults old callers.
+`GET /api/skills` also returns the SQLite-backed quick request options needed by the Seed screen.
 
-`POST /api/sessions` should not need a new request field. It already loads root memory before creating the seed draft and generating options.
+`POST /api/root-memory` continues to accept the root preferences payload. The schema extension handles the new field and defaults old callers.
 
-The first seed draft body should remain the raw seed, not the combined summary. The goal guides the AI, but it should not appear as user-authored draft text.
+`POST /api/sessions` does not need a new request field. It already loads root memory before creating the seed draft and generating options.
+
+Quick request management uses:
+
+- `POST /api/creation-request-options`
+- `PATCH /api/creation-request-options/:optionId`
+- `DELETE /api/creation-request-options/:optionId`
+- `PUT /api/creation-request-options`
+- `POST /api/creation-request-options/reset`
 
 ## Component Design
 
-`RootMemorySetup` owns the local goal state together with seed and selected skills.
+`RootMemorySetup` owns local request state together with seed and selected skills.
 
 Recommended additions:
 
-- A small constant list of creation goal labels.
-- `creationGoal` state initialized from `initialCreationGoal`.
-- `creationGoalNote` state initialized from `initialCreationGoalNote`.
-- A goal section rendered between the seed field and skill section.
-- Submit payload includes `creationGoal` and `creationGoalNote`.
+- `creationRequest` state initialized from `initialCreationRequest`.
+- `creationRequestOptions` initialized from SQLite-backed app state.
+- Quick choice buttons that mutate `creationRequest` rather than storing a separate selected goal.
+- Management controls for add, rename, delete, sort, and reset.
+- A request section rendered between the seed field and skill section.
+- Submit payload includes `creationRequest`.
 
-`TreeableApp` should pass existing values back into `RootMemorySetup` when restarting from current settings or creating a new thought from an existing session context.
+`TreeableApp` should pass existing values back into `RootMemorySetup` when restarting from current settings.
 
-`RootSetupDefaults` should include optional `creationGoal` and `creationGoalNote` fields so restart preserves the current selection.
-
-## Error Handling
-
-Validation should be conservative:
-
-- `creationGoal` defaults to empty string and should be limited to a short string.
-- `creationGoalNote` defaults to empty string and should have a moderate max length.
-- Unknown `creationGoal` values may be accepted as strings for forward compatibility, but the UI only creates the predefined labels.
-
-If root memory saving fails, the existing Seed screen error handling remains sufficient.
+`RootSetupDefaults` should include optional `creationRequest` so restart preserves the current request.
 
 ## Testing
 
 Add or update tests for:
 
-- `RootMemorySetup` renders the goal section after the seed field.
-- Selecting a goal and entering a note submits both fields.
-- Starting a first generation sends goal fields through `/api/root-memory`.
-- Restarting from current settings pre-fills the saved goal and note.
-- Root preference schema parses missing goal fields with empty defaults.
-- Repository summary formatting includes goal and note when present.
-- First seed draft creation still uses only the seed as draft body.
-
-## Open Decisions
-
-The predefined labels are fixed for the first version:
-
-- `理清观点`
-- `写成初稿`
-- `改成可发布`
-- `找表达角度`
-- `面向特定读者`
-
-Future versions may add platform-specific goals, but this pass should avoid another management surface.
+- `RootPreferencesSchema` trims `creationRequest` and defaults missing values to empty strings.
+- Repository summary formatting includes `本次创作要求` when present.
+- Repository CRUD, sort, archive, and reset behavior for quick request chips.
+- `RootMemorySetup` renders request quick choices and submits the combined `creationRequest`.
+- `RootMemorySetup` manages quick request chips.
+- `RootMemorySetup` lets users combine quick choices with custom text.
+- `RootMemorySetup` keeps the custom textarea collapsed by default and does not open it when quick choices are combined.
+- `RootMemorySetup` pre-fills `initialCreationRequest` and caps the textarea at 240 characters.
+- Starting a first generation sends `creationRequest` through `/api/root-memory`.
+- Restarting from current settings pre-fills the saved request.
+- The session start route keeps the seed draft body raw while passing the request through `rootSummary`.

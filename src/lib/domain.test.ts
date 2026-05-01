@@ -38,19 +38,17 @@ describe("RootPreferencesSchema", () => {
     expect(result).not.toHaveProperty("initialOptionMode");
   });
 
-  it("defaults and trims creation goal fields", () => {
+  it("defaults and trims creation request", () => {
     const result = RootPreferencesSchema.parse({
       seed: "我想写 AI 产品经理的真实困境",
-      creationGoal: " 改成可发布 ",
-      creationGoalNote: " 写给正在做 AI 产品的人，语气克制一点 ",
+      creationRequest: " 改成英文的，保留口语感 ",
       domains: ["AI", "product"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
 
-    expect(result.creationGoal).toBe("改成可发布");
-    expect(result.creationGoalNote).toBe("写给正在做 AI 产品的人，语气克制一点");
+    expect(result.creationRequest).toBe("改成英文的，保留口语感");
 
     const legacy = RootPreferencesSchema.parse({
       seed: "旧 seed",
@@ -60,8 +58,7 @@ describe("RootPreferencesSchema", () => {
       personas: ["practitioner"]
     });
 
-    expect(legacy.creationGoal).toBe("");
-    expect(legacy.creationGoalNote).toBe("");
+    expect(legacy.creationRequest).toBe("");
   });
 });
 

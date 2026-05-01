@@ -6,7 +6,11 @@ import { SkillUpsertSchema } from "@/lib/domain";
 export const runtime = "nodejs";
 
 export async function GET() {
-  return NextResponse.json({ skills: getRepository().listSkills() });
+  const repository = getRepository();
+  return NextResponse.json({
+    skills: repository.listSkills(),
+    creationRequestOptions: repository.listCreationRequestOptions()
+  });
 }
 
 export async function POST(request: Request) {

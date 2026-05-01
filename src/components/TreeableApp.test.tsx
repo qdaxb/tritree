@@ -352,7 +352,7 @@ describe("TreeableApp", () => {
       summary: [
         "",
         "  Seed：我想写 AI 产品经理的真实困境  ",
-        "  创作目标：改成可发布  ",
+        "  本次创作要求：改成英文的  ",
         ""
       ].join("\n")
     };
@@ -365,9 +365,9 @@ describe("TreeableApp", () => {
 
     render(<TreeableApp />);
 
-    const topbar = await screen.findByText("Seed：我想写 AI 产品经理的真实困境 | 创作目标：改成可发布");
+    const topbar = await screen.findByText("Seed：我想写 AI 产品经理的真实困境 | 本次创作要求：改成英文的");
     expect(topbar).toBeInTheDocument();
-    expect(topbar).toHaveTextContent(/^Seed：我想写 AI 产品经理的真实困境 \| 创作目标：改成可发布$/);
+    expect(topbar).toHaveTextContent(/^Seed：我想写 AI 产品经理的真实困境 \| 本次创作要求：改成英文的$/);
   });
 
   it("opens the seed screen when no existing tree is available", async () => {
@@ -396,13 +396,11 @@ describe("TreeableApp", () => {
             ...rootMemory,
             preferences: {
               ...rootMemory.preferences,
-              creationGoal: "改成可发布",
-              creationGoalNote: "写给正在做 AI 产品的人，语气克制一点"
+              creationRequest: "改成英文的，保留口语感"
             },
             summary: [
               "Seed：我想写 AI 产品经理的真实困境",
-              "创作目标：改成可发布",
-              "目标补充：写给正在做 AI 产品的人，语气克制一点"
+              "本次创作要求：改成英文的，保留口语感"
             ].join("\n")
           }
         })
@@ -413,20 +411,19 @@ describe("TreeableApp", () => {
     render(<TreeableApp />);
 
     await userEvent.type(await screen.findByRole("textbox", { name: "创作 seed" }), "我想写 AI 产品经理的真实困境");
-    await userEvent.click(screen.getByRole("button", { name: "改成可发布" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "补充目标" }), "写给正在做 AI 产品的人，语气克制一点");
+    await userEvent.click(screen.getByRole("button", { name: "展开自定义创作要求" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "自定义创作要求" }), "改成英文的，保留口语感");
     await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
 
     expect(await screen.findByText(/Seed：我想写 AI 产品经理的真实困境/)).toBeInTheDocument();
-    expect(await screen.findByText(/创作目标：改成可发布/)).toBeInTheDocument();
+    expect(await screen.findByText(/本次创作要求：改成英文的/)).toBeInTheDocument();
     expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
     expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("idle");
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/root-memory", expect.objectContaining({ method: "POST" }));
     expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toEqual(
       expect.objectContaining({
         seed: "我想写 AI 产品经理的真实困境",
-        creationGoal: "改成可发布",
-        creationGoalNote: "写给正在做 AI 产品的人，语气克制一点"
+        creationRequest: "改成英文的，保留口语感"
       })
     );
     expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).not.toHaveProperty("initialOptionId");
@@ -457,17 +454,15 @@ describe("TreeableApp", () => {
   });
 
   it("restarts from the seed screen with the current seed and skills preselected", async () => {
-    const rootMemoryWithGoal = {
+    const rootMemoryWithRequest = {
       ...rootMemory,
       preferences: {
         ...rootMemory.preferences,
-        creationGoal: "找表达角度",
-        creationGoalNote: "从产品实践者视角写"
+        creationRequest: "从产品实践者视角写，改成英文的"
       },
       summary: [
         "Seed：我想写 AI 产品经理的真实困境",
-        "创作目标：找表达角度",
-        "目标补充：从产品实践者视角写"
+        "本次创作要求：从产品实践者视角写，改成英文的"
       ].join("\n")
     };
     const currentSettingsState = {
@@ -478,7 +473,7 @@ describe("TreeableApp", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory: rootMemoryWithGoal }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory: rootMemoryWithRequest }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: currentSettingsState }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: currentSettingsState }) });
@@ -490,8 +485,10 @@ describe("TreeableApp", () => {
     await userEvent.click(within(document.querySelector(".topbar") as HTMLElement).getByRole("button", { name: "重新开始" }));
 
     expect(screen.getByRole("textbox", { name: "创作 seed" })).toHaveValue("我想写 AI 产品经理的真实困境");
-    expect(screen.getByRole("button", { name: "找表达角度" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("textbox", { name: "补充目标" })).toHaveValue("从产品实践者视角写");
+    expect(screen.queryByRole("textbox", { name: "自定义创作要求" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "展开自定义创作要求" }));
+    expect(screen.getByRole("textbox", { name: "自定义创作要求" })).toHaveValue("从产品实践者视角写，改成英文的");
+    expect(screen.queryByRole("button", { name: "找表达角度" })).not.toBeInTheDocument();
     expect(screen.getByText("标题不要夸张")).toBeInTheDocument();
     expect(screen.queryByText("分析")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(3);

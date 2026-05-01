@@ -1,5 +1,7 @@
 # Creation Goal Implementation Plan
 
+> Amendment after browser review (2026-05-01): the final implementation replaces fixed creation-goal state with one `creationRequest` field. The Seed screen offers SQLite-backed quick request chips plus a collapsed custom textarea, and both write into the same persisted `本次创作要求`. The quick chip library supports add, rename, delete, sort, and reset. Historical task details below describe the earlier fixed-goal design and are superseded for final code.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a lightweight work-level creation goal to the Seed screen and feed it into Tritree's existing root memory context.
