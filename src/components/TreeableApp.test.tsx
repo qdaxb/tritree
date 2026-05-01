@@ -346,6 +346,30 @@ describe("TreeableApp", () => {
     expect(screen.queryByLabelText("历史路径地图")).not.toBeInTheDocument();
   });
 
+  it("trims persisted root summary before flattening it in the topbar", async () => {
+    const rootMemoryWithPaddedSummary = {
+      ...rootMemory,
+      summary: [
+        "",
+        "  Seed：我想写 AI 产品经理的真实困境  ",
+        "  创作目标：改成可发布  ",
+        ""
+      ].join("\n")
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory: rootMemoryWithPaddedSummary }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    const topbar = await screen.findByText("Seed：我想写 AI 产品经理的真实困境 | 创作目标：改成可发布");
+    expect(topbar).toBeInTheDocument();
+    expect(topbar).toHaveTextContent(/^Seed：我想写 AI 产品经理的真实困境 \| 创作目标：改成可发布$/);
+  });
+
   it("opens the seed screen when no existing tree is available", async () => {
     const fetchMock = vi
       .fn()

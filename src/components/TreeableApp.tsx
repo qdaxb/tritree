@@ -86,7 +86,8 @@ function translatePreference(value: string) {
 
 function formatRootSummary(rootMemory: RootMemory | null) {
   if (!rootMemory) return "";
-  if (rootMemory.summary.trim()) return rootMemory.summary.replace(/\s*\n\s*/g, " | ");
+  const summary = rootMemory.summary.trim();
+  if (summary) return summary.replace(/\s*\n\s*/g, " | ");
   if (rootMemory.preferences.seed.trim()) return `Seed：${rootMemory.preferences.seed.trim()}`;
 
   const { preferences } = rootMemory;
