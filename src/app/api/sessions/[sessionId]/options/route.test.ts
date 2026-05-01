@@ -59,6 +59,19 @@ const state = {
   publishPackage: null
 };
 
+const existingOptions = [
+  { id: "a", label: "旧场景", description: "A", impact: "A", kind: "explore" },
+  { id: "b", label: "旧观点", description: "B", impact: "B", kind: "deepen" },
+  { id: "c", label: "旧结构", description: "C", impact: "C", kind: "reframe" }
+];
+
+const stateWithOptions = {
+  ...state,
+  currentNode: { ...node, options: existingOptions },
+  selectedPath: [{ ...node, options: existingOptions }],
+  treeNodes: [{ ...node, options: existingOptions }]
+};
+
 beforeEach(() => {
   streamDirectorOptionsMock.mockReset();
   getRepositoryMock.mockReset();
@@ -110,6 +123,74 @@ describe("POST /api/sessions/:sessionId/options", () => {
     expect(text).not.toContain('"label":"生成中"');
     expect(text).toContain('"type":"done"');
     expect(text.indexOf('"type":"options"')).toBeLessThan(text.indexOf('"type":"done"'));
+    expect(updateNodeOptions).toHaveBeenCalledWith({ sessionId: "session-1", nodeId: "node-1", output });
+  });
+
+  it("passes option mode into current-draft option generation", async () => {
+    const output = {
+      roundIntent: "下一步",
+      options: [
+        { id: "a", label: "换角度", description: "A", impact: "A", kind: "reframe" },
+        { id: "b", label: "换读者", description: "B", impact: "B", kind: "explore" },
+        { id: "c", label: "换结构", description: "C", impact: "C", kind: "deepen" }
+      ],
+      memoryObservation: "偏好具体表达。"
+    };
+    const updateNodeOptions = vi.fn().mockReturnValue(state);
+    getRepositoryMock.mockReturnValue({
+      getSessionState: vi.fn().mockReturnValue(state),
+      updateNodeOptions
+    });
+    streamDirectorOptionsMock.mockResolvedValue(output);
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/options", {
+        method: "POST",
+        body: JSON.stringify({ nodeId: "node-1", optionMode: "divergent" })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+
+    await response.text();
+
+    expect(streamDirectorOptionsMock).toHaveBeenCalled();
+    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("方向范围：发散");
+    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("拉开下一步方向之间的语义距离");
+  });
+
+  it("regenerates an existing option set when forced with a direction range", async () => {
+    const output = {
+      roundIntent: "更贴近当前稿",
+      options: [
+        { id: "a", label: "压实论点", description: "A", impact: "A", kind: "deepen" },
+        { id: "b", label: "补关键场景", description: "B", impact: "B", kind: "explore" },
+        { id: "c", label: "收束结尾", description: "C", impact: "C", kind: "finish" }
+      ],
+      memoryObservation: "偏好具体表达。"
+    };
+    const finalState = {
+      ...stateWithOptions,
+      currentNode: { ...stateWithOptions.currentNode, roundIntent: output.roundIntent, options: output.options }
+    };
+    const updateNodeOptions = vi.fn().mockReturnValue(finalState);
+    getRepositoryMock.mockReturnValue({
+      getSessionState: vi.fn().mockReturnValue(stateWithOptions),
+      updateNodeOptions
+    });
+    streamDirectorOptionsMock.mockResolvedValue(output);
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/options", {
+        method: "POST",
+        body: JSON.stringify({ nodeId: "node-1", optionMode: "focused", force: true })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+    const text = await response.text();
+
+    expect(text).toContain('"type":"done"');
+    expect(streamDirectorOptionsMock).toHaveBeenCalled();
+    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("方向范围：专注");
     expect(updateNodeOptions).toHaveBeenCalledWith({ sessionId: "session-1", nodeId: "node-1", output });
   });
 });

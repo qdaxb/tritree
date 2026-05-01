@@ -121,6 +121,9 @@ describe("agent instructions", () => {
     expect(optionsInstructions).toContain("当前内容");
     expect(optionsInstructions).toContain("三个编辑建议");
     expect(optionsInstructions).toContain("已出现过的建议标题");
+    expect(optionsInstructions).toContain("如果审稿材料里包含“方向范围”");
+    expect(optionsInstructions).toContain("方向范围是硬约束");
+    expect(optionsInstructions).toContain("专注时围绕同一个核心问题给近距离处理办法");
     expect(optionsInstructions).toContain("必须遵守已启用 Skills");
     expect(optionsInstructions).toContain("# 本任务执行规则");
     expect(optionsInstructions).toContain("# 输出要求");

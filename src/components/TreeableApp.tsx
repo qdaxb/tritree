@@ -197,7 +197,7 @@ function withCustomOption(node: TreeNode, customOption: BranchOption | null) {
 }
 
 function withStreamingOptions(node: TreeNode, streamingOptions: StreamingOptionsEntry | null) {
-  if (!streamingOptions || streamingOptions.nodeId !== node.id || node.options.length >= 3) return node;
+  if (!streamingOptions || streamingOptions.nodeId !== node.id) return node;
 
   return {
     ...node,
@@ -726,8 +726,13 @@ export function TreeableApp() {
     return doneState;
   }
 
-  async function ensureNodeOptions(state: SessionState, nodeId: string | null) {
-    if (!needsNodeOptions(state, nodeId)) return state;
+  async function ensureNodeOptions(
+    state: SessionState,
+    nodeId: string | null,
+    optionMode: OptionGenerationMode = "balanced",
+    force = false
+  ) {
+    if (!force && !needsNodeOptions(state, nodeId)) return state;
     if (!nodeId) return state;
 
     setGenerationStage({ nodeId, stage: "options" });
@@ -735,7 +740,11 @@ export function TreeableApp() {
     const response = await fetch(`/api/sessions/${state.session.id}/options`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nodeId })
+      body: JSON.stringify({
+        nodeId,
+        ...(optionMode !== "balanced" ? { optionMode } : {}),
+        ...(force ? { force } : {})
+      })
     });
     if (!response.ok) {
       const data = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -834,7 +843,7 @@ export function TreeableApp() {
       await allowDraftRender();
     }
 
-    const optionsState = await ensureNodeOptions(nextState, nextState.currentNode?.id ?? nodeId);
+    const optionsState = await ensureNodeOptions(nextState, nextState.currentNode?.id ?? nodeId, optionMode);
     if (optionsState !== nextState) {
       setSessionState(optionsState);
       setViewNodeId(optionsState.currentNode?.id ?? null);
@@ -856,6 +865,32 @@ export function TreeableApp() {
     setMessage("");
     try {
       const optionsState = await ensureNodeOptions(sessionState, nodeId);
+      if (optionsState !== sessionState) {
+        setSessionState(optionsState);
+        setViewNodeId(nodeId);
+      }
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "生成下一步选项失败。";
+      setMessage(apiKeyMessage(text));
+    } finally {
+      setGenerationStage(null);
+      setStreamingDraft(null);
+      setStreamingOptions(null);
+      setIsBusy(false);
+    }
+  }
+
+  async function regenerateOptionsForCurrentNode(optionMode: OptionGenerationMode) {
+    if (!sessionState?.currentNode || isBusy) return;
+    const nodeId = viewNodeId ?? sessionState.currentNode.id;
+    if (nodeId !== sessionState.currentNode.id) return;
+
+    setPendingChoice(null);
+    setGeneratedDiffNodeId(null);
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const optionsState = await ensureNodeOptions(sessionState, nodeId, optionMode, true);
       if (optionsState !== sessionState) {
         setSessionState(optionsState);
         setViewNodeId(nodeId);
@@ -1051,6 +1086,13 @@ export function TreeableApp() {
       !persistedDraftForView &&
       !isBusy
   );
+  const canRegenerateOptions = Boolean(
+    sessionState &&
+      activeViewNodeId &&
+      isViewingCurrentNode &&
+      persistedDraftForView &&
+      activeViewNode?.options.length === 3
+  );
   const streamedActiveViewNode = activeViewNode ? withStreamingOptions(activeViewNode, streamingOptions) : null;
   const currentNodeForCanvas = streamedActiveViewNode ? withCustomOption(streamedActiveViewNode, customOption) : null;
   const enabledSkillIds = sessionState?.enabledSkillIds ?? [];
@@ -1181,6 +1223,7 @@ export function TreeableApp() {
           onActivateBranch={activateHistoricalBranch}
           onAddCustomOption={activeViewNodeId ? addAndChooseCustomOption : undefined}
           onChoose={chooseFromViewedNode}
+          onRegenerateOptions={canRegenerateOptions ? regenerateOptionsForCurrentNode : undefined}
           onSelectComparisonNode={selectDraftComparisonNode}
           onViewNode={(nodeId) => void viewNode(nodeId)}
           pendingBranch={pendingBranch}

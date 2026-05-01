@@ -4,12 +4,15 @@ import { streamDirectorOptions } from "@/lib/ai/director-stream";
 import { badRequestResponse, isBadRequestError, publicServerErrorMessage } from "@/lib/api/errors";
 import { focusSessionStateForNode, summarizeCurrentDraftOptionsForDirector } from "@/lib/app-state";
 import { getRepository } from "@/lib/db/repository";
+import { OptionGenerationModeSchema } from "@/lib/domain";
 import { encodeNdjson } from "@/lib/stream/ndjson";
 
 export const runtime = "nodejs";
 
 const OptionsBodySchema = z.object({
-  nodeId: z.string().min(1)
+  nodeId: z.string().min(1),
+  optionMode: OptionGenerationModeSchema.default("balanced"),
+  force: z.boolean().default(false)
 });
 
 const ndjsonHeaders = {
@@ -44,7 +47,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "没有找到这个历史节点。" }, { status: 404 });
   }
 
-  if (focusedState.currentNode.options.length === 3) {
+  if (focusedState.currentNode.options.length === 3 && !body.force) {
     return new Response(encodeNdjson({ type: "done", state }), { headers: ndjsonHeaders });
   }
 
@@ -60,7 +63,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
       };
 
       try {
-        const output = await streamDirectorOptions(summarizeCurrentDraftOptionsForDirector(focusedState), {
+        const output = await streamDirectorOptions(summarizeCurrentDraftOptionsForDirector(focusedState, body.optionMode), {
           memory: { resource: state.rootMemory.id, thread: sessionId },
           signal: request.signal,
           onText(event) {

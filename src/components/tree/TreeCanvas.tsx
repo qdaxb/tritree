@@ -2,7 +2,7 @@
 
 import * as d3 from "d3";
 import clsx from "clsx";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -39,6 +39,7 @@ type TreeCanvasProps = {
   onActivateBranch?: (nodeId: string, optionId: BranchOption["id"]) => void;
   onAddCustomOption?: (option: BranchOption) => void;
   onChoose: (optionId: BranchOption["id"], note?: string, optionMode?: OptionGenerationMode) => void;
+  onRegenerateOptions?: (optionMode: OptionGenerationMode) => void;
   onSelectComparisonNode?: (nodeId: string) => void;
   onViewNode?: (nodeId: string) => void;
   skills?: Skill[];
@@ -541,6 +542,7 @@ export function TreeCanvas({
   onActivateBranch,
   onAddCustomOption,
   onChoose,
+  onRegenerateOptions,
   onSelectComparisonNode,
   onViewNode,
   skills
@@ -1018,6 +1020,7 @@ export function TreeCanvas({
           isBusy={isBusy}
           onAddCustomOption={onAddCustomOption}
           onChoose={onChoose}
+          onRegenerateOptions={onRegenerateOptions}
           options={currentNode.options}
           pendingChoice={pendingChoice}
           skills={skills}
@@ -1032,6 +1035,7 @@ export function BranchOptionTray({
   isBusy,
   onAddCustomOption,
   onChoose,
+  onRegenerateOptions,
   options,
   pendingChoice,
   skills = [],
@@ -1040,18 +1044,31 @@ export function BranchOptionTray({
   isBusy: boolean;
   onAddCustomOption?: (option: BranchOption) => void;
   onChoose: (optionId: BranchOption["id"], note?: string, optionMode?: OptionGenerationMode) => void;
+  onRegenerateOptions?: (optionMode: OptionGenerationMode) => void;
   options: BranchOption[];
   pendingChoice: string | null;
   skills?: Skill[];
   visibleCount?: number;
 }) {
   const [optionNotes, setOptionNotes] = useState<Partial<Record<BranchOption["id"], string>>>({});
+  const [optionMode, setOptionMode] = useState<OptionGenerationMode>("balanced");
   const orderedOptions = orderBranchOptions(options);
   const primaryOptions = orderedOptions.filter((option) => isPrimaryBranchOptionId(option.id));
   const primaryAllVisible = visibleCount >= primaryOptions.length;
 
   return (
     <div aria-label="下一步方向选项" className="branch-option-tray" role="group">
+      {primaryAllVisible ? (
+        <div aria-label="方向控制" className="branch-option-tray__controls" role="group">
+          <OptionModeControl
+            disabled={isBusy}
+            mode={optionMode}
+            onModeChange={setOptionMode}
+            onRegenerateOptions={onRegenerateOptions}
+          />
+          <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} skills={skills} />
+        </div>
+      ) : null}
       <div aria-label="三个主选项" className="branch-option-main branch-option-main--horizontal" role="group">
         {primaryOptions.map((option, index) =>
           index < visibleCount ? (
@@ -1063,47 +1080,74 @@ export function BranchOptionTray({
               onNoteChange={(note) => setOptionNotes((notes) => ({ ...notes, [option.id]: note }))}
               onChoose={onChoose}
               option={option}
+              optionMode={optionMode}
             />
           ) : (
             <BranchOptionPlaceholder key={option.id} optionId={option.id} />
           )
         )}
       </div>
-      <div aria-label="旁路设置" className="branch-option-side" role="group">
-        {primaryAllVisible ? (
-          <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} skills={skills} />
-        ) : null}
-      </div>
     </div>
   );
 }
 
+const DIRECTION_RANGE_OPTIONS: Array<{
+  description: string;
+  label: string;
+  value: OptionGenerationMode;
+}> = [
+  { label: "发散", value: "divergent", description: "拓宽下一轮候选方向" },
+  { label: "平衡", value: "balanced", description: "保持适中的候选范围" },
+  { label: "专注", value: "focused", description: "收束下一轮候选方向" }
+];
+
 function OptionModeControl({
   disabled,
-  onChooseMode
+  mode,
+  onModeChange,
+  onRegenerateOptions
 }: {
   disabled: boolean;
-  onChooseMode: (mode: OptionGenerationMode) => void;
+  mode: OptionGenerationMode;
+  onModeChange: (mode: OptionGenerationMode) => void;
+  onRegenerateOptions?: (mode: OptionGenerationMode) => void;
 }) {
-  const items: Array<{ label: string; value: OptionGenerationMode }> = [
-    { label: "发散", value: "divergent" },
-    { label: "平衡", value: "balanced" },
-    { label: "专注", value: "focused" }
-  ];
+  function chooseMode(nextMode: OptionGenerationMode) {
+    onModeChange(nextMode);
+  }
 
   return (
-    <div aria-label={undefined} className="option-mode-control" role="presentation">
-      {items.map((item) => (
+    <div className="option-mode-control-wrap">
+      <span className="option-mode-control__label">发散度</span>
+      <div aria-label="发散度" className="option-mode-control" role="group">
+        {DIRECTION_RANGE_OPTIONS.map((item) => (
+          <button
+            aria-label={item.label}
+            aria-pressed={mode === item.value}
+            className={clsx("option-mode-control__button", mode === item.value && "option-mode-control__button--active")}
+            disabled={disabled}
+            key={item.value}
+            onClick={() => chooseMode(item.value)}
+            title={`${item.description}；点换一组才会刷新当前选项`}
+            type="button"
+          >
+            <span className="option-mode-control__button-label">{item.label}</span>
+          </button>
+        ))}
+      </div>
+      {onRegenerateOptions ? (
         <button
-          className="option-mode-control__button"
+          aria-label="换一组方向"
+          className="option-mode-refresh"
           disabled={disabled}
-          key={item.value}
-          onClick={() => onChooseMode(item.value)}
+          onClick={() => onRegenerateOptions(mode)}
+          title="换一组方向"
           type="button"
         >
-          {item.label}
+          <RefreshCw aria-hidden="true" size={13} strokeWidth={2.4} />
+          <span>换一组</span>
         </button>
-      ))}
+      ) : null}
     </div>
   );
 }
@@ -1162,6 +1206,7 @@ function BranchOptionCard({
   onChoose,
   onNoteChange,
   option,
+  optionMode,
   variant = "primary"
 }: {
   isBusy: boolean;
@@ -1170,11 +1215,15 @@ function BranchOptionCard({
   onChoose: (optionId: BranchOption["id"], note?: string, optionMode?: OptionGenerationMode) => void;
   onNoteChange: (note: string) => void;
   option: BranchOption;
+  optionMode: OptionGenerationMode;
   variant?: "primary" | "side";
 }) {
+  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const displayLabel = displayBranchLabel(option.label);
   const choiceLabel = isCustomBranchOptionId(option.id) && variant === "side" ? "自定义" : option.id.toUpperCase();
+  const descriptionToggleLabel = isDescriptionOpen ? `${choiceLabel} 收起详情` : `${choiceLabel} 展开详情`;
+  const canShowNoteAction = isDescriptionOpen || note.trim().length > 0;
 
   return (
     <div
@@ -1191,7 +1240,7 @@ function BranchOptionCard({
         data-pending={isPending ? "true" : undefined}
         data-choice-button="true"
         disabled={isBusy}
-        onClick={() => onChoose(option.id, note.trim(), "balanced")}
+        onClick={() => onChoose(option.id, note.trim(), optionMode)}
         type="button"
       >
         <span className="branch-card__header">
@@ -1201,55 +1250,69 @@ function BranchOptionCard({
               {displayLabel}
               {isPending ? " 生成中" : ""}
             </span>
-            <span className="branch-card__description">{option.description}</span>
+            <span className={clsx("branch-card__description", isDescriptionOpen && "branch-card__description--expanded")}>
+              {option.description}
+            </span>
           </span>
         </span>
       </button>
       <div className="branch-card__meta">
-        {option.mode ? <span className="branch-card__mode-badge">{formatOptionModeLabel(option.mode)}</span> : null}
         <button
-          aria-expanded={isNoteOpen}
-          aria-label={`${choiceLabel} 更多备注`}
-          className={clsx("branch-card__more", note.trim() && "branch-card__more--active")}
+          aria-expanded={isDescriptionOpen}
+          aria-label={descriptionToggleLabel}
           disabled={isBusy}
-          onClick={() => setIsNoteOpen((open) => !open)}
+          className="branch-card__more"
+          onClick={() => setIsDescriptionOpen((open) => !open)}
           type="button"
         >
-          更多
+          {isDescriptionOpen ? (
+            <ChevronUp aria-hidden="true" size={13} strokeWidth={2.4} />
+          ) : (
+            <ChevronDown aria-hidden="true" size={13} strokeWidth={2.4} />
+          )}
+          <span>{isDescriptionOpen ? "收起" : "详情"}</span>
         </button>
+        {canShowNoteAction ? (
+          <button
+            aria-expanded={isNoteOpen}
+            aria-label={`${choiceLabel} 补充要求`}
+            className={clsx("branch-card__more", note.trim() && "branch-card__more--active")}
+            disabled={isBusy}
+            onClick={() => setIsNoteOpen((open) => !open)}
+            type="button"
+          >
+            {note.trim() ? "编辑要求" : "补充要求"}
+          </button>
+        ) : null}
       </div>
       {isNoteOpen ? (
         <div className="branch-card__more-panel">
           <label className="branch-card__note">
-            <span>更多备注</span>
+            <span>补充要求</span>
             <textarea
-              aria-label={`更多备注 ${choiceLabel}`}
+              aria-label={`补充要求 ${choiceLabel}`}
               disabled={isBusy}
               onChange={(event) => onNoteChange(event.target.value)}
-              placeholder="给模型一点补充"
+              placeholder="比如语气、保留点、避开点"
               rows={2}
               value={note}
             />
           </label>
-          <div aria-label={`${choiceLabel} 生成倾向`} className="branch-card__mode" role="group">
-            <OptionModeControl
+          <div className="branch-card__note-actions">
+            <button
+              aria-label={`${choiceLabel} 按此方向生成`}
+              className="branch-card__note-submit"
               disabled={isBusy}
-              onChooseMode={(mode) => onChoose(option.id, note.trim(), mode)}
-            />
+              onClick={() => onChoose(option.id, note.trim(), optionMode)}
+              type="button"
+            >
+              按此方向生成
+            </button>
           </div>
         </div>
       ) : null}
     </div>
   );
-}
-
-function formatOptionModeLabel(mode: OptionGenerationMode) {
-  const labels: Record<OptionGenerationMode, string> = {
-    divergent: "发散",
-    balanced: "平衡",
-    focused: "专注"
-  };
-  return labels[mode];
 }
 
 function MoreDirectionsCard({
@@ -1280,9 +1343,10 @@ function MoreDirectionsCard({
         className="branch-side-action"
         disabled={disabled}
         onClick={() => setIsEditing(true)}
+        title="添加自定义方向"
         type="button"
       >
-        + 更多方向
+        自定义
       </button>
     );
   }

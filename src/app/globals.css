@@ -336,7 +336,7 @@ button:disabled {
 
 .app-shell {
   height: 100dvh;
-  min-height: 720px;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
   grid-template-rows: 72px minmax(0, 1fr);
@@ -594,7 +594,7 @@ button:disabled {
   min-height: 0;
   display: grid;
   gap: 12px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .tree-canvas {
@@ -606,7 +606,7 @@ button:disabled {
   grid-template-rows: minmax(360px, 1fr) auto;
   gap: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: auto;
   background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.26);
   border-radius: 8px;
@@ -1066,16 +1066,7 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  align-items: stretch;
-}
-
-.branch-option-side {
-  min-height: 30px;
-  min-width: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 8px;
+  align-items: start;
 }
 
 .branch-card {
@@ -1168,11 +1159,13 @@ button:disabled {
 
 .branch-card--option:not(.branch-card--side) {
   min-height: 92px;
+  align-content: start;
 }
 
 .branch-card__copy {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .branch-card--side .branch-card__label {
@@ -1187,6 +1180,19 @@ button:disabled {
   line-height: 1.42;
 }
 
+.branch-card--option:not(.branch-card--side) .branch-card__description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.branch-card--option:not(.branch-card--side) .branch-card__description--expanded {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
 .branch-card__impact {
   color: #2563eb;
 }
@@ -1195,37 +1201,40 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  justify-content: flex-end;
-  margin-top: 6px;
-}
-
-.branch-card__mode {
-  margin-right: auto;
-}
-
-.branch-card__mode-badge {
-  margin-right: auto;
-  padding: 2px 7px;
-  color: #075985;
-  background: #e0f2fe;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
+  justify-content: flex-start;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .branch-card__more-panel {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
-.branch-card__more,
-.branch-side-action {
+.branch-card__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   padding: 0;
   color: rgba(71, 85, 105, 0.66);
   background: transparent;
   border: 0;
   font-size: 0.74rem;
   font-weight: 760;
+  white-space: nowrap;
+}
+
+.branch-side-action {
+  min-height: 32px;
+  padding: 0 10px;
+  color: rgba(71, 85, 105, 0.72);
+  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 820;
+  white-space: nowrap;
 }
 
 .branch-card__more:hover,
@@ -1234,27 +1243,108 @@ button:disabled {
   color: #075985;
 }
 
+.branch-card__note-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.branch-card__note-submit {
+  min-height: 32px;
+  padding: 0 10px;
+  color: #06111f;
+  background: var(--gold);
+  border: 0;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.branch-card__note-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.branch-option-tray__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 36px;
+  flex-wrap: wrap;
+}
+
+.branch-option-tray__controls > .branch-side-action {
+  margin-left: auto;
+}
+
+.option-mode-control-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: rgba(71, 85, 105, 0.76);
+  flex-wrap: wrap;
+}
+
+.option-mode-control__label {
+  color: rgba(15, 23, 42, 0.72);
+  font-size: 0.74rem;
+  font-weight: 840;
+  white-space: nowrap;
+}
+
 .option-mode-control {
   display: inline-flex;
   align-items: center;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 999px;
+  background: rgba(248, 250, 252, 0.9);
 }
 
 .option-mode-control__button {
-  min-height: 24px;
-  padding: 0 9px;
-  color: rgba(71, 85, 105, 0.7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  min-width: 58px;
+  padding: 0 12px;
+  color: rgba(71, 85, 105, 0.72);
   background: transparent;
   border: 0;
-  font-size: 0.72rem;
-  font-weight: 780;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .option-mode-control__button--active {
-  color: #075985;
-  background: #e0f2fe;
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.option-mode-control__button-label {
+  display: block;
+}
+
+.option-mode-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 8px;
+  color: #0f766e;
+  background: #f0fdfa;
+  border: 1px solid rgba(20, 184, 166, 0.24);
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.option-mode-refresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
 }
 
 .branch-card__note,
@@ -2292,7 +2382,12 @@ button:disabled {
   }
 
   .branch-option-tray {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
+  }
+
+  .option-mode-control-wrap {
+    align-items: flex-start;
+    flex-wrap: wrap;
   }
 
   .branch-card {
