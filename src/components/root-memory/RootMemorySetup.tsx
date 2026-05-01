@@ -109,6 +109,7 @@ export function RootMemorySetup({
             <textarea
               aria-label="补充目标"
               disabled={isSaving}
+              maxLength={240}
               onChange={(event) => setCreationGoalNote(event.target.value)}
               placeholder="例如：写给正在做 AI 产品的人，语气克制一点"
               rows={2}

@@ -107,6 +107,12 @@ describe("RootMemorySetup", () => {
     });
   });
 
+  it("limits the optional creation goal note to the schema length", () => {
+    render(<RootMemorySetup onManageSkills={vi.fn()} onSubmit={vi.fn()} isSaving={false} skills={skills} />);
+
+    expect(screen.getByRole("textbox", { name: "补充目标" })).toHaveAttribute("maxlength", "240");
+  });
+
   it("can start with the current seed and selected skills already filled in", async () => {
     const onSubmit = vi.fn();
     render(
