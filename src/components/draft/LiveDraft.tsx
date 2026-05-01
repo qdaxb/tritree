@@ -85,7 +85,11 @@ export function LiveDraft({
   const [editingMode, setEditingMode] = useState<"normal" | null>(null);
   const [isPublishPanelOpen, setIsPublishPanelOpen] = useState(false);
   const [activePublishPlatform, setActivePublishPlatform] = useState<PublishPlatform>("weibo");
-  const [publishTexts, setPublishTexts] = useState<PublishTextByPlatform>({ weibo: "", xiaohongshu: "" });
+  const [publishTexts, setPublishTexts] = useState<PublishTextByPlatform>({
+    weibo: "",
+    xiaohongshu: "",
+    moments: ""
+  });
   const [publishXiaohongshuTitle, setPublishXiaohongshuTitle] = useState("");
   const [publishImagePrompt, setPublishImagePrompt] = useState("");
   const [copiedPublishAction, setCopiedPublishAction] = useState<PublishCopyAction | null>(null);
@@ -451,11 +455,13 @@ export function LiveDraft({
         ? publishTexts.weibo.trim()
         : action === "xiaohongshu"
           ? publishTexts.xiaohongshu.trim()
-          : action === "title" && activePublishPlatform === "xiaohongshu"
-            ? publishXiaohongshuTitle.trim()
-            : action === "imagePrompt"
-              ? publishImagePrompt.trim()
-              : publishCopyValue(content, activePublishPlatform, action);
+          : action === "moments"
+            ? publishTexts.moments.trim()
+            : action === "title" && activePublishPlatform === "xiaohongshu"
+              ? publishXiaohongshuTitle.trim()
+              : action === "imagePrompt"
+                ? publishImagePrompt.trim()
+                : publishCopyValue(content, activePublishPlatform, action);
     if (!value) return;
 
     try {
@@ -510,7 +516,8 @@ export function LiveDraft({
   function setPublishFieldsFromDraft(nextDraft: Draft | null) {
     setPublishTexts({
       weibo: nextDraft ? formatPublishText(nextDraft, "weibo") : "",
-      xiaohongshu: nextDraft ? formatPublishText(nextDraft, "xiaohongshu") : ""
+      xiaohongshu: nextDraft ? formatPublishText(nextDraft, "xiaohongshu") : "",
+      moments: nextDraft ? formatPublishText(nextDraft, "moments") : ""
     });
     setPublishXiaohongshuTitle(nextDraft ? resolveDraftTitle(nextDraft.title, nextDraft.body).trim() : "");
     setPublishImagePrompt(nextDraft?.imagePrompt.trim() ?? "");
@@ -576,7 +583,7 @@ export function LiveDraft({
             </button>
           </div>
           <div aria-label="发布平台" className="draft-publish-tabs" role="group">
-            {(["weibo", "xiaohongshu"] as const).map((platform) => (
+            {(["weibo", "xiaohongshu", "moments"] as const).map((platform) => (
               <button
                 aria-pressed={activePublishPlatform === platform}
                 key={platform}
@@ -623,6 +630,25 @@ export function LiveDraft({
                   }}
                   rows={6}
                   value={publishTexts.xiaohongshu}
+                />
+              </>
+            ) : activePublishPlatform === "moments" ? (
+              <>
+                <div className="draft-publish-preview__meta">
+                  <span>朋友圈版预览</span>
+                  <span>约 {publishTexts.moments.length} 字</span>
+                </div>
+                <textarea
+                  aria-label="朋友圈文案"
+                  onChange={(event) => {
+                    setPublishTexts((current) => ({
+                      ...current,
+                      moments: event.target.value
+                    }));
+                    setCopiedPublishAction(null);
+                  }}
+                  rows={7}
+                  value={publishTexts.moments}
                 />
               </>
             ) : (
@@ -1207,13 +1233,17 @@ function normalizedHashtags(hashtags: string[], platform: PublishPlatform) {
 }
 
 function formatPublishText(draft: Draft, platform: PublishPlatform) {
+  if (platform === "moments") return draft.body.trim();
+
   const body = draft.body.trim();
   const hashtags = normalizedHashtags(draft.hashtags, platform).join(" ");
   return [body, hashtags].filter(Boolean).join("\n\n");
 }
 
 function publishPlatformLabel(platform: PublishPlatform) {
-  return platform === "weibo" ? "微博" : "小红书";
+  if (platform === "weibo") return "微博";
+  if (platform === "xiaohongshu") return "小红书";
+  return "朋友圈";
 }
 
 function publishCopyValue(draft: Draft, platform: PublishPlatform, action: PublishCopyAction) {
@@ -1225,13 +1255,16 @@ function publishCopyValue(draft: Draft, platform: PublishPlatform, action: Publi
 }
 
 function publishPrimaryActionFor(platform: PublishPlatform): PublishCopyAction {
-  return platform === "weibo" ? "weibo" : "xiaohongshu";
+  if (platform === "weibo") return "weibo";
+  if (platform === "xiaohongshu") return "xiaohongshu";
+  return "moments";
 }
 
 function publishCopyLabel(platform: PublishPlatform, action: PublishCopyAction) {
   void platform;
   if (action === "weibo") return "复制微博文案";
   if (action === "xiaohongshu") return "复制小红书文案";
+  if (action === "moments") return "复制朋友圈文案";
   if (action === "title") return "复制标题";
   if (action === "body") return "复制正文";
   if (action === "imagePrompt") return "复制配图提示";
@@ -1240,6 +1273,7 @@ function publishCopyLabel(platform: PublishPlatform, action: PublishCopyAction) 
 
 function secondaryPublishActionsFor(draft: Draft, platform: PublishPlatform): PublishCopyAction[] {
   const actions: PublishCopyAction[] = [];
+  if (platform === "moments") return actions;
   if (platform === "xiaohongshu" && resolveDraftTitle(draft.title, draft.body).trim()) actions.push("title");
   if (draft.body.trim()) actions.push("body");
   if (normalizedHashtags(draft.hashtags, platform).length) actions.push("hashtags");
@@ -1253,12 +1287,23 @@ function buildPublishChecks(
   imagePrompt?: string,
   publishTitle?: string
 ): PublishCheck[] {
+  const formattedText = publishText ?? formatPublishText(draft, platform);
+  const hasImagePrompt = Boolean((imagePrompt ?? draft.imagePrompt).trim());
+
+  if (platform === "moments") {
+    const checks: PublishCheck[] = [
+      { tone: "neutral", text: `朋友圈字数约 ${formattedText.length}` },
+      formattedText.trim() ? { tone: "ok", text: "正文已生成" } : { tone: "warn", text: "缺少正文" }
+    ];
+    if (formattedText.length > 700) checks.push({ tone: "warn", text: "朋友圈长文可能需要收紧" });
+    checks.push(hasImagePrompt ? { tone: "neutral", text: "配图提示可选用" } : { tone: "neutral", text: "朋友圈可以不配图" });
+    return checks;
+  }
+
   const resolvedTitle = resolveDraftTitle(draft.title, draft.body).trim();
   const title = (publishTitle ?? resolvedTitle).trim();
   const hasExplicitTitle = Boolean(draft.title.trim()) || (publishTitle !== undefined && title !== resolvedTitle);
   const hashtags = normalizedHashtags(draft.hashtags, platform);
-  const formattedText = publishText ?? formatPublishText(draft, platform);
-  const hasImagePrompt = Boolean((imagePrompt ?? draft.imagePrompt).trim());
 
   const shared: PublishCheck[] = [
     draft.body.trim() ? { tone: "ok", text: "正文已生成" } : { tone: "warn", text: "缺少正文" },
@@ -1290,8 +1335,8 @@ type DiffToken = {
 
 type DiffField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDiffStreamingField = Extract<DiffField, "body" | "imagePrompt">;
-type PublishPlatform = "weibo" | "xiaohongshu";
-type PublishCopyAction = "weibo" | "xiaohongshu" | "title" | "body" | "hashtags" | "imagePrompt";
+type PublishPlatform = "weibo" | "xiaohongshu" | "moments";
+type PublishCopyAction = "weibo" | "xiaohongshu" | "moments" | "title" | "body" | "hashtags" | "imagePrompt";
 type PublishCheck = {
   text: string;
   tone: "ok" | "warn" | "neutral";

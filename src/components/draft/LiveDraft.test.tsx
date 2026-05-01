@@ -1320,7 +1320,7 @@ describe("LiveDraft", () => {
     expect(publishRule).toContain("overflow: auto");
   });
 
-  it("opens a publish assistant with Weibo and Xiaohongshu tabs", async () => {
+  it("opens a publish assistant with Weibo, Xiaohongshu, and Moments tabs", async () => {
     render(
       <LiveDraft
         draft={{
@@ -1339,6 +1339,7 @@ describe("LiveDraft", () => {
     expect(screen.getByRole("dialog", { name: "发布助手" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "微博" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "小红书" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "朋友圈" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("微博版预览")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "微博发布文案" })).toHaveValue(
       "先给对方一条主线，再补细节。\n\n#产品思考# #沟通效率#"
@@ -1348,9 +1349,18 @@ describe("LiveDraft", () => {
 
     expect(screen.getByRole("button", { name: "微博" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "小红书" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "朋友圈" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("小红书版预览")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "小红书标题" })).toHaveValue("把复杂工作讲成一句人话");
     expect(screen.getByRole("textbox", { name: "小红书正文" })).toHaveValue("先给对方一条主线，再补细节。\n\n#产品思考 #沟通效率");
+
+    await userEvent.click(screen.getByRole("button", { name: "朋友圈" }));
+
+    expect(screen.getByRole("button", { name: "微博" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "小红书" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "朋友圈" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("朋友圈版预览")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "朋友圈文案" })).toHaveValue("先给对方一条主线，再补细节。");
   });
 
   it("copies the edited Weibo text with double-hash topics", async () => {
@@ -1426,6 +1436,45 @@ describe("LiveDraft", () => {
     expect(screen.getByRole("button", { name: "复制话题" })).toBeInTheDocument();
   });
 
+  it("copies the edited body-first Moments text without title or topics", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+
+    render(
+      <LiveDraft
+        draft={{
+          title: "不会进入朋友圈",
+          body: "朋友圈正文第一句。\n朋友圈正文第二句。",
+          hashtags: ["产品思考", "#沟通效率"],
+          imagePrompt: "生活化手机随拍"
+        }}
+        isBusy={false}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+    await userEvent.click(screen.getByRole("button", { name: "朋友圈" }));
+
+    const momentsText = screen.getByRole("textbox", { name: "朋友圈文案" });
+    expect(momentsText).toHaveValue("朋友圈正文第一句。\n朋友圈正文第二句。");
+    expect((momentsText as HTMLTextAreaElement).value).not.toContain("不会进入朋友圈");
+    expect((momentsText as HTMLTextAreaElement).value).not.toContain("#产品思考");
+    expect(screen.queryByRole("button", { name: "复制标题" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复制话题" })).not.toBeInTheDocument();
+
+    fireEvent.change(momentsText, {
+      target: { value: "手动改过的朋友圈文案" }
+    });
+    await userEvent.click(screen.getByRole("button", { name: "复制朋友圈文案" }));
+
+    expect(writeText).toHaveBeenCalledWith("手动改过的朋友圈文案");
+    expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
+  });
+
   it("shows the image prompt in the publish assistant and copies it", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
@@ -1466,6 +1515,31 @@ describe("LiveDraft", () => {
     expect(screen.getByText("标题来自正文摘要")).toBeInTheDocument();
     expect(screen.getByText("缺少话题")).toBeInTheDocument();
     expect(screen.getByText("建议补充配图提示")).toBeInTheDocument();
+  });
+
+  it("shows Moments publish checks from edited text and optional image prompt", async () => {
+    render(
+      <LiveDraft
+        draft={{ title: "标题", body: "朋友圈长文".repeat(150), hashtags: ["#话题"], imagePrompt: "" }}
+        isBusy={false}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+    await userEvent.click(screen.getByRole("button", { name: "朋友圈" }));
+
+    expect(screen.getByText(/朋友圈字数约/)).toBeInTheDocument();
+    expect(screen.getByText("正文已生成")).toBeInTheDocument();
+    expect(screen.getByText("朋友圈长文可能需要收紧")).toBeInTheDocument();
+    expect(screen.getByText("朋友圈可以不配图")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "朋友圈文案" }), {
+      target: { value: "" }
+    });
+
+    expect(screen.getByText("朋友圈字数约 0")).toBeInTheDocument();
+    expect(screen.getByText("缺少正文")).toBeInTheDocument();
   });
 
   it("closes the publish assistant when editing starts or the draft changes", async () => {
