@@ -128,6 +128,32 @@ describe("summarizeSessionForDirector", () => {
     expect(summary.selectedOptionLabel).not.toContain("小改");
   });
 
+  it("puts the direction range into editor conversation messages", () => {
+    const state = createStateWithPath([
+      createNode({
+        id: "root",
+        roundIndex: 1,
+        options: [
+          option("a", "确定表达主线"),
+          option("b", "选择读者视角"),
+          option("c", "整理故事推进")
+        ],
+        selectedOptionId: "b",
+        foldedOptions: [option("a", "确定表达主线"), option("c", "整理故事推进")]
+      })
+    ]);
+
+    const summary = summarizeCurrentDraftOptionsForDirector(state, "focused");
+    const messages = (summary as any).messages as Array<{ role: string; content: string }>;
+    const finalMessage = messages.at(-1)?.content ?? "";
+
+    expect(finalMessage).toContain("本轮要求：");
+    expect(finalMessage).toContain("方向范围：专注");
+    expect(finalMessage).toContain("三个选项必须共享同一个核心改写问题");
+    expect(finalMessage).toContain("只给近距离的三种处理办法");
+    expect(finalMessage.indexOf("本轮要求：")).toBeLessThan(finalMessage.indexOf("当前内容："));
+  });
+
   it("includes previous and current option labels so the director can avoid repeats", () => {
     const state = createStateWithPath([
       createNode({

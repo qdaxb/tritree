@@ -88,7 +88,7 @@ export function summarizeEditedDraftForDirector(state: SessionState, draft: Draf
     foldedSummary: formatCurrentPathFoldedOptionsForDirector(state),
     selectedOptionLabel,
     enabledSkills: enabledSkillsForDirector(state),
-    messages: buildEditorMessages(state, draft)
+    messages: buildEditorMessages(state, draft, selectedOptionLabel)
   };
 }
 
@@ -106,7 +106,7 @@ export function summarizeCurrentDraftOptionsForDirector(
     foldedSummary: formatCurrentPathFoldedOptionsForDirector(state),
     selectedOptionLabel,
     enabledSkills: enabledSkillsForDirector(state),
-    messages: buildEditorMessages(state, state.currentDraft)
+    messages: buildEditorMessages(state, state.currentDraft, selectedOptionLabel)
   };
 }
 
@@ -224,7 +224,7 @@ function buildDraftConversationMessages(state: SessionState, finalUserRequest: s
   return mergeConsecutiveUserMessages(messages);
 }
 
-function buildEditorMessages(state: SessionState, currentDraft: Draft | null): DirectorMessage[] {
+function buildEditorMessages(state: SessionState, currentDraft: Draft | null, reviewInstruction = ""): DirectorMessage[] {
   const messages: DirectorMessage[] = [
     {
       role: "user",
@@ -261,6 +261,7 @@ function buildEditorMessages(state: SessionState, currentDraft: Draft | null): D
     currentDraft,
     foldedSummary: formatCurrentPathFoldedSuggestionTitlesForEditor(state),
     latestRevisionSummary,
+    reviewInstruction,
     state
   });
 
@@ -330,17 +331,20 @@ function formatEditorCurrentReviewMaterial({
   currentDraft,
   foldedSummary,
   latestRevisionSummary,
+  reviewInstruction,
   state
 }: {
   currentDraft: Draft | null;
   foldedSummary: string;
   latestRevisionSummary: string;
+  reviewInstruction: string;
   state: SessionState;
 }) {
   const seenLabels = uniqueLabels(currentPathOptions(state));
 
   return [
     "本轮审稿材料：",
+    reviewInstruction ? `本轮要求：\n${reviewInstruction}` : "",
     `当前内容：\n${currentDraft ? formatDraftForDirector(currentDraft) : "暂无内容。"}`,
     latestRevisionSummary,
     `暂未采纳的建议标题：\n${foldedSummary}`,
