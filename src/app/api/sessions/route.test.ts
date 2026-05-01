@@ -203,6 +203,105 @@ describe("POST /api/sessions", () => {
     expect(text.indexOf('"type":"options"')).toBeLessThan(text.indexOf('"type":"done"'));
   });
 
+  it("keeps the seed draft body raw while passing goal context through root summary", async () => {
+    const rootMemoryWithGoal = {
+      id: "root",
+      preferences: {
+        seed: "写一篇解释为什么要写作的文章",
+        creationGoal: "改成可发布",
+        creationGoalNote: "写给想建立写作习惯的人",
+        domains: ["创作"],
+        tones: ["平静"],
+        styles: ["观点型"],
+        personas: ["实践者"]
+      },
+      summary: [
+        "Seed：写一篇解释为什么要写作的文章",
+        "创作目标：改成可发布",
+        "目标补充：写给想建立写作习惯的人"
+      ].join("\n"),
+      learnedSummary: "",
+      createdAt: "2026-04-26T00:00:00.000Z",
+      updatedAt: "2026-04-26T00:00:00.000Z"
+    };
+    const draftState = {
+      rootMemory: rootMemoryWithGoal,
+      session: {
+        id: "session-1",
+        title: "Draft",
+        status: "active",
+        currentNodeId: "node-1",
+        createdAt: "2026-04-26T00:00:00.000Z",
+        updatedAt: "2026-04-26T00:00:00.000Z"
+      },
+      currentNode: {
+        id: "node-1",
+        sessionId: "session-1",
+        parentId: null,
+        parentOptionId: null,
+        roundIndex: 1,
+        roundIntent: "选择起始方式",
+        options: [],
+        selectedOptionId: null,
+        foldedOptions: [],
+        createdAt: "2026-04-26T00:00:00.000Z"
+      },
+      currentDraft: createSeedDraft("写一篇解释为什么要写作的文章"),
+      nodeDrafts: [{ nodeId: "node-1", draft: createSeedDraft("写一篇解释为什么要写作的文章") }],
+      selectedPath: [],
+      treeNodes: [],
+      enabledSkillIds: ["system-analysis"],
+      enabledSkills: resolvedSkills,
+      foldedBranches: [],
+      publishPackage: null
+    };
+    const createSessionDraft = vi.fn().mockReturnValue(draftState);
+    const updateNodeOptions = vi.fn().mockReturnValue({
+      ...draftState,
+      currentNode: {
+        ...draftState.currentNode,
+        options: [
+          { id: "a", label: "分析", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "扩写", description: "B", impact: "B", kind: "deepen" },
+          { id: "c", label: "润色", description: "C", impact: "C", kind: "reframe" }
+        ]
+      }
+    });
+    getRepositoryMock.mockReturnValue({
+      getRootMemory: () => rootMemoryWithGoal,
+      defaultEnabledSkillIds: vi.fn(() => ["system-analysis"]),
+      resolveSkillsByIds: vi.fn(() => resolvedSkills),
+      createSessionDraft,
+      updateNodeOptions
+    });
+    streamDirectorOptionsMock.mockResolvedValue({
+      roundIntent: "选择起始方式",
+      options: [
+        { id: "a", label: "分析", description: "A", impact: "A", kind: "explore" },
+        { id: "b", label: "扩写", description: "B", impact: "B", kind: "deepen" },
+        { id: "c", label: "润色", description: "C", impact: "C", kind: "reframe" }
+      ],
+      memoryObservation: ""
+    });
+
+    const response = await POST(new Request("http://test.local/api/sessions", { method: "POST" }));
+
+    expect(response.status).toBe(200);
+    expect(createSessionDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        draft: expect.objectContaining({
+          body: "写一篇解释为什么要写作的文章"
+        })
+      })
+    );
+    expect(streamDirectorOptionsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rootSummary: expect.stringContaining("创作目标：改成可发布")
+      }),
+      expect.anything()
+    );
+  });
+
   it("starts a session with selected enabled skill ids", async () => {
     const draftState = {
       rootMemory: {
