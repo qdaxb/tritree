@@ -155,6 +155,10 @@ describe("tree director compatibility generators", () => {
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
       "[treeable:mastra-prompt:draft]",
+      expect.stringContaining("标题不要夸张")
+    );
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[treeable:mastra-prompt:draft]",
       expect.not.stringContaining("逻辑链审查")
     );
   });
@@ -183,6 +187,10 @@ describe("tree director compatibility generators", () => {
     expect(consoleInfoSpy).toHaveBeenCalledWith(
       "[treeable:mastra-prompt:options]",
       expect.stringContaining("逻辑链审查")
+    );
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[treeable:mastra-prompt:options]",
+      expect.stringContaining("标题不要夸张")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
       "[treeable:mastra-prompt:options]",
