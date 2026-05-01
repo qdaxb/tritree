@@ -86,6 +86,7 @@ export function LiveDraft({
   const [isPublishPanelOpen, setIsPublishPanelOpen] = useState(false);
   const [activePublishPlatform, setActivePublishPlatform] = useState<PublishPlatform>("weibo");
   const [publishTexts, setPublishTexts] = useState<PublishTextByPlatform>({ weibo: "", xiaohongshu: "" });
+  const [publishXiaohongshuTitle, setPublishXiaohongshuTitle] = useState("");
   const [publishImagePrompt, setPublishImagePrompt] = useState("");
   const [copiedPublishAction, setCopiedPublishAction] = useState<PublishCopyAction | null>(null);
   const [publishCopyError, setPublishCopyError] = useState("");
@@ -446,11 +447,15 @@ export function LiveDraft({
     if (!content) return;
 
     const value =
-      action === "weibo" || action === "xiaohongshu"
-        ? publishTexts[activePublishPlatform].trim()
-        : action === "imagePrompt"
-          ? publishImagePrompt.trim()
-          : publishCopyValue(content, activePublishPlatform, action);
+      action === "weibo"
+        ? publishTexts.weibo.trim()
+        : action === "xiaohongshu"
+          ? publishTexts.xiaohongshu.trim()
+          : action === "title" && activePublishPlatform === "xiaohongshu"
+            ? publishXiaohongshuTitle.trim()
+            : action === "imagePrompt"
+              ? publishImagePrompt.trim()
+              : publishCopyValue(content, activePublishPlatform, action);
     if (!value) return;
 
     try {
@@ -507,6 +512,7 @@ export function LiveDraft({
       weibo: nextDraft ? formatPublishText(nextDraft, "weibo") : "",
       xiaohongshu: nextDraft ? formatPublishText(nextDraft, "xiaohongshu") : ""
     });
+    setPublishXiaohongshuTitle(nextDraft ? resolveDraftTitle(nextDraft.title, nextDraft.body).trim() : "");
     setPublishImagePrompt(nextDraft?.imagePrompt.trim() ?? "");
   }
 
@@ -586,21 +592,59 @@ export function LiveDraft({
             ))}
           </div>
           <section className="draft-publish-preview" aria-label={`${publishPlatformLabel(activePublishPlatform)}版预览`}>
-            <div className="draft-publish-preview__meta">
-              <span>{publishPlatformLabel(activePublishPlatform)}版预览</span>
-              <span>约 {publishTexts[activePublishPlatform].length} 字</span>
-            </div>
-            <textarea
-              aria-label={`${publishPlatformLabel(activePublishPlatform)}发布文案`}
-              onChange={(event) =>
-                setPublishTexts((current) => ({
-                  ...current,
-                  [activePublishPlatform]: event.target.value
-                }))
-              }
-              rows={7}
-              value={publishTexts[activePublishPlatform]}
-            />
+            {activePublishPlatform === "xiaohongshu" ? (
+              <>
+                <div className="draft-publish-preview__meta">
+                  <span>小红书版预览</span>
+                  <span>标题约 {publishXiaohongshuTitle.length} 字</span>
+                </div>
+                <textarea
+                  aria-label="小红书标题"
+                  className="draft-publish-preview__title-field"
+                  onChange={(event) => {
+                    setPublishXiaohongshuTitle(event.target.value);
+                    setCopiedPublishAction(null);
+                  }}
+                  rows={2}
+                  value={publishXiaohongshuTitle}
+                />
+                <div className="draft-publish-preview__meta">
+                  <span>小红书正文</span>
+                  <span>约 {publishTexts.xiaohongshu.length} 字</span>
+                </div>
+                <textarea
+                  aria-label="小红书正文"
+                  onChange={(event) => {
+                    setPublishTexts((current) => ({
+                      ...current,
+                      xiaohongshu: event.target.value
+                    }));
+                    setCopiedPublishAction(null);
+                  }}
+                  rows={6}
+                  value={publishTexts.xiaohongshu}
+                />
+              </>
+            ) : (
+              <>
+                <div className="draft-publish-preview__meta">
+                  <span>微博版预览</span>
+                  <span>约 {publishTexts.weibo.length} 字</span>
+                </div>
+                <textarea
+                  aria-label="微博发布文案"
+                  onChange={(event) => {
+                    setPublishTexts((current) => ({
+                      ...current,
+                      weibo: event.target.value
+                    }));
+                    setCopiedPublishAction(null);
+                  }}
+                  rows={7}
+                  value={publishTexts.weibo}
+                />
+              </>
+            )}
           </section>
           <section className="draft-publish-image-prompt">
             <div className="draft-publish-image-prompt__meta">
@@ -646,7 +690,13 @@ export function LiveDraft({
             </p>
           ) : null}
           <div className="draft-publish-checks" aria-label={`${publishPlatformLabel(activePublishPlatform)}发布检查`}>
-            {buildPublishChecks(content, activePublishPlatform, publishTexts[activePublishPlatform], publishImagePrompt).map((check) => (
+            {buildPublishChecks(
+              content,
+              activePublishPlatform,
+              publishTexts[activePublishPlatform],
+              publishImagePrompt,
+              publishXiaohongshuTitle
+            ).map((check) => (
               <p className={`draft-publish-check draft-publish-check--${check.tone}`} key={check.text}>
                 <span aria-hidden="true">{check.tone === "ok" ? "✓" : check.tone === "warn" ? "!" : "•"}</span>
                 <span>{check.text}</span>
@@ -1157,10 +1207,9 @@ function normalizedHashtags(hashtags: string[], platform: PublishPlatform) {
 }
 
 function formatPublishText(draft: Draft, platform: PublishPlatform) {
-  const title = resolveDraftTitle(draft.title, draft.body).trim();
   const body = draft.body.trim();
   const hashtags = normalizedHashtags(draft.hashtags, platform).join(" ");
-  return [title, body, hashtags].filter(Boolean).join("\n\n");
+  return [body, hashtags].filter(Boolean).join("\n\n");
 }
 
 function publishPlatformLabel(platform: PublishPlatform) {
@@ -1197,17 +1246,21 @@ function secondaryPublishActionsFor(draft: Draft, platform: PublishPlatform): Pu
   return actions;
 }
 
-function buildPublishChecks(draft: Draft, platform: PublishPlatform, publishText?: string, imagePrompt?: string): PublishCheck[] {
-  const title = resolveDraftTitle(draft.title, draft.body).trim();
-  const hasExplicitTitle = Boolean(draft.title.trim());
+function buildPublishChecks(
+  draft: Draft,
+  platform: PublishPlatform,
+  publishText?: string,
+  imagePrompt?: string,
+  publishTitle?: string
+): PublishCheck[] {
+  const resolvedTitle = resolveDraftTitle(draft.title, draft.body).trim();
+  const title = (publishTitle ?? resolvedTitle).trim();
+  const hasExplicitTitle = Boolean(draft.title.trim()) || (publishTitle !== undefined && title !== resolvedTitle);
   const hashtags = normalizedHashtags(draft.hashtags, platform);
   const formattedText = publishText ?? formatPublishText(draft, platform);
   const hasImagePrompt = Boolean((imagePrompt ?? draft.imagePrompt).trim());
 
   const shared: PublishCheck[] = [
-    title
-      ? { tone: hasExplicitTitle ? "ok" : "neutral", text: hasExplicitTitle ? "标题已生成" : "标题来自正文摘要" }
-      : { tone: "warn", text: "缺少标题" },
     draft.body.trim() ? { tone: "ok", text: "正文已生成" } : { tone: "warn", text: "缺少正文" },
     hashtags.length ? { tone: "ok", text: "话题已整理为平台格式" } : { tone: "warn", text: "缺少话题" }
   ];
@@ -1222,6 +1275,9 @@ function buildPublishChecks(draft: Draft, platform: PublishPlatform, publishText
 
   return [
     { tone: "neutral", text: `标题约 ${title.length} 字` },
+    title
+      ? { tone: hasExplicitTitle ? "ok" : "neutral", text: hasExplicitTitle ? "标题已生成" : "标题来自正文摘要" }
+      : { tone: "warn", text: "缺少标题" },
     ...shared,
     hasImagePrompt ? { tone: "ok", text: "配图提示可用于封面" } : { tone: "warn", text: "建议补充配图提示" }
   ];

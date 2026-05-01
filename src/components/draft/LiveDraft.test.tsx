@@ -1341,7 +1341,7 @@ describe("LiveDraft", () => {
     expect(screen.getByRole("button", { name: "小红书" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("微博版预览")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "微博发布文案" })).toHaveValue(
-      "把复杂工作讲成一句人话\n\n先给对方一条主线，再补细节。\n\n#产品思考# #沟通效率#"
+      "先给对方一条主线，再补细节。\n\n#产品思考# #沟通效率#"
     );
 
     await userEvent.click(screen.getByRole("button", { name: "小红书" }));
@@ -1349,9 +1349,8 @@ describe("LiveDraft", () => {
     expect(screen.getByRole("button", { name: "微博" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "小红书" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("小红书版预览")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "小红书发布文案" })).toHaveValue(
-      "把复杂工作讲成一句人话\n\n先给对方一条主线，再补细节。\n\n#产品思考 #沟通效率"
-    );
+    expect(screen.getByRole("textbox", { name: "小红书标题" })).toHaveValue("把复杂工作讲成一句人话");
+    expect(screen.getByRole("textbox", { name: "小红书正文" })).toHaveValue("先给对方一条主线，再补细节。\n\n#产品思考 #沟通效率");
   });
 
   it("copies the edited Weibo text with double-hash topics", async () => {
@@ -1376,7 +1375,7 @@ describe("LiveDraft", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "发布" }));
     expect(screen.getByRole("textbox", { name: "微博发布文案" })).toHaveValue(
-      "标题\n\n正文第一句。\n正文第二句。\n\n#产品思考# #沟通效率#"
+      "正文第一句。\n正文第二句。\n\n#产品思考# #沟通效率#"
     );
 
     fireEvent.change(screen.getByRole("textbox", { name: "微博发布文案" }), {
@@ -1407,10 +1406,22 @@ describe("LiveDraft", () => {
     expect(screen.queryByRole("button", { name: "复制标题" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "小红书" }));
-    await userEvent.click(screen.getByRole("button", { name: "复制标题" }));
+    expect(screen.getByRole("textbox", { name: "小红书标题" })).toHaveValue("小红书标题");
+    expect(screen.getByRole("textbox", { name: "小红书正文" })).toHaveValue("小红书正文\n\n#生活观察");
 
-    expect(writeText).toHaveBeenCalledWith("小红书标题");
+    fireEvent.change(screen.getByRole("textbox", { name: "小红书标题" }), {
+      target: { value: "改过的小红书标题" }
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "小红书正文" }), {
+      target: { value: "改过的小红书正文\n\n#生活观察" }
+    });
     expect(screen.getByRole("button", { name: "复制小红书文案" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "复制标题" }));
+    await userEvent.click(screen.getByRole("button", { name: "复制小红书文案" }));
+
+    expect(writeText).toHaveBeenNthCalledWith(1, "改过的小红书标题");
+    expect(writeText).toHaveBeenNthCalledWith(2, "改过的小红书正文\n\n#生活观察");
+    expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制正文" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制话题" })).toBeInTheDocument();
   });
@@ -1446,6 +1457,7 @@ describe("LiveDraft", () => {
     await userEvent.click(screen.getByRole("button", { name: "发布" }));
 
     expect(screen.getByText(/微博字数约/)).toBeInTheDocument();
+    expect(screen.queryByText("标题来自正文摘要")).not.toBeInTheDocument();
     expect(screen.getByText("缺少话题")).toBeInTheDocument();
     expect(screen.getByText("微博可以不配图")).toBeInTheDocument();
 

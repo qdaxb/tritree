@@ -49,7 +49,8 @@ Dialog structure:
 
 - Header: `发布助手`, short subcopy `生成适合平台的复制版本`, close button.
 - Platform tabs: `微博`, `小红书`.
-- Editable platform text box: exact text that will be copied for the active tab.
+- Weibo editable text box: exact text that will be copied for the Weibo tab.
+- Xiaohongshu editable title and body boxes: title is copied separately from the publish body.
 - Image prompt box: visible `配图提示` content with a copy action when present.
 - Copy actions for the active tab.
 - Platform checks for the active tab.
@@ -68,26 +69,28 @@ Use the current `Draft` shape: `title`, `body`, `hashtags`, `imagePrompt`.
 Weibo formatted text:
 
 ```text
-{title}
-
 {body}
 
 {Weibo topics separated by spaces, formatted as #话题#}
 ```
 
-If the title is empty after fallback resolution, omit the title block. If there are no hashtags, omit the hashtag block.
+Weibo does not include a separate title block. If there are no hashtags, omit the hashtag block.
 
-Xiaohongshu formatted text:
+Xiaohongshu title field:
 
 ```text
 {title}
+```
 
+Xiaohongshu body field:
+
+```text
 {body}
 
 {Xiaohongshu topics separated by spaces, formatted as #话题}
 ```
 
-The initial formatting can match Weibo structurally, but Xiaohongshu gets different checks and copy actions because title and topic handling matter more there. Future iterations can add Xiaohongshu-specific title/body splitting if the product starts storing platform variants.
+Xiaohongshu keeps title and body separate because the platform publish flow treats them as separate inputs.
 
 Hashtag normalization:
 
@@ -115,7 +118,9 @@ Xiaohongshu tab:
 
 Copy success state:
 
-- The primary platform copy action copies the current edited text box value, not the original generated text.
+- The primary Weibo copy action copies the current edited Weibo text box value.
+- The primary Xiaohongshu copy action copies the current edited Xiaohongshu body box value.
+- `复制标题` copies the current edited Xiaohongshu title box value.
 - The clicked button label changes to `已复制`.
 - The success state resets after a short delay or when switching tabs.
 - Clipboard errors show a small inline message: `复制失败，请手动选中文案复制。`
@@ -126,7 +131,6 @@ Checks are informational and never block copying.
 
 Shared checks:
 
-- Title exists.
 - Body exists.
 - Hashtags exist.
 - Hashtags use the active platform format.
@@ -142,6 +146,7 @@ Xiaohongshu checks:
 
 - Show title length.
 - Warn when title is missing.
+- Show whether the title is explicit or derived from the body fallback.
 - Warn when no hashtags exist.
 - Suggest using the image prompt for cover or image generation if present.
 - Warn when image prompt is missing, because Xiaohongshu usually benefits from visuals.
@@ -179,9 +184,9 @@ Add focused tests for:
 
 - The `发布` button appears for a visible draft and opens the dialog.
 - The dialog switches between `微博` and `小红书`.
-- Weibo primary copy writes the formatted Weibo text.
-- Xiaohongshu primary copy writes the formatted Xiaohongshu text.
-- Xiaohongshu shows `复制标题`; Weibo does not need that action.
+- Weibo primary copy writes the edited titleless Weibo text.
+- Xiaohongshu primary copy writes the edited Xiaohongshu body text.
+- Xiaohongshu shows a separate editable title box and `复制标题`; Weibo does not need that action.
 - Weibo hashtags are normalized as `#话题#`.
 - Xiaohongshu hashtags are normalized as `#话题`.
 - The primary copy action uses user edits from the platform text box.

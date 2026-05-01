@@ -1587,6 +1587,11 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
+.draft-publish-preview textarea.draft-publish-preview__title-field {
+  min-height: 44px;
+  max-height: 84px;
+}
+
 .draft-publish-image-prompt {
   display: grid;
   gap: 8px;
