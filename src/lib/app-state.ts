@@ -1,5 +1,6 @@
 import {
   SkillSchema,
+  skillsForTarget,
   type BranchOption,
   type Draft,
   type OptionGenerationMode,
@@ -107,7 +108,7 @@ export function summarizeSelectionRewriteForDirector(
     learnedSummary: state.rootMemory.learnedSummary,
     pathSummary: formatPathForDirector(state),
     currentDraft: draft,
-    enabledSkills: enabledSkillsForDirector(state),
+    enabledSkills: skillsForTarget(enabledSkillsForDirector(state), "writer"),
     field,
     selectedText,
     instruction

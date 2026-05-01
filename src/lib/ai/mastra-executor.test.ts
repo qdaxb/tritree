@@ -24,10 +24,53 @@ vi.mock("@mastra/core/agent", () => ({
 
 const modelFactory = vi.fn((modelId: string) => ({ modelId }));
 
-const enabledSkills: Skill[] = [];
+const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+const enabledSkills: Skill[] = [
+  {
+    id: "writer-skill",
+    title: "自然短句",
+    category: "风格",
+    description: "草稿更自然。",
+    prompt: "句子短一点。",
+    appliesTo: "writer",
+    isSystem: false,
+    defaultEnabled: false,
+    isArchived: false,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    updatedAt: "2026-05-01T00:00:00.000Z"
+  },
+  {
+    id: "editor-skill",
+    title: "逻辑链审查",
+    category: "检查",
+    description: "检查跳跃。",
+    prompt: "找出因果链断点。",
+    appliesTo: "editor",
+    isSystem: false,
+    defaultEnabled: false,
+    isArchived: false,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    updatedAt: "2026-05-01T00:00:00.000Z"
+  },
+  {
+    id: "shared-skill",
+    title: "标题不要夸张",
+    category: "约束",
+    description: "避免标题党。",
+    prompt: "标题和正文都要克制。",
+    appliesTo: "both",
+    isSystem: false,
+    defaultEnabled: false,
+    isArchived: false,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    updatedAt: "2026-05-01T00:00:00.000Z"
+  }
+];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  consoleInfoSpy.mockClear();
   modelFactory.mockClear();
   mocks.createAnthropic.mockReturnValue(modelFactory);
   mocks.agentConstructor.mockImplementation(function Agent(options) {
@@ -88,6 +131,64 @@ describe("tree director compatibility generators", () => {
       { role: "user", content: "用户选择：继续完善" }
     ]
   };
+
+  it("passes writer and shared skills to the draft agent", async () => {
+    const fakeAgent = {
+      generate: vi.fn(async () => ({
+        object: {
+          roundIntent: "继续完善",
+          draft: { title: "标题", body: "正文", hashtags: [], imagePrompt: "" },
+          memoryObservation: "偏好观察"
+        }
+      }))
+    };
+
+    await generateTreeDraft({
+      parts: directorParts,
+      treeDraftAgent: fakeAgent
+    });
+
+    expect(fakeAgent.generate).toHaveBeenCalled();
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[treeable:mastra-prompt:draft]",
+      expect.stringContaining("自然短句")
+    );
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[treeable:mastra-prompt:draft]",
+      expect.not.stringContaining("逻辑链审查")
+    );
+  });
+
+  it("passes editor and shared skills to the options agent", async () => {
+    const fakeAgent = {
+      generate: vi.fn(async () => ({
+        object: {
+          roundIntent: "选择下一步",
+          options: [
+            { id: "a", label: "补因果链", description: "第二段跳得太快。", impact: "让读者更容易理解。", kind: "deepen" },
+            { id: "b", label: "收紧标题", description: "标题承诺偏大。", impact: "让表达更可信。", kind: "reframe" },
+            { id: "c", label: "整理结尾", description: "结尾还没有收束。", impact: "让文章接近发布。", kind: "finish" }
+          ],
+          memoryObservation: "偏好观察"
+        }
+      }))
+    };
+
+    await generateTreeOptions({
+      parts: directorParts,
+      treeOptionsAgent: fakeAgent
+    });
+
+    expect(fakeAgent.generate).toHaveBeenCalled();
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[treeable:mastra-prompt:options]",
+      expect.stringContaining("逻辑链审查")
+    );
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[treeable:mastra-prompt:options]",
+      expect.not.stringContaining("自然短句")
+    );
+  });
 
   it("generates old UI draft output through a Mastra-compatible structured agent", async () => {
     const fakeAgent = {

@@ -6,7 +6,9 @@ import {
   type DirectorOutput,
   DirectorOutputSchema,
   requireDirectorOptionIds,
-  requireThreeOptions
+  requireThreeOptions,
+  skillsForTarget,
+  type Skill
 } from "@/lib/domain";
 import {
   buildDirectorUserPrompt,
@@ -131,7 +133,7 @@ function buildDirectorOptionsRequest(
   env: Record<string, string | undefined> = process.env
 ): DirectorRequest {
   return buildAnthropicCompatibleRequest(
-    parts,
+    partsForTarget(parts, "editor"),
     `${DIRECTOR_OPTIONS_SYSTEM_PROMPT}\n\n${DIRECTOR_OPTIONS_JSON_INSTRUCTIONS}`,
     1200,
     env
@@ -157,7 +159,7 @@ function buildDirectorDraftRequest(
   env: Record<string, string | undefined> = process.env
 ): DirectorRequest {
   return buildAnthropicCompatibleRequest(
-    parts,
+    partsForTarget(parts, "writer"),
     `${DIRECTOR_DRAFT_SYSTEM_PROMPT}\n\n${DIRECTOR_DRAFT_JSON_INSTRUCTIONS}`,
     1500,
     env
@@ -206,6 +208,20 @@ function buildAnthropicCompatibleRequest(
     body: requestBody,
     headers: requestHeaders,
     url: requestUrl
+  };
+}
+
+function partsForTarget(parts: DirectorInputParts, target: "writer" | "editor"): DirectorInputParts {
+  return {
+    ...parts,
+    enabledSkills: skillsForTarget(parts.enabledSkills.map(normalizeSkillTarget), target)
+  };
+}
+
+function normalizeSkillTarget(skill: Skill): Skill {
+  return {
+    ...skill,
+    appliesTo: skill.appliesTo ?? "both"
   };
 }
 

@@ -336,6 +336,34 @@ describe("getDirectorAuthToken", () => {
 });
 
 describe("buildDirectorDraftStreamRequest", () => {
+  it("filters direct provider requests by draft and options target", () => {
+    const parts = {
+      rootSummary: "Seed：写一篇文章",
+      learnedSummary: "",
+      currentDraft: "正文",
+      pathSummary: "",
+      foldedSummary: "",
+      selectedOptionLabel: "",
+      enabledSkills: [
+        skill("writer-skill", "自然短句", "writer"),
+        skill("editor-skill", "逻辑链审查", "editor"),
+        skill("shared-skill", "标题不要夸张", "both")
+      ]
+    };
+
+    const draftRequest = buildDirectorDraftStreamRequest(parts, { KIMI_API_KEY: "token" });
+    const optionsRequest = buildDirectorOptionsStreamRequest(parts, { KIMI_API_KEY: "token" });
+
+    const draftText = JSON.stringify(draftRequest.body.messages);
+    const optionsText = JSON.stringify(optionsRequest.body.messages);
+    expect(draftText).toContain("自然短句");
+    expect(draftText).toContain("标题不要夸张");
+    expect(draftText).not.toContain("逻辑链审查");
+    expect(optionsText).toContain("逻辑链审查");
+    expect(optionsText).toContain("标题不要夸张");
+    expect(optionsText).not.toContain("自然短句");
+  });
+
   it("adds stream true to the draft-only request", () => {
     const request = buildDirectorDraftStreamRequest(
       {
@@ -403,6 +431,22 @@ describe("buildDirectorDraftStreamRequest", () => {
     expect(latestMessage).not.toContain("生成下一步三个创作方向");
   });
 });
+
+function skill(id: string, title: string, appliesTo: "writer" | "editor" | "both") {
+  return {
+    id,
+    title,
+    category: appliesTo === "writer" ? "风格" : "检查",
+    description: `${title}说明`,
+    prompt: `${title}提示词`,
+    appliesTo,
+    isSystem: false,
+    defaultEnabled: false,
+    isArchived: false,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    updatedAt: "2026-05-01T00:00:00.000Z"
+  } as const;
+}
 
 describe("parseDirectorDraftText", () => {
   it("parses a complete draft JSON string", () => {
