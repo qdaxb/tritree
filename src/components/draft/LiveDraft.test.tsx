@@ -1320,6 +1320,13 @@ describe("LiveDraft", () => {
     expect(publishRule).toContain("overflow: auto");
   });
 
+  it("keeps all publish platform tabs on one row", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const tabsRule = css.match(/\.draft-publish-tabs\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(tabsRule).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
+  });
+
   it("opens a publish assistant with Weibo, Xiaohongshu, and Moments tabs", async () => {
     render(
       <LiveDraft

@@ -1622,7 +1622,7 @@ button:disabled {
 
 .draft-publish-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   background: #eef2f6;
@@ -1630,6 +1630,7 @@ button:disabled {
 }
 
 .draft-publish-tabs button {
+  min-width: 0;
   min-height: 34px;
   color: #475569;
   font-size: 0.82rem;
