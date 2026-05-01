@@ -728,9 +728,10 @@ export function TreeableApp() {
   async function ensureNodeOptions(
     state: SessionState,
     nodeId: string | null,
-    optionMode: OptionGenerationMode = "balanced"
+    optionMode: OptionGenerationMode = "balanced",
+    force = false
   ) {
-    if (!needsNodeOptions(state, nodeId)) return state;
+    if (!force && !needsNodeOptions(state, nodeId)) return state;
     if (!nodeId) return state;
 
     setGenerationStage({ nodeId, stage: "options" });
@@ -740,7 +741,8 @@ export function TreeableApp() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         nodeId,
-        ...(optionMode !== "balanced" ? { optionMode } : {})
+        ...(optionMode !== "balanced" ? { optionMode } : {}),
+        ...(force ? { force } : {})
       })
     });
     if (!response.ok) {
@@ -862,6 +864,32 @@ export function TreeableApp() {
     setMessage("");
     try {
       const optionsState = await ensureNodeOptions(sessionState, nodeId);
+      if (optionsState !== sessionState) {
+        setSessionState(optionsState);
+        setViewNodeId(nodeId);
+      }
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "生成下一步选项失败。";
+      setMessage(apiKeyMessage(text));
+    } finally {
+      setGenerationStage(null);
+      setStreamingDraft(null);
+      setStreamingOptions(null);
+      setIsBusy(false);
+    }
+  }
+
+  async function regenerateOptionsForCurrentNode(optionMode: OptionGenerationMode) {
+    if (!sessionState?.currentNode || isBusy) return;
+    const nodeId = viewNodeId ?? sessionState.currentNode.id;
+    if (nodeId !== sessionState.currentNode.id) return;
+
+    setPendingChoice(null);
+    setGeneratedDiffNodeId(null);
+    setIsBusy(true);
+    setMessage("");
+    try {
+      const optionsState = await ensureNodeOptions(sessionState, nodeId, optionMode, true);
       if (optionsState !== sessionState) {
         setSessionState(optionsState);
         setViewNodeId(nodeId);
@@ -1057,6 +1085,13 @@ export function TreeableApp() {
       !persistedDraftForView &&
       !isBusy
   );
+  const canRegenerateOptions = Boolean(
+    sessionState &&
+      activeViewNodeId &&
+      isViewingCurrentNode &&
+      persistedDraftForView &&
+      activeViewNode?.options.length === 3
+  );
   const streamedActiveViewNode = activeViewNode ? withStreamingOptions(activeViewNode, streamingOptions) : null;
   const currentNodeForCanvas = streamedActiveViewNode ? withCustomOption(streamedActiveViewNode, customOption) : null;
   const enabledSkillIds = sessionState?.enabledSkillIds ?? [];
@@ -1186,6 +1221,7 @@ export function TreeableApp() {
           onActivateBranch={activateHistoricalBranch}
           onAddCustomOption={activeViewNodeId ? addAndChooseCustomOption : undefined}
           onChoose={chooseFromViewedNode}
+          onRegenerateOptions={canRegenerateOptions ? regenerateOptionsForCurrentNode : undefined}
           onSelectComparisonNode={selectDraftComparisonNode}
           onViewNode={(nodeId) => void viewNode(nodeId)}
           pendingBranch={pendingBranch}

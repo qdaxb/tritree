@@ -256,7 +256,6 @@ describe("TreeCanvas", () => {
       "aria-pressed",
       "true"
     );
-    expect(screen.getByText("兼顾延展和当前稿推进")).toBeInTheDocument();
 
     fireEvent.click(within(range).getByRole("button", { name: "发散 给我更远、更不一样的路线" }));
 
@@ -264,11 +263,35 @@ describe("TreeCanvas", () => {
       "aria-pressed",
       "true"
     );
-    expect(screen.getByText("给我更远、更不一样的路线")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
     expect(onChoose).toHaveBeenCalledWith("a", "", "divergent");
+  });
+
+  it("regenerates the visible option set with the selected direction range", () => {
+    const onRegenerateOptions = vi.fn();
+    render(
+      <BranchOptionTray
+        isBusy={false}
+        onChoose={vi.fn()}
+        onRegenerateOptions={onRegenerateOptions}
+        options={currentNode.options}
+        pendingChoice={null}
+      />
+    );
+
+    const range = screen.getByRole("group", { name: "方向范围" });
+
+    expect(within(range).getByText("更远")).toBeInTheDocument();
+    expect(within(range).getByText("适中")).toBeInTheDocument();
+    expect(within(range).getByText("更近")).toBeInTheDocument();
+    expect(screen.queryByText("兼顾延展和当前稿推进")).not.toBeInTheDocument();
+
+    fireEvent.click(within(range).getByRole("button", { name: "专注 围绕当前稿继续收窄" }));
+    fireEvent.click(screen.getByRole("button", { name: "换一组方向" }));
+
+    expect(onRegenerateOptions).toHaveBeenCalledWith("focused");
   });
 
   it("keeps expanded option panels focused on notes instead of duplicating mode controls", () => {

@@ -11,7 +11,8 @@ export const runtime = "nodejs";
 
 const OptionsBodySchema = z.object({
   nodeId: z.string().min(1),
-  optionMode: OptionGenerationModeSchema.default("balanced")
+  optionMode: OptionGenerationModeSchema.default("balanced"),
+  force: z.boolean().default(false)
 });
 
 const ndjsonHeaders = {
@@ -46,7 +47,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "没有找到这个历史节点。" }, { status: 404 });
   }
 
-  if (focusedState.currentNode.options.length === 3) {
+  if (focusedState.currentNode.options.length === 3 && !body.force) {
     return new Response(encodeNdjson({ type: "done", state }), { headers: ndjsonHeaders });
   }
 

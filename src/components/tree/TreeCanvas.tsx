@@ -2,7 +2,7 @@
 
 import * as d3 from "d3";
 import clsx from "clsx";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -39,6 +39,7 @@ type TreeCanvasProps = {
   onActivateBranch?: (nodeId: string, optionId: BranchOption["id"]) => void;
   onAddCustomOption?: (option: BranchOption) => void;
   onChoose: (optionId: BranchOption["id"], note?: string, optionMode?: OptionGenerationMode) => void;
+  onRegenerateOptions?: (optionMode: OptionGenerationMode) => void;
   onSelectComparisonNode?: (nodeId: string) => void;
   onViewNode?: (nodeId: string) => void;
   skills?: Skill[];
@@ -541,6 +542,7 @@ export function TreeCanvas({
   onActivateBranch,
   onAddCustomOption,
   onChoose,
+  onRegenerateOptions,
   onSelectComparisonNode,
   onViewNode,
   skills
@@ -1018,6 +1020,7 @@ export function TreeCanvas({
           isBusy={isBusy}
           onAddCustomOption={onAddCustomOption}
           onChoose={onChoose}
+          onRegenerateOptions={onRegenerateOptions}
           options={currentNode.options}
           pendingChoice={pendingChoice}
           skills={skills}
@@ -1032,6 +1035,7 @@ export function BranchOptionTray({
   isBusy,
   onAddCustomOption,
   onChoose,
+  onRegenerateOptions,
   options,
   pendingChoice,
   skills = [],
@@ -1040,6 +1044,7 @@ export function BranchOptionTray({
   isBusy: boolean;
   onAddCustomOption?: (option: BranchOption) => void;
   onChoose: (optionId: BranchOption["id"], note?: string, optionMode?: OptionGenerationMode) => void;
+  onRegenerateOptions?: (optionMode: OptionGenerationMode) => void;
   options: BranchOption[];
   pendingChoice: string | null;
   skills?: Skill[];
@@ -1055,7 +1060,12 @@ export function BranchOptionTray({
     <div aria-label="下一步方向选项" className="branch-option-tray" role="group">
       {primaryAllVisible ? (
         <div className="branch-option-tray__controls">
-          <OptionModeControl disabled={isBusy} mode={optionMode} onModeChange={setOptionMode} />
+          <OptionModeControl
+            disabled={isBusy}
+            mode={optionMode}
+            onModeChange={setOptionMode}
+            onRegenerateOptions={onRegenerateOptions}
+          />
         </div>
       ) : null}
       <div aria-label="三个主选项" className="branch-option-main branch-option-main--horizontal" role="group">
@@ -1085,23 +1095,28 @@ export function BranchOptionTray({
   );
 }
 
-const DIRECTION_RANGE_OPTIONS: Array<{ description: string; label: string; value: OptionGenerationMode }> = [
-  { label: "发散", value: "divergent", description: "给我更远、更不一样的路线" },
-  { label: "平衡", value: "balanced", description: "兼顾延展和当前稿推进" },
-  { label: "专注", value: "focused", description: "围绕当前稿继续收窄" }
+const DIRECTION_RANGE_OPTIONS: Array<{
+  caption: string;
+  description: string;
+  label: string;
+  value: OptionGenerationMode;
+}> = [
+  { label: "发散", caption: "更远", value: "divergent", description: "给我更远、更不一样的路线" },
+  { label: "平衡", caption: "适中", value: "balanced", description: "兼顾延展和当前稿推进" },
+  { label: "专注", caption: "更近", value: "focused", description: "围绕当前稿继续收窄" }
 ];
 
 function OptionModeControl({
   disabled,
   mode,
-  onModeChange
+  onModeChange,
+  onRegenerateOptions
 }: {
   disabled: boolean;
   mode: OptionGenerationMode;
   onModeChange: (mode: OptionGenerationMode) => void;
+  onRegenerateOptions?: (mode: OptionGenerationMode) => void;
 }) {
-  const activeOption = DIRECTION_RANGE_OPTIONS.find((item) => item.value === mode) ?? DIRECTION_RANGE_OPTIONS[1];
-
   return (
     <div className="option-mode-control-wrap">
       <span className="option-mode-control__label">方向范围</span>
@@ -1116,11 +1131,24 @@ function OptionModeControl({
             onClick={() => onModeChange(item.value)}
             type="button"
           >
-            {item.label}
+            <span className="option-mode-control__button-label">{item.label}</span>
+            <span className="option-mode-control__button-caption">{item.caption}</span>
           </button>
         ))}
       </div>
-      <span className="option-mode-control__hint">{activeOption.description}</span>
+      {onRegenerateOptions ? (
+        <button
+          aria-label="换一组方向"
+          className="option-mode-refresh"
+          disabled={disabled}
+          onClick={() => onRegenerateOptions(mode)}
+          title="换一组方向"
+          type="button"
+        >
+          <RefreshCw aria-hidden="true" size={13} strokeWidth={2.4} />
+          <span>换一组</span>
+        </button>
+      ) : null}
     </div>
   );
 }

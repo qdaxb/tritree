@@ -1224,7 +1224,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  min-height: 34px;
+  min-height: 36px;
 }
 
 .option-mode-control-wrap {
@@ -1233,6 +1233,7 @@ button:disabled {
   gap: 8px;
   min-width: 0;
   color: rgba(71, 85, 105, 0.76);
+  flex-wrap: wrap;
 }
 
 .option-mode-control__label {
@@ -1252,13 +1253,17 @@ button:disabled {
 }
 
 .option-mode-control__button {
-  min-height: 26px;
+  display: grid;
+  gap: 1px;
+  min-height: 34px;
+  min-width: 54px;
   padding: 0 10px;
   color: rgba(71, 85, 105, 0.72);
   background: transparent;
   border: 0;
   font-size: 0.72rem;
   font-weight: 800;
+  line-height: 1.05;
 }
 
 .option-mode-control__button--active {
@@ -1266,12 +1271,39 @@ button:disabled {
   background: #ccfbf1;
 }
 
-.option-mode-control__hint {
-  min-width: 0;
-  color: rgba(71, 85, 105, 0.72);
+.option-mode-control__button-label,
+.option-mode-control__button-caption {
+  display: block;
+}
+
+.option-mode-control__button-caption {
+  color: rgba(71, 85, 105, 0.58);
+  font-size: 0.62rem;
+  font-weight: 760;
+}
+
+.option-mode-control__button--active .option-mode-control__button-caption {
+  color: rgba(15, 118, 110, 0.72);
+}
+
+.option-mode-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 8px;
+  color: #0f766e;
+  background: #f0fdfa;
+  border: 1px solid rgba(20, 184, 166, 0.24);
+  border-radius: 8px;
   font-size: 0.72rem;
-  font-weight: 720;
+  font-weight: 820;
   white-space: nowrap;
+}
+
+.option-mode-refresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
 }
 
 .branch-card__note,
@@ -2070,10 +2102,6 @@ button:disabled {
   .option-mode-control-wrap {
     align-items: flex-start;
     flex-wrap: wrap;
-  }
-
-  .option-mode-control__hint {
-    white-space: normal;
   }
 
   .branch-card {
