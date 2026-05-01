@@ -47,6 +47,9 @@ The JSON object must match this shape:
   ],
   "memoryObservation": "一句中文偏好观察"
 }
+每个选项的 description 要说明诊断依据或建议理由：当前内容哪里不清楚、哪里有风险、哪里没有兑现，或哪里最值得推进。
+每个选项的 impact 要说明选择后改善什么：例如让逻辑更连贯、读者更容易进入、标题更可信、内容更接近发布。
+不要返回独立审查报告；把诊断压进三个可选择的编辑建议里。
 Option ids must be exactly "a", "b", and "c" once each.
 Option kind must be one of "explore", "deepen", "reframe", or "finish".
 Every string value that the user will see must be Simplified Chinese.

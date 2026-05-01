@@ -67,6 +67,16 @@ describe("buildSharedAgentContext", () => {
 });
 
 describe("agent instructions", () => {
+  it("asks the editor to turn diagnosis into visible option text", () => {
+    const instructions = buildTreeOptionsInstructions(input);
+
+    expect(instructions).toContain("先诊断当前内容最值得处理的问题");
+    expect(instructions).toContain("每个建议都要来自一个明确诊断");
+    expect(instructions).toContain("description 写为什么建议这样改");
+    expect(instructions).toContain("impact 写选择后会改善什么");
+    expect(instructions).toContain("不要返回独立审查报告");
+  });
+
   it("uses separate writer and editor roles without leaking the tree choice mechanic", () => {
     const draftInstructions = buildTreeDraftInstructions(input);
     const optionsInstructions = buildTreeOptionsInstructions(input);

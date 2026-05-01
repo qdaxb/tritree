@@ -520,6 +520,8 @@ describe("buildDirectorOptionsStreamRequest", () => {
     expect(request.body.system).toContain("只生成下一步三个选项");
     expect(request.body.system).not.toContain("draft that can keep improving");
     expect(request.body.system).toContain("Before proposing options, infer what creative decision would help the creator most");
+    expect(request.body.system).toContain("每个选项的 description 要说明诊断依据或建议理由");
+    expect(request.body.system).toContain("每个选项的 impact 要说明选择后改善什么");
     expect(request.body.system).toContain("Small finishing actions such as proofreading or image-prompt work are allowed");
     expect(request.body.system).not.toContain("concrete change");
     expect(request.body.system).not.toContain("diagnosed content gap");
