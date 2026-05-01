@@ -1189,10 +1189,6 @@ button:disabled {
   margin-top: 6px;
 }
 
-.branch-card__mode {
-  margin-right: auto;
-}
-
 .branch-card__mode-badge {
   margin-right: auto;
   padding: 2px 7px;
@@ -1224,27 +1220,58 @@ button:disabled {
   color: #075985;
 }
 
+.branch-option-tray__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 34px;
+}
+
+.option-mode-control-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: rgba(71, 85, 105, 0.76);
+}
+
+.option-mode-control__label {
+  color: rgba(15, 23, 42, 0.72);
+  font-size: 0.74rem;
+  font-weight: 840;
+  white-space: nowrap;
+}
+
 .option-mode-control {
   display: inline-flex;
   align-items: center;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 999px;
+  background: rgba(248, 250, 252, 0.9);
 }
 
 .option-mode-control__button {
-  min-height: 24px;
-  padding: 0 9px;
-  color: rgba(71, 85, 105, 0.7);
+  min-height: 26px;
+  padding: 0 10px;
+  color: rgba(71, 85, 105, 0.72);
   background: transparent;
   border: 0;
   font-size: 0.72rem;
-  font-weight: 780;
+  font-weight: 800;
 }
 
 .option-mode-control__button--active {
-  color: #075985;
-  background: #e0f2fe;
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.option-mode-control__hint {
+  min-width: 0;
+  color: rgba(71, 85, 105, 0.72);
+  font-size: 0.72rem;
+  font-weight: 720;
+  white-space: nowrap;
 }
 
 .branch-card__note,
@@ -2037,7 +2064,16 @@ button:disabled {
   }
 
   .branch-option-tray {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
+  }
+
+  .option-mode-control-wrap {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .option-mode-control__hint {
+    white-space: normal;
   }
 
   .branch-card {

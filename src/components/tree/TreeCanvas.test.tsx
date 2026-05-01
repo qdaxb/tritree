@@ -234,6 +234,60 @@ describe("TreeCanvas", () => {
     expect(onChoose).toHaveBeenCalledWith("a", "请用更尖锐一点的对比。", "balanced");
   });
 
+  it("uses one tray-level direction range control for choosing option mode", () => {
+    const onChoose = vi.fn();
+    render(
+      <BranchOptionTray
+        isBusy={false}
+        onChoose={onChoose}
+        options={currentNode.options}
+        pendingChoice={null}
+      />
+    );
+
+    const tray = screen.getByRole("group", { name: "下一步方向选项" });
+    const range = within(tray).getByRole("group", { name: "方向范围" });
+
+    expect(within(range).getByRole("button", { name: "发散 给我更远、更不一样的路线" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    expect(within(range).getByRole("button", { name: "平衡 兼顾延展和当前稿推进" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByText("兼顾延展和当前稿推进")).toBeInTheDocument();
+
+    fireEvent.click(within(range).getByRole("button", { name: "发散 给我更远、更不一样的路线" }));
+
+    expect(within(range).getByRole("button", { name: "发散 给我更远、更不一样的路线" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByText("给我更远、更不一样的路线")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
+
+    expect(onChoose).toHaveBeenCalledWith("a", "", "divergent");
+  });
+
+  it("keeps expanded option panels focused on notes instead of duplicating mode controls", () => {
+    render(
+      <BranchOptionTray
+        isBusy={false}
+        onChoose={vi.fn()}
+        options={currentNode.options}
+        pendingChoice={null}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "A 更多备注" }));
+
+    expect(screen.getByLabelText("更多备注 A")).toBeInTheDocument();
+    expect(screen.getAllByRole("group", { name: "方向范围" })).toHaveLength(1);
+    expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
+  });
+
   it("keeps custom as an action even after the node already has a custom branch", () => {
     render(
       <BranchOptionTray
@@ -349,7 +403,7 @@ describe("TreeCanvas", () => {
     );
   });
 
-  it("keeps generation focus controls inside each option's More panel and chooses immediately", () => {
+  it("keeps direction range controls at tray level when More opens and chooses with the selected mode", () => {
     const onChoose = vi.fn();
     render(
       <BranchOptionTray
@@ -361,9 +415,11 @@ describe("TreeCanvas", () => {
     );
 
     expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
+    const range = screen.getByRole("group", { name: "方向范围" });
+    fireEvent.click(within(range).getByRole("button", { name: "专注 围绕当前稿继续收窄" }));
     fireEvent.click(screen.getByRole("button", { name: "A 更多备注" }));
-    const firstOptionMode = screen.getByRole("group", { name: "A 生成倾向" });
-    fireEvent.click(within(firstOptionMode).getByRole("button", { name: "专注" }));
+    expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
     expect(onChoose).toHaveBeenCalledWith("a", "", "focused");
     expect(within(screen.getByRole("group", { name: "旁路设置" })).queryByText("专注")).not.toBeInTheDocument();
