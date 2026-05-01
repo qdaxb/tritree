@@ -287,6 +287,30 @@ describe("Treeable repository", () => {
     expect(repo.getRootMemory()?.preferences.domains).toEqual(["AI", "product"]);
   });
 
+  it("includes creation goal details in root memory summary", () => {
+    const repo = createTreeableRepository(testDbPath());
+
+    const root = repo.saveRootMemory({
+      seed: "我想写 AI 产品经理的真实困境",
+      creationGoal: "改成可发布",
+      creationGoalNote: "写给正在做 AI 产品的人，语气克制一点",
+      domains: ["AI", "product"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+
+    expect(root.summary).toBe(
+      [
+        "Seed：我想写 AI 产品经理的真实困境",
+        "创作目标：改成可发布",
+        "目标补充：写给正在做 AI 产品的人，语气克制一点"
+      ].join("\n")
+    );
+    expect(root.preferences.creationGoal).toBe("改成可发布");
+    expect(root.preferences.creationGoalNote).toBe("写给正在做 AI 产品的人，语气克制一点");
+  });
+
   it("creates a session with an initial node and draft", () => {
     const repo = createTreeableRepository(testDbPath());
     const root = repo.saveRootMemory({

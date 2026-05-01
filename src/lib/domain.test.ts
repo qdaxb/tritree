@@ -37,6 +37,32 @@ describe("RootPreferencesSchema", () => {
     expect(result).not.toHaveProperty("initialOptionId");
     expect(result).not.toHaveProperty("initialOptionMode");
   });
+
+  it("defaults and trims creation goal fields", () => {
+    const result = RootPreferencesSchema.parse({
+      seed: "我想写 AI 产品经理的真实困境",
+      creationGoal: " 改成可发布 ",
+      creationGoalNote: " 写给正在做 AI 产品的人，语气克制一点 ",
+      domains: ["AI", "product"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+
+    expect(result.creationGoal).toBe("改成可发布");
+    expect(result.creationGoalNote).toBe("写给正在做 AI 产品的人，语气克制一点");
+
+    const legacy = RootPreferencesSchema.parse({
+      seed: "旧 seed",
+      domains: ["AI"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+
+    expect(legacy.creationGoal).toBe("");
+    expect(legacy.creationGoalNote).toBe("");
+  });
 });
 
 describe("DirectorOptionsOutputSchema", () => {

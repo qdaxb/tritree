@@ -126,6 +126,8 @@ export const DEFAULT_SYSTEM_SKILLS = [
 
 export const RootPreferencesSchema = z.object({
   seed: z.string().trim().default(""),
+  creationGoal: z.string().trim().max(40).default(""),
+  creationGoalNote: z.string().trim().max(240).default(""),
   domains: z.array(z.string().min(1)).min(1),
   tones: z.array(z.string().min(1)).min(1),
   styles: z.array(z.string().min(1)).min(1),

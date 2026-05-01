@@ -113,16 +113,27 @@ function withTransaction<T>(db: ReturnType<typeof createDatabase>, write: () => 
 }
 
 function summarizePreferences(preferences: RootPreferences) {
-  if (preferences.seed?.trim()) {
-    return `Seed：${preferences.seed.trim()}`;
+  const seed = preferences.seed?.trim();
+  const creationGoal = preferences.creationGoal?.trim();
+  const creationGoalNote = preferences.creationGoalNote?.trim();
+  const goalParts = [
+    creationGoal ? `创作目标：${creationGoal}` : "",
+    creationGoalNote ? `目标补充：${creationGoalNote}` : ""
+  ].filter(Boolean);
+
+  if (seed) {
+    return [`Seed：${seed}`, ...goalParts].join("\n");
   }
 
   return [
-    `领域：${preferences.domains.join("、")}`,
-    `语气：${preferences.tones.join("、")}`,
-    `表达：${preferences.styles.join("、")}`,
-    `视角：${preferences.personas.join("、")}`
-  ].join(" | ");
+    [
+      `领域：${preferences.domains.join("、")}`,
+      `语气：${preferences.tones.join("、")}`,
+      `表达：${preferences.styles.join("、")}`,
+      `视角：${preferences.personas.join("、")}`
+    ].join(" | "),
+    ...goalParts
+  ].join("\n");
 }
 
 function toRootMemory(row: RootMemoryRow): RootMemory {
