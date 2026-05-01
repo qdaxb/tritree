@@ -214,6 +214,7 @@ const skills: Skill[] = [
     category: "方向",
     description: "拆解问题。",
     prompt: "分析 prompt",
+    appliesTo: "editor",
     isSystem: true,
     defaultEnabled: true,
     isArchived: false,
@@ -226,6 +227,7 @@ const skills: Skill[] = [
     category: "约束",
     description: "避免标题党。",
     prompt: "约束 prompt",
+    appliesTo: "both",
     isSystem: true,
     defaultEnabled: false,
     isArchived: false,
@@ -840,6 +842,7 @@ describe("TreeableApp", () => {
       category: "平台",
       description: "适合小红书。",
       prompt: "标题口语一点。",
+      appliesTo: "both",
       isSystem: false,
       defaultEnabled: false,
       isArchived: false,
@@ -878,6 +881,7 @@ describe("TreeableApp", () => {
         })
       );
     });
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body as string).appliesTo).toBe("both");
     expect(screen.getByRole("article", { name: "小红书风格" })).toBeInTheDocument();
   });
 

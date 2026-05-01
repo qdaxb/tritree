@@ -2,6 +2,12 @@
 
 import type { Skill } from "@/lib/domain";
 
+const effectGroups = [
+  { appliesTo: "writer", title: "写作方式", effect: "影响：草稿" },
+  { appliesTo: "editor", title: "审稿重点", effect: "影响：建议" },
+  { appliesTo: "both", title: "发布约束", effect: "影响：全程" }
+] as const;
+
 export function SkillPicker({
   disabled = false,
   onChange,
@@ -14,7 +20,6 @@ export function SkillPicker({
   skills: Skill[];
 }) {
   const selected = new Set(selectedSkillIds);
-  const categories = Array.from(new Set(skills.map((skill) => skill.category)));
 
   function toggle(skillId: string) {
     const next = new Set(selectedSkillIds);
@@ -28,12 +33,14 @@ export function SkillPicker({
 
   return (
     <div className="skill-picker">
-      {categories.map((category) => (
-        <fieldset aria-label={category} className="skill-picker__group" key={category}>
-          <legend>{category}</legend>
-          {skills
-            .filter((skill) => skill.category === category)
-            .map((skill) => (
+      {effectGroups.map((group) => {
+        const groupSkills = skills.filter((skill) => skill.appliesTo === group.appliesTo);
+        if (groupSkills.length === 0) return null;
+
+        return (
+          <fieldset aria-label={group.title} className="skill-picker__group" key={group.appliesTo}>
+            <legend>{group.title}</legend>
+            {groupSkills.map((skill) => (
               <label className="skill-picker__item" key={skill.id}>
                 <input
                   checked={selected.has(skill.id)}
@@ -43,12 +50,14 @@ export function SkillPicker({
                 />
                 <span>
                   <strong>{skill.title}</strong>
+                  <em className="skill-effect-label">{group.effect}</em>
                   {skill.description ? <small>{skill.description}</small> : null}
                 </span>
               </label>
             ))}
-        </fieldset>
-      ))}
+          </fieldset>
+        );
+      })}
     </div>
   );
 }

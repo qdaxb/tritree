@@ -1,4 +1,4 @@
-import type { Draft, Skill } from "@/lib/domain";
+import { skillsForTarget, type Draft, type Skill } from "@/lib/domain";
 import {
   createDirectorStreamHttpError,
   getDirectorAuthToken,
@@ -13,7 +13,7 @@ export type SelectionRewriteField = "body";
 
 export type SelectionRewriteInput = {
   currentDraft: Draft;
-  enabledSkills: Array<Pick<Skill, "description" | "prompt" | "title">>;
+  enabledSkills: Array<Pick<Skill, "appliesTo" | "description" | "prompt" | "title">>;
   field: SelectionRewriteField;
   instruction: string;
   learnedSummary: string;
@@ -56,6 +56,8 @@ Preserve the user's intent, local tone, and useful wording; only rewrite the sel
 `.trim();
 
 export function buildSelectionRewritePrompt(input: SelectionRewriteInput) {
+  const enabledSkills = skillsForTarget(input.enabledSkills as Skill[], "writer");
+
   return `
 # 本轮任务
 根据当前草稿上下文和用户修改要求，改写选中的局部片段。
@@ -78,7 +80,7 @@ ${input.pathSummary || "暂无已选路径。"}
 配图提示：${input.currentDraft.imagePrompt}
 
 # 已选技能
-${formatEnabledSkills(input.enabledSkills as Skill[])}
+${formatEnabledSkills(enabledSkills)}
 
 # 选区
 字段：${input.field}

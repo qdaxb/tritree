@@ -5,7 +5,8 @@ import {
   extractPartialSelectionRewriteText,
   parseSelectionRewriteText,
   rewriteSelectedDraftText,
-  streamSelectedDraftText
+  streamSelectedDraftText,
+  type SelectionRewriteInput
 } from "./selection-rewrite";
 
 const input = {
@@ -20,22 +21,16 @@ const input = {
   },
   enabledSkills: [
     {
-      id: "system-polish",
       title: "轻量润色",
-      category: "表达",
       description: "保留原意，只改局部表达。",
       prompt: "优先保留用户已经写好的结构和语气。",
-      isSystem: true,
-      defaultEnabled: true,
-      isArchived: false,
-      createdAt: "2026-04-28T00:00:00.000Z",
-      updatedAt: "2026-04-28T00:00:00.000Z"
+      appliesTo: "writer"
     }
   ],
   field: "body" as const,
   selectedText: "第二句要更具体。",
   instruction: "补一个真实工作细节"
-};
+} satisfies SelectionRewriteInput;
 
 describe("buildSelectionRewritePrompt", () => {
   it("includes draft context, selected text, instruction, path, and enabled skills", () => {
@@ -48,6 +43,39 @@ describe("buildSelectionRewritePrompt", () => {
     expect(prompt).toContain("修改要求：\n补一个真实工作细节");
     expect(prompt).toContain("技能 1：轻量润色");
     expect(prompt).toContain("只返回替换选区的新片段");
+  });
+
+  it("uses only writer and shared skills in the rewrite prompt", () => {
+    const prompt = buildSelectionRewritePrompt({
+      ...input,
+      enabledSkills: [
+        {
+          ...input.enabledSkills[0],
+          title: "自然短句",
+          description: "草稿更自然。",
+          prompt: "句子短一点。",
+          appliesTo: "writer"
+        },
+        {
+          ...input.enabledSkills[0],
+          title: "逻辑链审查",
+          description: "检查跳跃。",
+          prompt: "找出因果链断点。",
+          appliesTo: "editor"
+        },
+        {
+          ...input.enabledSkills[0],
+          title: "标题不要夸张",
+          description: "避免标题党。",
+          prompt: "标题和正文都要克制。",
+          appliesTo: "both"
+        }
+      ]
+    });
+
+    expect(prompt).toContain("自然短句");
+    expect(prompt).toContain("标题不要夸张");
+    expect(prompt).not.toContain("逻辑链审查");
   });
 });
 

@@ -164,6 +164,7 @@ describe("buildDirectorInput", () => {
           category: "方向",
           description: "判断作品真正要表达什么。",
           prompt: "帮助创作者判断这篇作品最重要的表达主线、写作动机和取舍边界。",
+          appliesTo: "editor",
           isSystem: true,
           defaultEnabled: true,
           isArchived: false,
@@ -195,6 +196,7 @@ describe("buildDirectorInput", () => {
           category: "方向",
           description: "判断作品真正要表达什么。",
           prompt: "帮助创作者判断这篇作品最重要的表达主线、写作动机和取舍边界。",
+          appliesTo: "editor",
           isSystem: true,
           defaultEnabled: true,
           isArchived: false,
@@ -207,6 +209,7 @@ describe("buildDirectorInput", () => {
           category: "方向",
           description: "梳理可用材料和展开顺序。",
           prompt: "帮助创作者判断哪些素材应该保留、补足、合并或前置。",
+          appliesTo: "editor",
           isSystem: true,
           defaultEnabled: true,
           isArchived: false,
@@ -241,6 +244,7 @@ describe("buildDirectorInput", () => {
           category: "方向",
           description: "梳理可用材料和展开顺序。",
           prompt: "帮助创作者判断哪些素材应该保留、补足、合并或前置。",
+          appliesTo: "editor",
           isSystem: true,
           defaultEnabled: true,
           isArchived: false,
@@ -253,6 +257,7 @@ describe("buildDirectorInput", () => {
           category: "方向",
           description: "判断作品是否接近发布，以及还缺什么包装。",
           prompt: "帮助创作者判断标题、话题、配图提示和轻量校对是否已经足够支撑发布。",
+          appliesTo: "editor",
           isSystem: true,
           defaultEnabled: true,
           isArchived: false,
@@ -336,6 +341,34 @@ describe("getDirectorAuthToken", () => {
 });
 
 describe("buildDirectorDraftStreamRequest", () => {
+  it("filters direct provider requests by draft and options target", () => {
+    const parts = {
+      rootSummary: "Seed：写一篇文章",
+      learnedSummary: "",
+      currentDraft: "正文",
+      pathSummary: "",
+      foldedSummary: "",
+      selectedOptionLabel: "",
+      enabledSkills: [
+        skill("writer-skill", "自然短句", "writer"),
+        skill("editor-skill", "逻辑链审查", "editor"),
+        skill("shared-skill", "标题不要夸张", "both")
+      ]
+    };
+
+    const draftRequest = buildDirectorDraftStreamRequest(parts, { KIMI_API_KEY: "token" });
+    const optionsRequest = buildDirectorOptionsStreamRequest(parts, { KIMI_API_KEY: "token" });
+
+    const draftText = JSON.stringify(draftRequest.body.messages);
+    const optionsText = JSON.stringify(optionsRequest.body.messages);
+    expect(draftText).toContain("自然短句");
+    expect(draftText).toContain("标题不要夸张");
+    expect(draftText).not.toContain("逻辑链审查");
+    expect(optionsText).toContain("逻辑链审查");
+    expect(optionsText).toContain("标题不要夸张");
+    expect(optionsText).not.toContain("自然短句");
+  });
+
   it("adds stream true to the draft-only request", () => {
     const request = buildDirectorDraftStreamRequest(
       {
@@ -403,6 +436,22 @@ describe("buildDirectorDraftStreamRequest", () => {
     expect(latestMessage).not.toContain("生成下一步三个创作方向");
   });
 });
+
+function skill(id: string, title: string, appliesTo: "writer" | "editor" | "both") {
+  return {
+    id,
+    title,
+    category: appliesTo === "writer" ? "风格" : "检查",
+    description: `${title}说明`,
+    prompt: `${title}提示词`,
+    appliesTo,
+    isSystem: false,
+    defaultEnabled: false,
+    isArchived: false,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    updatedAt: "2026-05-01T00:00:00.000Z"
+  } as const;
+}
 
 describe("parseDirectorDraftText", () => {
   it("parses a complete draft JSON string", () => {
@@ -476,6 +525,8 @@ describe("buildDirectorOptionsStreamRequest", () => {
     expect(request.body.system).toContain("只生成下一步三个选项");
     expect(request.body.system).not.toContain("draft that can keep improving");
     expect(request.body.system).toContain("Before proposing options, infer what creative decision would help the creator most");
+    expect(request.body.system).toContain("每个选项的 description 要说明诊断依据或建议理由");
+    expect(request.body.system).toContain("每个选项的 impact 要说明选择后改善什么");
     expect(request.body.system).toContain("Small finishing actions such as proofreading or image-prompt work are allowed");
     expect(request.body.system).not.toContain("concrete change");
     expect(request.body.system).not.toContain("diagnosed content gap");
@@ -509,6 +560,7 @@ describe("buildDirectorOptionsStreamRequest", () => {
             category: "方向",
             description: "梳理可用材料和展开顺序。",
             prompt: "帮助创作者判断哪些素材应该保留、补足、合并或前置。",
+            appliesTo: "editor",
             isSystem: true,
             defaultEnabled: true,
             isArchived: false,

@@ -11,6 +11,7 @@ const skills: Skill[] = [
     category: "方向",
     description: "拆解问题。",
     prompt: "分析 prompt",
+    appliesTo: "editor",
     isSystem: true,
     defaultEnabled: true,
     isArchived: false,
@@ -23,6 +24,7 @@ const skills: Skill[] = [
     category: "约束",
     description: "保持克制。",
     prompt: "不要夸张。",
+    appliesTo: "both",
     isSystem: false,
     defaultEnabled: false,
     isArchived: false,
@@ -48,6 +50,7 @@ describe("SkillLibraryPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "新建技能" }));
     await userEvent.type(screen.getByRole("textbox", { name: "技能名称" }), "小红书风格");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "分类" }), "平台");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "作用方式" }), "writer");
     await userEvent.type(screen.getByRole("textbox", { name: "说明" }), "适合小红书。");
     await userEvent.type(screen.getByRole("textbox", { name: "提示词" }), "标题口语一点。");
     await userEvent.click(screen.getByRole("checkbox", { name: "默认启用" }));
@@ -58,6 +61,7 @@ describe("SkillLibraryPanel", () => {
       category: "平台",
       description: "适合小红书。",
       prompt: "标题口语一点。",
+      appliesTo: "writer",
       defaultEnabled: true,
       isArchived: false
     });
@@ -126,6 +130,7 @@ describe("SkillLibraryPanel", () => {
 
     const systemItem = screen.getByRole("article", { name: "分析" });
     expect(within(systemItem).queryByRole("button", { name: "编辑 分析" })).not.toBeInTheDocument();
+    expect(within(systemItem).getByText("影响：建议")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "编辑 我的约束" }));
     await userEvent.clear(screen.getByRole("textbox", { name: "技能名称" }));

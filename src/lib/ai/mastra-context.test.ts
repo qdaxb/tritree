@@ -17,6 +17,7 @@ const input = {
       category: "方向",
       description: "判断内容所处阶段，并控制改动幅度。",
       prompt: "种子或零散想法阶段可以大幅组织材料；当任务是提出编辑建议时，基本成稿阶段应避免所有建议都给重构。",
+      appliesTo: "both",
       isSystem: true,
       defaultEnabled: true,
       isArchived: false,
@@ -29,6 +30,7 @@ const input = {
       category: "风格",
       description: "更像自然分享。",
       prompt: "使用自然、轻松、不过度修饰的朋友圈语气。",
+      appliesTo: "writer",
       isSystem: false,
       defaultEnabled: false,
       isArchived: false,
@@ -67,6 +69,16 @@ describe("buildSharedAgentContext", () => {
 });
 
 describe("agent instructions", () => {
+  it("asks the editor to turn diagnosis into visible option text", () => {
+    const instructions = buildTreeOptionsInstructions(input);
+
+    expect(instructions).toContain("先诊断当前内容最值得处理的问题");
+    expect(instructions).toContain("每个建议都要来自一个明确诊断");
+    expect(instructions).toContain("description 写为什么建议这样改");
+    expect(instructions).toContain("impact 写选择后会改善什么");
+    expect(instructions).toContain("不要返回独立审查报告");
+  });
+
   it("uses separate writer and editor roles without leaking the tree choice mechanic", () => {
     const draftInstructions = buildTreeDraftInstructions(input);
     const optionsInstructions = buildTreeOptionsInstructions(input);

@@ -85,6 +85,7 @@ type SkillRow = {
   category: string;
   description: string;
   prompt: string;
+  applies_to: string;
   is_system: number;
   default_enabled: number;
   is_archived: number;
@@ -172,6 +173,7 @@ function toSkill(row: SkillRow): Skill {
     category: row.category,
     description: row.description,
     prompt: row.prompt,
+    appliesTo: row.applies_to || "both",
     isSystem: Boolean(row.is_system),
     defaultEnabled: Boolean(row.default_enabled),
     isArchived: Boolean(row.is_archived),
@@ -220,7 +222,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         db.prepare(
           `
             UPDATE skills
-            SET title = ?, category = ?, description = ?, prompt = ?, is_system = 1, default_enabled = ?, is_archived = ?, updated_at = ?
+            SET title = ?, category = ?, description = ?, prompt = ?, applies_to = ?, is_system = 1, default_enabled = ?, is_archived = ?, updated_at = ?
             WHERE id = ?
           `
         ).run(
@@ -228,6 +230,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
           parsed.category,
           parsed.description,
           parsed.prompt,
+          parsed.appliesTo,
           parsed.defaultEnabled ? 1 : 0,
           parsed.isArchived ? 1 : 0,
           timestamp,
@@ -236,8 +239,8 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       } else {
         db.prepare(
           `
-            INSERT INTO skills (id, title, category, description, prompt, is_system, default_enabled, is_archived, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+            INSERT INTO skills (id, title, category, description, prompt, applies_to, is_system, default_enabled, is_archived, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
           `
         ).run(
           skill.id,
@@ -245,6 +248,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
           parsed.category,
           parsed.description,
           parsed.prompt,
+          parsed.appliesTo,
           parsed.defaultEnabled ? 1 : 0,
           parsed.isArchived ? 1 : 0,
           timestamp,
@@ -287,8 +291,8 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const timestamp = now();
     db.prepare(
       `
-        INSERT INTO skills (id, title, category, description, prompt, is_system, default_enabled, is_archived, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+        INSERT INTO skills (id, title, category, description, prompt, applies_to, is_system, default_enabled, is_archived, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
       `
     ).run(
       id,
@@ -296,6 +300,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       parsed.category,
       parsed.description,
       parsed.prompt,
+      parsed.appliesTo,
       parsed.defaultEnabled ? 1 : 0,
       parsed.isArchived ? 1 : 0,
       timestamp,
@@ -313,6 +318,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       category: input.category ?? existing.category,
       description: input.description ?? existing.description,
       prompt: input.prompt ?? existing.prompt,
+      appliesTo: input.appliesTo ?? existing.applies_to ?? "both",
       defaultEnabled: input.defaultEnabled ?? Boolean(existing.default_enabled),
       isArchived: input.isArchived ?? Boolean(existing.is_archived)
     });
@@ -320,7 +326,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     db.prepare(
       `
         UPDATE skills
-        SET title = ?, category = ?, description = ?, prompt = ?, default_enabled = ?, is_archived = ?, updated_at = ?
+        SET title = ?, category = ?, description = ?, prompt = ?, applies_to = ?, default_enabled = ?, is_archived = ?, updated_at = ?
         WHERE id = ?
       `
     ).run(
@@ -328,6 +334,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       parsed.category,
       parsed.description,
       parsed.prompt,
+      parsed.appliesTo,
       parsed.defaultEnabled ? 1 : 0,
       parsed.isArchived ? 1 : 0,
       timestamp,

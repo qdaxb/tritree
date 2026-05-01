@@ -5,7 +5,8 @@ import {
   type Draft,
   type DirectorDraftOutput,
   type DirectorOptionsOutput,
-  type Skill
+  type Skill,
+  skillsForTarget
 } from "@/lib/domain";
 import { createTreeDraftAgent, createTreeOptionsAgent } from "./mastra-agents";
 import {
@@ -103,7 +104,7 @@ export async function generateTreeDraft({
 }: TreeDirectorExecutionInput & {
   treeDraftAgent?: TreeDraftAgentLike;
 }): Promise<DirectorDraftOutput> {
-  const agentContext = contextForDirectorParts(parts, context);
+  const agentContext = contextForDirectorParts(parts, "writer", context);
   const messages = directorMessagesForParts(parts);
   logMastraPrompt("draft", agentContext, messages);
   const agent = treeDraftAgent ?? (createTreeDraftAgent(agentContext, env) as unknown as TreeDraftAgentLike);
@@ -128,7 +129,7 @@ export async function streamTreeDraft({
   treeDraftAgent?: TreeDraftAgentLike;
   onPartialObject?: (partial: TreeDraftPartial) => void;
 }): Promise<DirectorDraftOutput> {
-  const agentContext = contextForDirectorParts(parts, context);
+  const agentContext = contextForDirectorParts(parts, "writer", context);
   const messages = directorMessagesForParts(parts);
   logMastraPrompt("draft", agentContext, messages);
   const agent = treeDraftAgent ?? (createTreeDraftAgent(agentContext, env) as unknown as TreeDraftAgentLike);
@@ -168,7 +169,7 @@ export async function generateTreeOptions({
 }: TreeDirectorExecutionInput & {
   treeOptionsAgent?: TreeOptionsAgentLike;
 }): Promise<DirectorOptionsOutput> {
-  const agentContext = contextForDirectorParts(parts, context);
+  const agentContext = contextForDirectorParts(parts, "editor", context);
   const messages = directorMessagesForParts(parts);
   logMastraPrompt("options", agentContext, messages);
   const agent = treeOptionsAgent ?? (createTreeOptionsAgent(agentContext, env) as unknown as TreeOptionsAgentLike);
@@ -193,7 +194,7 @@ export async function streamTreeOptions({
   treeOptionsAgent?: TreeOptionsAgentLike;
   onPartialObject?: (partial: TreeOptionsPartial) => void;
 }): Promise<DirectorOptionsOutput> {
-  const agentContext = contextForDirectorParts(parts, context);
+  const agentContext = contextForDirectorParts(parts, "editor", context);
   const messages = directorMessagesForParts(parts);
   logMastraPrompt("options", agentContext, messages);
   const agent = treeOptionsAgent ?? (createTreeOptionsAgent(agentContext, env) as unknown as TreeOptionsAgentLike);
@@ -225,12 +226,13 @@ export async function streamTreeOptions({
 
 function contextForDirectorParts(
   parts: DirectorInputParts,
+  target: "writer" | "editor",
   context: Partial<AgentExecutionContextOverride> = {}
 ): SharedAgentContextInput {
   return {
     rootSummary: parts.rootSummary,
     learnedSummary: parts.learnedSummary,
-    enabledSkills: parts.enabledSkills.map(normalizeSkill),
+    enabledSkills: skillsForTarget(parts.enabledSkills.map(normalizeSkill), target),
     longTermMemory: context.longTermMemory,
     availableSkillSummaries: context.availableSkillSummaries,
     toolSummaries: context.toolSummaries
@@ -240,6 +242,7 @@ function contextForDirectorParts(
 function normalizeSkill(skill: Skill): Skill {
   return {
     ...skill,
+    appliesTo: skill.appliesTo ?? "both",
     defaultEnabled: skill.defaultEnabled ?? false,
     isArchived: skill.isArchived ?? false
   };

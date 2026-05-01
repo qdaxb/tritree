@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   summarizeCurrentDraftOptionsForDirector,
   summarizeEditedDraftForDirector,
+  summarizeSelectionRewriteForDirector,
   summarizeSessionForDirector
 } from "./app-state";
-import type { BranchOption, SessionState, TreeNode } from "./domain";
+import type { BranchOption, SessionState, Skill, TreeNode } from "./domain";
 
 describe("summarizeSessionForDirector", () => {
   it("summarizes path, folded branches, and draft for AI context", () => {
@@ -376,6 +377,25 @@ describe("summarizeSessionForDirector", () => {
     expect(summary.foldedSummary).not.toContain("旧路线里的选项");
     expect(summary.pathSummary).not.toContain("旧路线里的选项");
   });
+
+  it("uses only writer and shared skills for selection rewrite", () => {
+    const state = createStateWithPath([]);
+    state.enabledSkills = [
+      skill("writer-skill", "自然短句", "writer"),
+      skill("editor-skill", "逻辑链审查", "editor"),
+      skill("shared-skill", "标题不要夸张", "both")
+    ];
+
+    const summary = summarizeSelectionRewriteForDirector(
+      state,
+      { title: "标题", body: "第一句。第二句。", hashtags: [], imagePrompt: "" },
+      "第一句",
+      "改自然一点",
+      "body"
+    );
+
+    expect(summary.enabledSkills.map((item) => item.title)).toEqual(["自然短句", "标题不要夸张"]);
+  });
 });
 
 function expectNoProcessTerms(text: string) {
@@ -416,6 +436,22 @@ function option(id: BranchOption["id"], label: string): BranchOption {
     description: `${label}的说明。`,
     impact: `${label}的影响。`,
     kind: id === "b" ? "deepen" : id === "c" ? "reframe" : "explore"
+  };
+}
+
+function skill(id: string, title: string, appliesTo: "writer" | "editor" | "both"): Skill {
+  return {
+    id,
+    title,
+    category: appliesTo === "writer" ? "风格" : "检查",
+    description: `${title}说明`,
+    prompt: `${title}提示词`,
+    appliesTo,
+    isSystem: false,
+    defaultEnabled: false,
+    isArchived: false,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    updatedAt: "2026-05-01T00:00:00.000Z"
   };
 }
 

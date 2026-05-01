@@ -10,6 +10,7 @@ const emptyForm: SkillUpsert = {
   category: "约束",
   description: "",
   prompt: "",
+  appliesTo: "both",
   defaultEnabled: false,
   isArchived: false
 };
@@ -55,6 +56,7 @@ export function SkillLibraryPanel({
       category: skill.category,
       description: skill.description,
       prompt: skill.prompt,
+      appliesTo: skill.appliesTo,
       defaultEnabled: skill.defaultEnabled,
       isArchived: false
     });
@@ -135,6 +137,21 @@ export function SkillLibraryPanel({
             </select>
           </label>
           <label>
+            <span>作用方式</span>
+            <select
+              aria-label="作用方式"
+              disabled={isSaving}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, appliesTo: event.target.value as SkillUpsert["appliesTo"] }))
+              }
+              value={form.appliesTo}
+            >
+              <option value="writer">写作方式（影响草稿）</option>
+              <option value="editor">审稿重点（影响建议）</option>
+              <option value="both">发布约束（影响全程）</option>
+            </select>
+          </label>
+          <label>
             <span>说明（选填）</span>
             <textarea
               aria-label="说明"
@@ -189,7 +206,12 @@ export function SkillLibraryPanel({
               <article aria-label={skill.title} className="skill-library-item" key={skill.id}>
                 <div>
                   <strong>{skill.title}</strong>
-                  <span>{skill.isSystem ? "系统" : "用户"}{skill.defaultEnabled ? " · 默认启用" : ""}</span>
+                  <span>
+                    {skill.isSystem ? "系统" : "用户"}
+                    {skill.defaultEnabled ? " · 默认启用" : ""}
+                    {" · "}
+                    <span>{effectLabelFor(skill.appliesTo)}</span>
+                  </span>
                   {skill.description ? <p>{skill.description}</p> : null}
                 </div>
                 {!skill.isSystem ? (
@@ -211,8 +233,20 @@ export function SkillLibraryPanel({
   );
 }
 
+function effectLabelFor(appliesTo: Skill["appliesTo"]) {
+  if (appliesTo === "writer") return "影响：草稿";
+  if (appliesTo === "editor") return "影响：建议";
+  return "影响：全程";
+}
+
 function groupSkills(skills: Skill[]) {
-  return categories
-    .map((category) => [category, skills.filter((skill) => skill.category === category)] as const)
-    .filter(([, categorySkills]) => categorySkills.length > 0);
+  const groups = [
+    ["写作方式", "writer"],
+    ["审稿重点", "editor"],
+    ["发布约束", "both"]
+  ] as const;
+
+  return groups
+    .map(([label, appliesTo]) => [label, skills.filter((skill) => skill.appliesTo === appliesTo)] as const)
+    .filter(([, groupSkills]) => groupSkills.length > 0);
 }

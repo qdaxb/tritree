@@ -11,6 +11,7 @@ const skills: Skill[] = [
     category: "方向",
     description: "拆解问题。",
     prompt: "分析 prompt",
+    appliesTo: "editor",
     isSystem: true,
     defaultEnabled: true,
     isArchived: false,
@@ -23,6 +24,7 @@ const skills: Skill[] = [
     category: "约束",
     description: "避免标题党。",
     prompt: "约束 prompt",
+    appliesTo: "both",
     isSystem: true,
     defaultEnabled: false,
     isArchived: false,
@@ -88,12 +90,12 @@ describe("RootMemorySetup", () => {
 
     expect(screen.getByText("已启用 1 个技能")).toBeInTheDocument();
     expect(screen.getByText("分析")).toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "方向" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "审稿重点" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "技能库" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "展开技能列表" }));
 
-    expect(screen.getByRole("group", { name: "方向" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "审稿重点" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "技能库" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "收起技能列表" })).toBeInTheDocument();
   });
@@ -124,7 +126,7 @@ describe("RootMemorySetup", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "还有 1 个" }));
 
-    expect(screen.getByRole("group", { name: "方向" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "审稿重点" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "技能库" })).toBeInTheDocument();
   });
 

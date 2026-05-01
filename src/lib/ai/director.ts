@@ -6,7 +6,9 @@ import {
   type DirectorOutput,
   DirectorOutputSchema,
   requireDirectorOptionIds,
-  requireThreeOptions
+  requireThreeOptions,
+  skillsForTarget,
+  type Skill
 } from "@/lib/domain";
 import {
   buildDirectorUserPrompt,
@@ -45,6 +47,9 @@ The JSON object must match this shape:
   ],
   "memoryObservation": "一句中文偏好观察"
 }
+每个选项的 description 要说明诊断依据或建议理由：当前内容哪里不清楚、哪里有风险、哪里没有兑现，或哪里最值得推进。
+每个选项的 impact 要说明选择后改善什么：例如让逻辑更连贯、读者更容易进入、标题更可信、内容更接近发布。
+不要返回独立审查报告；把诊断压进三个可选择的编辑建议里。
 Option ids must be exactly "a", "b", and "c" once each.
 Option kind must be one of "explore", "deepen", "reframe", or "finish".
 Every string value that the user will see must be Simplified Chinese.
@@ -131,7 +136,7 @@ function buildDirectorOptionsRequest(
   env: Record<string, string | undefined> = process.env
 ): DirectorRequest {
   return buildAnthropicCompatibleRequest(
-    parts,
+    partsForTarget(parts, "editor"),
     `${DIRECTOR_OPTIONS_SYSTEM_PROMPT}\n\n${DIRECTOR_OPTIONS_JSON_INSTRUCTIONS}`,
     1200,
     env
@@ -157,7 +162,7 @@ function buildDirectorDraftRequest(
   env: Record<string, string | undefined> = process.env
 ): DirectorRequest {
   return buildAnthropicCompatibleRequest(
-    parts,
+    partsForTarget(parts, "writer"),
     `${DIRECTOR_DRAFT_SYSTEM_PROMPT}\n\n${DIRECTOR_DRAFT_JSON_INSTRUCTIONS}`,
     1500,
     env
@@ -206,6 +211,20 @@ function buildAnthropicCompatibleRequest(
     body: requestBody,
     headers: requestHeaders,
     url: requestUrl
+  };
+}
+
+function partsForTarget(parts: DirectorInputParts, target: "writer" | "editor"): DirectorInputParts {
+  return {
+    ...parts,
+    enabledSkills: skillsForTarget(parts.enabledSkills.map(normalizeSkillTarget), target)
+  };
+}
+
+function normalizeSkillTarget(skill: Skill): Skill {
+  return {
+    ...skill,
+    appliesTo: skill.appliesTo ?? "both"
   };
 }
 

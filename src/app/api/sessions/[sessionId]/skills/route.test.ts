@@ -16,7 +16,7 @@ describe("/api/sessions/:sessionId/skills", () => {
     getRepositoryMock.mockReturnValue({
       getSessionState: vi.fn().mockReturnValue({
         enabledSkillIds: ["system-analysis"],
-        enabledSkills: [{ id: "system-analysis", title: "分析" }]
+        enabledSkills: [{ id: "system-analysis", title: "分析", appliesTo: "editor" }]
       })
     });
 
@@ -32,7 +32,7 @@ describe("/api/sessions/:sessionId/skills", () => {
   it("replaces session enabled skills", async () => {
     const replaceSessionEnabledSkills = vi.fn().mockReturnValue({
       enabledSkillIds: ["system-polish"],
-      enabledSkills: [{ id: "system-polish", title: "润色" }]
+      enabledSkills: [{ id: "system-polish", title: "发布准备", appliesTo: "editor" }]
     });
     getRepositoryMock.mockReturnValue({ replaceSessionEnabledSkills });
 
@@ -47,6 +47,6 @@ describe("/api/sessions/:sessionId/skills", () => {
 
     expect(response.status).toBe(200);
     expect(replaceSessionEnabledSkills).toHaveBeenCalledWith("session-1", ["system-polish"]);
-    expect(data.enabledSkills).toEqual([{ id: "system-polish", title: "润色" }]);
+    expect(data.enabledSkills).toEqual([{ id: "system-polish", title: "发布准备", appliesTo: "editor" }]);
   });
 });
