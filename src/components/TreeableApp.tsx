@@ -511,6 +511,7 @@ export function TreeableApp() {
       category: skill.category,
       description: skill.description,
       prompt: skill.prompt,
+      appliesTo: skill.appliesTo,
       defaultEnabled: skill.defaultEnabled,
       isArchived: true
     });
@@ -1055,6 +1056,7 @@ export function TreeableApp() {
   const enabledSkillIds = sessionState?.enabledSkillIds ?? [];
   const enabledSkills: Skill[] = (sessionState?.enabledSkills ?? []).map((skill) => ({
     ...skill,
+    appliesTo: skill.appliesTo ?? "both",
     defaultEnabled: skill.defaultEnabled ?? false,
     isArchived: skill.isArchived ?? false
   }));

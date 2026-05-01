@@ -198,7 +198,17 @@ button:disabled {
 
 .skill-picker__item span {
   display: grid;
-  gap: 3px;
+  gap: 0.2rem;
+}
+
+.skill-effect-label {
+  color: var(--muted-text);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-top: 0.15rem;
 }
 
 .skill-picker__item small {
