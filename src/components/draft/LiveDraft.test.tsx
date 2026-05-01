@@ -1312,6 +1312,35 @@ describe("LiveDraft", () => {
     expect(scrollArea).not.toContainElement(screen.getByText("技能弹层"));
   });
 
+  it("opens a publish assistant with Weibo and Xiaohongshu tabs", async () => {
+    render(
+      <LiveDraft
+        draft={{
+          title: "把复杂工作讲成一句人话",
+          body: "先给对方一条主线，再补细节。",
+          hashtags: ["产品思考", "#沟通效率"],
+          imagePrompt: "一张干净的工作台"
+        }}
+        isBusy={false}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+
+    expect(screen.getByRole("dialog", { name: "发布助手" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "微博" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "小红书" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("微博版预览")).toBeInTheDocument();
+    expect(screen.getByText(/#产品思考 #沟通效率/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "小红书" }));
+
+    expect(screen.getByRole("button", { name: "微博" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "小红书" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("小红书版预览")).toBeInTheDocument();
+  });
+
   it("renders empty-state actions in the middle of the draft area instead of the header", () => {
     const { container } = render(
       <LiveDraft

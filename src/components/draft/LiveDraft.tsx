@@ -15,7 +15,7 @@ import { unifiedMergeView } from "@codemirror/merge";
 import { EditorState } from "@codemirror/state";
 import { Decoration, EditorView, keymap } from "@codemirror/view";
 import { createPortal } from "react-dom";
-import { ImagePlus, Sparkles } from "lucide-react";
+import { Copy, ImagePlus, Send, Sparkles, X } from "lucide-react";
 import type { Draft, PublishPackage } from "@/lib/domain";
 import { resolveDraftTitle } from "@/lib/seed-draft";
 
@@ -83,6 +83,10 @@ export function LiveDraft({
   const selectionRewritePendingRef = useRef(false);
   const [isGeneratedDiffEditing, setIsGeneratedDiffEditing] = useState(false);
   const [editingMode, setEditingMode] = useState<"normal" | null>(null);
+  const [isPublishPanelOpen, setIsPublishPanelOpen] = useState(false);
+  const [activePublishPlatform, setActivePublishPlatform] = useState<PublishPlatform>("weibo");
+  const [copiedPublishAction, setCopiedPublishAction] = useState<PublishCopyAction | null>(null);
+  const [publishCopyError, setPublishCopyError] = useState("");
   const [showDiff, setShowDiff] = useState(false);
   const [title, setTitle] = useState(() => resolveDraftTitle(initialEditableDraft?.title, initialEditableDraft?.body));
   const [body, setBody] = useState(() => initialEditableDraft?.body ?? "");
@@ -472,6 +476,22 @@ export function LiveDraft({
         <span>{mode === "history" ? "历史草稿" : "实时草稿"}</span>
         <div className="draft-panel__actions">
           {headerActions}
+          {content && !isComparisonMode ? (
+            <button
+              aria-expanded={isPublishPanelOpen}
+              className="draft-publish-button"
+              disabled={isBusy}
+              onClick={() => {
+                setPublishCopyError("");
+                setCopiedPublishAction(null);
+                setIsPublishPanelOpen((open) => !open);
+              }}
+              type="button"
+            >
+              <Send aria-hidden="true" size={13} />
+              <span>发布</span>
+            </button>
+          ) : null}
           {canShowDiffControl ? (
             <button
               aria-pressed={isComparisonMode || showDiff || canDismissLiveDiff}
@@ -491,6 +511,47 @@ export function LiveDraft({
         </div>
       </div>
       {headerPanel ? <div className="draft-panel__popover">{headerPanel}</div> : null}
+      {isPublishPanelOpen && content ? (
+        <aside aria-label="发布助手" className="draft-publish-panel" role="dialog">
+          <div className="draft-publish-panel__header">
+            <div>
+              <p className="draft-publish-panel__title">发布助手</p>
+              <p className="draft-publish-panel__copy">生成适合平台的复制版本</p>
+            </div>
+            <button
+              aria-label="关闭发布助手"
+              className="draft-publish-panel__close"
+              onClick={() => setIsPublishPanelOpen(false)}
+              type="button"
+            >
+              <X aria-hidden="true" size={14} />
+            </button>
+          </div>
+          <div aria-label="发布平台" className="draft-publish-tabs" role="group">
+            {(["weibo", "xiaohongshu"] as const).map((platform) => (
+              <button
+                aria-pressed={activePublishPlatform === platform}
+                key={platform}
+                onClick={() => {
+                  setActivePublishPlatform(platform);
+                  setPublishCopyError("");
+                  setCopiedPublishAction(null);
+                }}
+                type="button"
+              >
+                {publishPlatformLabel(platform)}
+              </button>
+            ))}
+          </div>
+          <section className="draft-publish-preview" aria-label={`${publishPlatformLabel(activePublishPlatform)}版预览`}>
+            <div className="draft-publish-preview__meta">
+              <span>{publishPlatformLabel(activePublishPlatform)}版预览</span>
+              <span>约 {formatPublishText(content, activePublishPlatform).length} 字</span>
+            </div>
+            <pre>{formatPublishText(content, activePublishPlatform)}</pre>
+          </section>
+        </aside>
+      ) : null}
       <div className="draft-panel__scroll">
         {isBusy ? <p className="updating">AI 正在生成下一版草稿...</p> : null}
         {isComparisonMode ? (
@@ -978,6 +1039,25 @@ function parseHashtags(value: string) {
     .filter(Boolean);
 }
 
+function normalizedHashtags(hashtags: string[]) {
+  return hashtags
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
+}
+
+function formatPublishText(draft: Draft, platform: PublishPlatform) {
+  void platform;
+  const title = resolveDraftTitle(draft.title, draft.body).trim();
+  const body = draft.body.trim();
+  const hashtags = normalizedHashtags(draft.hashtags).join(" ");
+  return [title, body, hashtags].filter(Boolean).join("\n\n");
+}
+
+function publishPlatformLabel(platform: PublishPlatform) {
+  return platform === "weibo" ? "微博" : "小红书";
+}
+
 type DiffToken = {
   type: "same" | "added" | "removed";
   value: string;
@@ -985,6 +1065,8 @@ type DiffToken = {
 
 type DiffField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDiffStreamingField = Extract<DiffField, "body" | "imagePrompt">;
+type PublishPlatform = "weibo" | "xiaohongshu";
+type PublishCopyAction = "weibo" | "xiaohongshu" | "title" | "body" | "hashtags";
 type SelectionMode = "actions" | "edit";
 type SelectionAnchor = { left: number; top: number };
 type SelectionRect = Pick<DOMRect, "bottom" | "height" | "left" | "right" | "top" | "width" | "x" | "y">;

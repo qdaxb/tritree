@@ -1468,6 +1468,110 @@ button:disabled {
   z-index: 4;
 }
 
+.draft-publish-panel {
+  position: absolute;
+  top: 48px;
+  right: 18px;
+  z-index: 5;
+  width: min(380px, calc(100% - 36px));
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+}
+
+.draft-publish-panel__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.draft-publish-panel__title,
+.draft-publish-panel__copy {
+  margin: 0;
+}
+
+.draft-publish-panel__title {
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.draft-publish-panel__copy {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.draft-publish-panel__close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 0;
+  border-radius: 999px;
+}
+
+.draft-publish-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: #eef2f6;
+  border-radius: 8px;
+}
+
+.draft-publish-tabs button {
+  min-height: 34px;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 850;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.draft-publish-tabs button[aria-pressed="true"] {
+  color: #0f766e;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.draft-publish-preview {
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+  background: #fbfcfc;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 8px;
+}
+
+.draft-publish-preview__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.draft-publish-preview pre {
+  max-height: 150px;
+  margin: 0;
+  overflow: auto;
+  color: #334155;
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.58;
+  white-space: pre-wrap;
+}
+
 .draft-panel__scroll {
   min-height: 0;
   overflow: auto;
@@ -1494,6 +1598,7 @@ button:disabled {
 
 .draft-edit-button,
 .draft-diff-toggle,
+.draft-publish-button,
 .draft-skill-button {
   padding: 5px 9px;
   color: #0f766e;
@@ -1502,6 +1607,17 @@ button:disabled {
   background: #ccfbf1;
   border: 0;
   border-radius: 8px;
+}
+
+.draft-publish-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.draft-publish-button[aria-expanded="true"] {
+  color: #102033;
+  background: #e0f2fe;
 }
 
 .draft-diff-toggle[aria-pressed="true"] {
