@@ -433,6 +433,25 @@ export function LiveDraft({
     }
   }
 
+  async function copyPublishText(action: PublishCopyAction) {
+    if (!content) return;
+
+    const value = publishCopyValue(content, activePublishPlatform, action);
+    if (!value) return;
+
+    try {
+      await copyTextToClipboard(value);
+      setPublishCopyError("");
+      setCopiedPublishAction(action);
+      window.setTimeout(() => {
+        setCopiedPublishAction((current) => (current === action ? null : current));
+      }, 1400);
+    } catch {
+      setCopiedPublishAction(null);
+      setPublishCopyError("复制失败，请手动选中文案复制。");
+    }
+  }
+
   async function submitSelectionRewrite() {
     if (
       selectionRewritePendingRef.current ||
@@ -550,6 +569,28 @@ export function LiveDraft({
             </div>
             <pre>{formatPublishText(content, activePublishPlatform)}</pre>
           </section>
+          <div className="draft-publish-actions">
+            {[publishPrimaryActionFor(activePublishPlatform), ...secondaryPublishActionsFor(content, activePublishPlatform)].map(
+              (action) => (
+                <button
+                  className={
+                    action === publishPrimaryActionFor(activePublishPlatform) ? "draft-publish-actions__primary" : undefined
+                  }
+                  key={action}
+                  onClick={() => void copyPublishText(action)}
+                  type="button"
+                >
+                  <Copy aria-hidden="true" size={13} />
+                  <span>{copiedPublishAction === action ? "已复制" : publishCopyLabel(activePublishPlatform, action)}</span>
+                </button>
+              )
+            )}
+          </div>
+          {publishCopyError ? (
+            <p className="draft-publish-error" role="status">
+              {publishCopyError}
+            </p>
+          ) : null}
         </aside>
       ) : null}
       <div className="draft-panel__scroll">
@@ -1056,6 +1097,34 @@ function formatPublishText(draft: Draft, platform: PublishPlatform) {
 
 function publishPlatformLabel(platform: PublishPlatform) {
   return platform === "weibo" ? "微博" : "小红书";
+}
+
+function publishCopyValue(draft: Draft, platform: PublishPlatform, action: PublishCopyAction) {
+  if (action === "body") return draft.body.trim();
+  if (action === "title") return resolveDraftTitle(draft.title, draft.body).trim();
+  if (action === "hashtags") return normalizedHashtags(draft.hashtags).join(" ");
+  return formatPublishText(draft, platform);
+}
+
+function publishPrimaryActionFor(platform: PublishPlatform): PublishCopyAction {
+  return platform === "weibo" ? "weibo" : "xiaohongshu";
+}
+
+function publishCopyLabel(platform: PublishPlatform, action: PublishCopyAction) {
+  void platform;
+  if (action === "weibo") return "复制微博文案";
+  if (action === "xiaohongshu") return "复制小红书文案";
+  if (action === "title") return "复制标题";
+  if (action === "body") return "复制正文";
+  return "复制话题";
+}
+
+function secondaryPublishActionsFor(draft: Draft, platform: PublishPlatform): PublishCopyAction[] {
+  const actions: PublishCopyAction[] = [];
+  if (platform === "xiaohongshu" && resolveDraftTitle(draft.title, draft.body).trim()) actions.push("title");
+  if (draft.body.trim()) actions.push("body");
+  if (normalizedHashtags(draft.hashtags).length) actions.push("hashtags");
+  return actions;
 }
 
 type DiffToken = {

@@ -1341,6 +1341,60 @@ describe("LiveDraft", () => {
     expect(screen.getByText("小红书版预览")).toBeInTheDocument();
   });
 
+  it("copies the formatted Weibo text with normalized hashtags", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+
+    render(
+      <LiveDraft
+        draft={{
+          title: "标题",
+          body: "正文第一句。\n正文第二句。",
+          hashtags: ["产品思考", "#沟通效率"],
+          imagePrompt: ""
+        }}
+        isBusy={false}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+    await userEvent.click(screen.getByRole("button", { name: "复制微博文案" }));
+
+    expect(writeText).toHaveBeenCalledWith("标题\n\n正文第一句。\n正文第二句。\n\n#产品思考 #沟通效率");
+    expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
+  });
+
+  it("offers Xiaohongshu-specific copy actions", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+
+    render(
+      <LiveDraft
+        draft={{ title: "小红书标题", body: "小红书正文", hashtags: ["生活观察"], imagePrompt: "封面图" }}
+        isBusy={false}
+        publishPackage={null}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+    expect(screen.queryByRole("button", { name: "复制标题" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "小红书" }));
+    await userEvent.click(screen.getByRole("button", { name: "复制标题" }));
+
+    expect(writeText).toHaveBeenCalledWith("小红书标题");
+    expect(screen.getByRole("button", { name: "复制小红书文案" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制正文" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制话题" })).toBeInTheDocument();
+  });
+
   it("renders empty-state actions in the middle of the draft area instead of the header", () => {
     const { container } = render(
       <LiveDraft
