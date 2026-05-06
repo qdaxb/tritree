@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { badRequestResponse, isBadRequestError } from "@/lib/api/errors";
+import { authErrorResponse, requireCurrentUser } from "@/lib/auth/current-user";
 import { getRepository } from "@/lib/db/repository";
 import { SkillUpsertSchema } from "@/lib/domain";
 
@@ -12,10 +13,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ skill
   const { skillId } = await context.params;
 
   try {
+    const user = await requireCurrentUser();
     const body = SkillPatchSchema.parse(await request.json());
-    const skill = getRepository().updateSkill(skillId, body);
+    const skill = getRepository().updateSkill(user.id, skillId, body);
     return NextResponse.json({ skill });
   } catch (error) {
+    const response = authErrorResponse(error);
+    if (response) return response;
     if (isBadRequestError(error) || error instanceof z.ZodError) return badRequestResponse(error);
     if (error instanceof Error && error.message === "System skills cannot be edited directly.") {
       return NextResponse.json({ error: error.message }, { status: 409 });

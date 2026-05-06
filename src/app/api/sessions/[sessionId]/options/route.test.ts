@@ -3,9 +3,25 @@ import { POST } from "./route";
 
 const streamDirectorOptionsMock = vi.hoisted(() => vi.fn());
 const getRepositoryMock = vi.hoisted(() => vi.fn());
+const requireCurrentUserMock = vi.hoisted(() => vi.fn());
+
+const currentUser = {
+  id: "user-1",
+  username: "awei",
+  displayName: "Awei",
+  role: "admin",
+  isActive: true,
+  createdAt: "2026-05-06T00:00:00.000Z",
+  updatedAt: "2026-05-06T00:00:00.000Z"
+};
 
 vi.mock("@/lib/ai/director-stream", () => ({
   streamDirectorOptions: streamDirectorOptionsMock
+}));
+
+vi.mock("@/lib/auth/current-user", () => ({
+  authErrorResponse: () => null,
+  requireCurrentUser: requireCurrentUserMock
 }));
 
 vi.mock("@/lib/db/repository", () => ({
@@ -75,6 +91,8 @@ const stateWithOptions = {
 beforeEach(() => {
   streamDirectorOptionsMock.mockReset();
   getRepositoryMock.mockReset();
+  requireCurrentUserMock.mockReset();
+  requireCurrentUserMock.mockResolvedValue(currentUser);
 });
 
 describe("POST /api/sessions/:sessionId/options", () => {
@@ -123,7 +141,7 @@ describe("POST /api/sessions/:sessionId/options", () => {
     expect(text).not.toContain('"label":"生成中"');
     expect(text).toContain('"type":"done"');
     expect(text.indexOf('"type":"options"')).toBeLessThan(text.indexOf('"type":"done"'));
-    expect(updateNodeOptions).toHaveBeenCalledWith({ sessionId: "session-1", nodeId: "node-1", output });
+    expect(updateNodeOptions).toHaveBeenCalledWith({ userId: "user-1", sessionId: "session-1", nodeId: "node-1", output });
   });
 
   it("passes option mode into current-draft option generation", async () => {
@@ -191,6 +209,6 @@ describe("POST /api/sessions/:sessionId/options", () => {
     expect(text).toContain('"type":"done"');
     expect(streamDirectorOptionsMock).toHaveBeenCalled();
     expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("方向范围：专注");
-    expect(updateNodeOptions).toHaveBeenCalledWith({ sessionId: "session-1", nodeId: "node-1", output });
+    expect(updateNodeOptions).toHaveBeenCalledWith({ userId: "user-1", sessionId: "session-1", nodeId: "node-1", output });
   });
 });

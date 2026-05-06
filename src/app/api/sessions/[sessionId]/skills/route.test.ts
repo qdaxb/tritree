@@ -2,6 +2,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, PUT } from "./route";
 
 const getRepositoryMock = vi.hoisted(() => vi.fn());
+const requireCurrentUserMock = vi.hoisted(() => vi.fn());
+
+const currentUser = {
+  id: "user-1",
+  username: "awei",
+  displayName: "Awei",
+  role: "admin",
+  isActive: true,
+  createdAt: "2026-05-06T00:00:00.000Z",
+  updatedAt: "2026-05-06T00:00:00.000Z"
+};
+
+vi.mock("@/lib/auth/current-user", () => ({
+  authErrorResponse: () => null,
+  requireCurrentUser: requireCurrentUserMock
+}));
 
 vi.mock("@/lib/db/repository", () => ({
   getRepository: getRepositoryMock
@@ -9,6 +25,8 @@ vi.mock("@/lib/db/repository", () => ({
 
 beforeEach(() => {
   getRepositoryMock.mockReset();
+  requireCurrentUserMock.mockReset();
+  requireCurrentUserMock.mockResolvedValue(currentUser);
 });
 
 describe("/api/sessions/:sessionId/skills", () => {
@@ -46,7 +64,7 @@ describe("/api/sessions/:sessionId/skills", () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(replaceSessionEnabledSkills).toHaveBeenCalledWith("session-1", ["system-polish"]);
+    expect(replaceSessionEnabledSkills).toHaveBeenCalledWith("user-1", "session-1", ["system-polish"]);
     expect(data.enabledSkills).toEqual([{ id: "system-polish", title: "发布准备", appliesTo: "editor" }]);
   });
 });

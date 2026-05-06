@@ -5,11 +5,27 @@ const streamDirectorDraftMock = vi.hoisted(() => vi.fn());
 const extractPartialDirectorDraftMock = vi.hoisted(() => vi.fn());
 const extractActiveDirectorDraftFieldMock = vi.hoisted(() => vi.fn());
 const getRepositoryMock = vi.hoisted(() => vi.fn());
+const requireCurrentUserMock = vi.hoisted(() => vi.fn());
+
+const currentUser = {
+  id: "user-1",
+  username: "awei",
+  displayName: "Awei",
+  role: "admin",
+  isActive: true,
+  createdAt: "2026-05-06T00:00:00.000Z",
+  updatedAt: "2026-05-06T00:00:00.000Z"
+};
 
 vi.mock("@/lib/ai/director-stream", () => ({
   streamDirectorDraft: streamDirectorDraftMock,
   extractPartialDirectorDraft: extractPartialDirectorDraftMock,
   extractActiveDirectorDraftField: extractActiveDirectorDraftFieldMock
+}));
+
+vi.mock("@/lib/auth/current-user", () => ({
+  authErrorResponse: () => null,
+  requireCurrentUser: requireCurrentUserMock
 }));
 
 vi.mock("@/lib/db/repository", () => ({
@@ -81,6 +97,8 @@ beforeEach(() => {
   extractPartialDirectorDraftMock.mockReset();
   extractActiveDirectorDraftFieldMock.mockReset();
   getRepositoryMock.mockReset();
+  requireCurrentUserMock.mockReset();
+  requireCurrentUserMock.mockResolvedValue(currentUser);
 });
 
 describe("POST /api/sessions/:sessionId/draft/generate/stream", () => {
@@ -124,6 +142,7 @@ describe("POST /api/sessions/:sessionId/draft/generate/stream", () => {
     expect(text).toContain('"type":"done"');
     expect(text.indexOf('"type":"draft"')).toBeLessThan(text.indexOf('"type":"done"'));
     expect(updateNodeDraft).toHaveBeenCalledWith({
+      userId: "user-1",
       sessionId: "session-1",
       nodeId: "node-2",
       output: finalOutput

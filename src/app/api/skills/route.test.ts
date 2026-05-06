@@ -3,6 +3,22 @@ import { GET, POST } from "./route";
 import { PATCH } from "./[skillId]/route";
 
 const getRepositoryMock = vi.hoisted(() => vi.fn());
+const requireCurrentUserMock = vi.hoisted(() => vi.fn());
+
+const currentUser = {
+  id: "user-1",
+  username: "awei",
+  displayName: "Awei",
+  role: "admin",
+  isActive: true,
+  createdAt: "2026-05-06T00:00:00.000Z",
+  updatedAt: "2026-05-06T00:00:00.000Z"
+};
+
+vi.mock("@/lib/auth/current-user", () => ({
+  authErrorResponse: () => null,
+  requireCurrentUser: requireCurrentUserMock
+}));
 
 vi.mock("@/lib/db/repository", () => ({
   getRepository: getRepositoryMock
@@ -10,6 +26,8 @@ vi.mock("@/lib/db/repository", () => ({
 
 beforeEach(() => {
   getRepositoryMock.mockReset();
+  requireCurrentUserMock.mockReset();
+  requireCurrentUserMock.mockResolvedValue(currentUser);
 });
 
 describe("/api/skills", () => {
@@ -47,6 +65,7 @@ describe("/api/skills", () => {
 
     expect(response.status).toBe(200);
     expect(createSkill).toHaveBeenCalledWith(
+      "user-1",
       expect.objectContaining({ title: "我的约束", category: "约束", appliesTo: "both" })
     );
     expect(data.skill.id).toBe("user-skill");
@@ -70,6 +89,7 @@ describe("/api/skills", () => {
 
     expect(response.status).toBe(200);
     expect(createSkill).toHaveBeenCalledWith(
+      "user-1",
       expect.objectContaining({ title: "短句约束", description: "", prompt: "句子短一点。" })
     );
   });

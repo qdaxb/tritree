@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { badRequestResponse, isBadRequestError, publicServerErrorMessage } from "@/lib/api/errors";
 import { focusSessionStateForNode } from "@/lib/app-state";
+import { authErrorResponse, requireCurrentUser } from "@/lib/auth/current-user";
 import { getRepository } from "@/lib/db/repository";
 import { BranchOptionSchema, OptionGenerationModeSchema } from "@/lib/domain";
 
@@ -17,6 +18,13 @@ const BranchBodySchema = z.object({
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await context.params;
+  const user = await requireCurrentUser().catch((error) => {
+    const response = authErrorResponse(error);
+    if (response) return response;
+    throw error;
+  });
+  if (user instanceof Response) return user;
+
   let body: z.infer<typeof BranchBodySchema>;
 
   try {
@@ -30,7 +38,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   }
 
   const repository = getRepository();
-  const state = repository.getSessionState(sessionId);
+  const state = repository.getSessionState(user.id, sessionId);
   if (!state) {
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
   }
@@ -40,6 +48,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   try {
     if (!body.customOption) {
       const existingState = repository.activateHistoricalBranch({
+        userId: user.id,
         sessionId,
         nodeId: body.nodeId,
         selectedOptionId: body.optionId
@@ -60,6 +69,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     }
 
     const nextState = repository.createHistoricalDraftChild({
+      userId: user.id,
       customOption: body.customOption,
       optionMode: body.optionMode,
       sessionId,

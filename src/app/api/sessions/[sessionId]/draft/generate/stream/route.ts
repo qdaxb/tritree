@@ -3,6 +3,7 @@ import { z } from "zod";
 import { extractActiveDirectorDraftField, extractPartialDirectorDraft, streamDirectorDraft } from "@/lib/ai/director-stream";
 import { badRequestResponse, isBadRequestError, publicServerErrorMessage } from "@/lib/api/errors";
 import { focusSessionStateForNode, summarizeSessionForDirector } from "@/lib/app-state";
+import { authErrorResponse, requireCurrentUser } from "@/lib/auth/current-user";
 import { getRepository } from "@/lib/db/repository";
 import { OptionGenerationModeSchema, type BranchOption, type SessionState, type TreeNode } from "@/lib/domain";
 import { encodeNdjson } from "@/lib/stream/ndjson";
@@ -23,6 +24,13 @@ const ndjsonHeaders = {
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await context.params;
+  const user = await requireCurrentUser().catch((error) => {
+    const response = authErrorResponse(error);
+    if (response) return response;
+    throw error;
+  });
+  if (user instanceof Response) return user;
+
   let body: z.infer<typeof DraftGenerateBodySchema>;
 
   try {
@@ -36,7 +44,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   }
 
   const repository = getRepository();
-  const state = repository.getSessionState(sessionId);
+  const state = repository.getSessionState(user.id, sessionId);
   if (!state) {
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
   }
@@ -77,7 +85,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
             }
           }
         );
-        const latestState = repository.getSessionState(sessionId);
+        const latestState = repository.getSessionState(user.id, sessionId);
         if (!latestState) {
           throw new Error("Session disappeared before saving streamed draft.");
         }
@@ -88,6 +96,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         }
 
         const nextState = repository.updateNodeDraft({
+          userId: user.id,
           sessionId,
           nodeId: targetNode.id,
           output

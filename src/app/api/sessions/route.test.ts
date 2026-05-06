@@ -4,9 +4,25 @@ import { POST } from "./route";
 
 const streamDirectorOptionsMock = vi.hoisted(() => vi.fn());
 const getRepositoryMock = vi.hoisted(() => vi.fn());
+const requireCurrentUserMock = vi.hoisted(() => vi.fn());
+
+const currentUser = {
+  id: "user-1",
+  username: "awei",
+  displayName: "Awei",
+  role: "admin",
+  isActive: true,
+  createdAt: "2026-05-06T00:00:00.000Z",
+  updatedAt: "2026-05-06T00:00:00.000Z"
+};
 
 vi.mock("@/lib/ai/director-stream", () => ({
   streamDirectorOptions: streamDirectorOptionsMock
+}));
+
+vi.mock("@/lib/auth/current-user", () => ({
+  authErrorResponse: () => null,
+  requireCurrentUser: requireCurrentUserMock
 }));
 
 vi.mock("@/lib/db/repository", () => ({
@@ -32,6 +48,8 @@ const resolvedSkills = [
 beforeEach(() => {
   streamDirectorOptionsMock.mockReset();
   getRepositoryMock.mockReset();
+  requireCurrentUserMock.mockReset();
+  requireCurrentUserMock.mockResolvedValue(currentUser);
 });
 
 describe("createSeedDraft", () => {
@@ -190,11 +208,12 @@ describe("POST /api/sessions", () => {
     );
     expect(createSessionDraft).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: "user-1",
         rootMemoryId: "root",
         draft: expect.objectContaining({ body: "写一篇解释为什么要写作的文章" })
       })
     );
-    expect(updateNodeOptions).toHaveBeenCalledWith({ sessionId: "session-1", nodeId: "node-1", output });
+    expect(updateNodeOptions).toHaveBeenCalledWith({ userId: "user-1", sessionId: "session-1", nodeId: "node-1", output });
     expect(text).toContain('"type":"state"');
     expect(text).toContain('"type":"options"');
     expect(text).toContain('"label":"拆清楚为什么写"');
@@ -288,6 +307,7 @@ describe("POST /api/sessions", () => {
     expect(response.status).toBe(200);
     expect(createSessionDraft).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: "user-1",
         draft: expect.objectContaining({
           body: "写一篇解释为什么要写作的文章"
         })
@@ -397,13 +417,14 @@ describe("POST /api/sessions", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(resolveSkillsByIds).toHaveBeenCalledWith(["system-analysis", "system-no-hype-title"]);
+    expect(resolveSkillsByIds).toHaveBeenCalledWith(["system-analysis", "system-no-hype-title"], "user-1");
     expect(streamDirectorOptionsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabledSkills: resolvedSkills }),
       expect.anything()
     );
     expect(createSessionDraft).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: "user-1",
         enabledSkillIds: ["system-analysis", "system-no-hype-title"]
       })
     );
