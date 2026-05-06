@@ -931,6 +931,69 @@ describe("TreeCanvas", () => {
     expect(container.querySelector(".tree-scroll-controls")).toBeInTheDocument();
   });
 
+  it("starts mobile tree browsing at the root edge instead of clipping it", async () => {
+    const selectedPath = buildLongSelectedPath(9);
+    const clientWidthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    const clientHeightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+    const scrollWidthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+    const scrollHeightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+    const scrollToDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollTo");
+    const scrollTo = vi.fn();
+
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return this.classList?.contains("tree-viewport") ? 360 : 360;
+      }
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get() {
+        return this.classList?.contains("tree-viewport") ? 300 : 580;
+      }
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", {
+      configurable: true,
+      get() {
+        return this.classList?.contains("tree-viewport") ? 720 : 360;
+      }
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return this.classList?.contains("tree-viewport") ? 580 : 580;
+      }
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo
+    });
+
+    try {
+      render(
+        <TreeCanvas
+          currentNode={selectedPath[selectedPath.length - 1]}
+          isBusy={false}
+          isMobileLayout
+          onChoose={vi.fn()}
+          pendingChoice={null}
+          selectedPath={selectedPath}
+          treeNodes={selectedPath}
+        />
+      );
+
+      await vi.waitFor(() => {
+        expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ left: 0 }));
+      });
+    } finally {
+      if (clientWidthDescriptor) Object.defineProperty(HTMLElement.prototype, "clientWidth", clientWidthDescriptor);
+      if (clientHeightDescriptor) Object.defineProperty(HTMLElement.prototype, "clientHeight", clientHeightDescriptor);
+      if (scrollWidthDescriptor) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scrollWidthDescriptor);
+      if (scrollHeightDescriptor) Object.defineProperty(HTMLElement.prototype, "scrollHeight", scrollHeightDescriptor);
+      if (scrollToDescriptor) Object.defineProperty(HTMLElement.prototype, "scrollTo", scrollToDescriptor);
+    }
+  });
+
   it("lets tree viewport scrollbars reach the drawing area edges", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const canvasRule = css.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -941,6 +1004,16 @@ describe("TreeCanvas", () => {
     expect(canvasRule).toContain("padding: 0");
     expect(viewportRule).toContain("padding: var(--tree-canvas-inset) 0 0 var(--tree-canvas-inset)");
     expect(trayRule).toContain("margin: 16px var(--tree-canvas-inset) var(--tree-canvas-inset)");
+  });
+
+  it("stacks mobile direction cards instead of squeezing them into desktop columns", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const mobileRule = css.match(/@media \(max-width: 640px\)\s*\{(?<body>[\s\S]+)\}\s*$/)?.groups?.body ?? "";
+
+    expect(mobileRule).toContain(".branch-option-main");
+    expect(mobileRule).toContain("grid-template-columns: 1fr");
+    expect(mobileRule).toContain(".branch-option-tray__controls > .branch-side-action");
+    expect(mobileRule).toContain("margin-left: 0");
   });
 
   it("lets the left panel scroll instead of clipping a tall option tray", () => {

@@ -31,6 +31,7 @@ type TreeCanvasProps = {
   focusedNodeId?: string | null;
   generationStage?: NodeGenerationStage | null;
   isComparisonMode?: boolean;
+  isMobileLayout?: boolean;
   selectedPath: TreeNode[];
   treeNodes?: TreeNode[];
   isBusy: boolean;
@@ -534,6 +535,7 @@ export function TreeCanvas({
   focusedNodeId,
   generationStage = null,
   isComparisonMode = false,
+  isMobileLayout = false,
   selectedPath,
   treeNodes,
   isBusy,
@@ -655,8 +657,27 @@ export function TreeCanvas({
   }, [currentNode?.id, currentPrimaryOptionCount]);
 
   useEffect(() => {
+    if (isMobileLayout) {
+      scrollTreeToRoot("auto");
+      return;
+    }
+
     scrollTreeToLatest("auto");
-  }, [branchLayout.height, branchLayout.width, nodeId, pendingBranch?.nodeId]);
+  }, [branchLayout.height, branchLayout.width, isMobileLayout, nodeId, pendingBranch?.nodeId]);
+
+  function scrollTreeToRoot(behavior: ScrollBehavior = "smooth") {
+    const viewport = treeViewportRef.current;
+    if (!viewport) return;
+
+    const top = Math.max(0, (viewport.scrollHeight - viewport.clientHeight) / 2);
+    if (typeof viewport.scrollTo === "function") {
+      viewport.scrollTo({ behavior, left: 0, top });
+      return;
+    }
+
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = top;
+  }
 
   function scrollTreeToLatest(behavior: ScrollBehavior = "smooth") {
     const viewport = treeViewportRef.current;

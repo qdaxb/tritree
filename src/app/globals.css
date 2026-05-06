@@ -546,6 +546,15 @@ button:disabled {
   gap: 8px;
 }
 
+.mobile-panel-switcher {
+  display: none;
+}
+
+.mobile-panel {
+  min-height: 0;
+  display: contents;
+}
+
 .brand-mark {
   width: 42px;
   height: 42px;
@@ -2467,10 +2476,83 @@ button:disabled {
 
 @media (max-width: 980px) {
   .app-shell {
+    min-height: 100dvh;
     height: auto;
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(540px, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr);
     overflow: visible;
+  }
+
+  .mobile-panel-switcher {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    background: rgba(238, 242, 247, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 8px;
+  }
+
+  .mobile-panel-switcher button {
+    position: relative;
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #475569;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    font-weight: 850;
+  }
+
+  .mobile-panel-switcher button[aria-pressed="true"] {
+    color: #0f766e;
+    background: #ffffff;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  }
+
+  .mobile-panel-tab__badge {
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    min-width: 17px;
+    height: 17px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0 4px;
+    color: #ffffff;
+    font-size: 0.62rem;
+    font-weight: 900;
+    line-height: 1;
+    background: #ef4444;
+    border: 2px solid #ffffff;
+    border-radius: 999px;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.24);
+  }
+
+  .mobile-panel {
+    grid-column: 1 / -1;
+    min-height: 0;
+    display: none;
+  }
+
+  .mobile-panel--active {
+    display: grid;
+  }
+
+  .mobile-panel--tree.mobile-panel--active {
+    grid-template-rows: minmax(540px, auto);
+  }
+
+  .mobile-panel--draft.mobile-panel--active {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .mobile-panel > .canvas-region,
+  .mobile-panel > .draft-panel {
+    min-height: 0;
   }
 
   .draft-panel {
@@ -2563,6 +2645,14 @@ button:disabled {
   }
 
   .branch-option-tray {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-option-tray__controls > .branch-side-action {
+    margin-left: 0;
+  }
+
+  .branch-option-main {
     grid-template-columns: 1fr;
   }
 

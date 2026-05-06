@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ReactNode } from "react";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -330,11 +332,63 @@ function controlledNdjsonResponse() {
   };
 }
 
+function installViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width
+  });
+
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query: string) => {
+      const matches = query === "(max-width: 980px)" ? width <= 980 : false;
+      const listeners = new Set<(event: MediaQueryListEvent) => void>();
+      const mediaQueryList = {
+        matches,
+        media: query,
+        onchange: null,
+        addEventListener: (_event: "change", listener: (event: MediaQueryListEvent) => void) => {
+          listeners.add(listener);
+        },
+        removeEventListener: (_event: "change", listener: (event: MediaQueryListEvent) => void) => {
+          listeners.delete(listener);
+        },
+        addListener: (listener: (event: MediaQueryListEvent) => void) => {
+          listeners.add(listener);
+        },
+        removeListener: (listener: (event: MediaQueryListEvent) => void) => {
+          listeners.delete(listener);
+        },
+        dispatchEvent: (event: Event) => {
+          listeners.forEach((listener) => listener(event as MediaQueryListEvent));
+          return true;
+        }
+      };
+
+      return mediaQueryList as MediaQueryList;
+    })
+  );
+}
+
+function installMobileViewport() {
+  installViewport(390);
+}
+
+function installDesktopViewport() {
+  installViewport(1280);
+}
+
+function mobileTabBadge(tabName: "树图" | "草稿") {
+  return screen.getByRole("button", { name: tabName }).querySelector(".mobile-panel-tab__badge");
+}
+
 describe("TreeableApp", () => {
   afterEach(() => {
     liveDraftMock.mockClear();
     treeCanvasMock.mockClear();
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -352,6 +406,55 @@ describe("TreeableApp", () => {
     expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions");
     expect(screen.queryByLabelText("历史路径地图")).not.toBeInTheDocument();
+  });
+
+  it("renders mobile panel controls with tree active by default", async () => {
+    installMobileViewport();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByTestId("tree-canvas")).toBeInTheDocument();
+    const switcher = screen.getByRole("group", { name: "移动端主面板" });
+    expect(within(switcher).getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(switcher).getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "false");
+    expect(document.querySelector(".mobile-panel--tree")).toHaveClass("mobile-panel--active");
+    expect(document.querySelector(".mobile-panel--draft")).not.toHaveClass("mobile-panel--active");
+  });
+
+  it("does not render mobile panel controls on desktop", async () => {
+    installDesktopViewport();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByTestId("tree-canvas")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "移动端主面板" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("live-draft")).toBeInTheDocument();
+  });
+
+  it("defines mobile-only panel visibility rules", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const defaultPanelRule = css.match(/\.mobile-panel\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const mediaRule = css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)
+      ?.groups?.body ?? "";
+
+    expect(defaultPanelRule).toContain("display: contents");
+    expect(mediaRule).toContain(".mobile-panel-switcher");
+    expect(mediaRule).toContain("display: none");
+    expect(mediaRule).toContain(".mobile-panel--active");
+    expect(mediaRule).toContain("display: grid");
+    expect(mediaRule).toContain("grid-template-rows: auto auto minmax(0, 1fr)");
   });
 
   it("trims persisted root summary before flattening it in the topbar", async () => {
@@ -724,6 +827,332 @@ describe("TreeableApp", () => {
         body: JSON.stringify({ nodeId: "node-1", optionId: "a", optionMode: "balanced" })
       })
     );
+  });
+
+  it("switches to the draft panel when a mobile direction choice starts draft generation", async () => {
+    installMobileViewport();
+    const childNode = {
+      ...activeState.currentNode,
+      id: "node-2",
+      parentId: "node-1",
+      parentOptionId: "a" as const,
+      roundIndex: 2,
+      options: [],
+      selectedOptionId: null
+    };
+    const chosenState = {
+      ...activeState,
+      session: { ...activeState.session, currentNodeId: "node-2" },
+      currentNode: childNode,
+      currentDraft: activeState.currentDraft,
+      nodeDrafts: [{ nodeId: "node-1", draft: activeState.currentDraft }],
+      selectedPath: [activeState.currentNode, childNode]
+    };
+    const generatedState = {
+      ...chosenState,
+      currentDraft: { title: "Generated", body: "Generated body", hashtags: ["#AI"], imagePrompt: "Tree" },
+      nodeDrafts: [
+        { nodeId: "node-1", draft: activeState.currentDraft },
+        { nodeId: "node-2", draft: { title: "Generated", body: "Generated body", hashtags: ["#AI"], imagePrompt: "Tree" } }
+      ]
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: chosenState }) })
+      .mockResolvedValueOnce(optionsNdjsonResponse(generatedState))
+      .mockResolvedValueOnce(optionsNdjsonResponse(generatedState));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByRole("group", { name: "移动端主面板" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "choose displayed option" }));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(document.querySelector(".mobile-panel--draft")).toHaveClass("mobile-panel--active");
+  });
+
+  it("marks the tree tab when next options are generating behind the mobile draft tab", async () => {
+    installMobileViewport();
+    const draftStream = controlledNdjsonResponse();
+    const optionsStream = controlledNdjsonResponse();
+    const childNode = {
+      ...activeState.currentNode,
+      id: "node-2",
+      parentId: "node-1",
+      parentOptionId: "a" as const,
+      roundIndex: 2,
+      options: [],
+      selectedOptionId: null
+    };
+    const chosenState = {
+      ...activeState,
+      session: { ...activeState.session, currentNodeId: "node-2" },
+      currentNode: childNode,
+      currentDraft: null,
+      nodeDrafts: [{ nodeId: "node-1", draft: activeState.currentDraft }],
+      selectedPath: [activeState.currentNode, childNode]
+    };
+    const generatedDraft = { title: "Generated", body: "Generated body", hashtags: ["#AI"], imagePrompt: "Tree" };
+    const generatedState = {
+      ...chosenState,
+      currentDraft: generatedDraft,
+      nodeDrafts: [
+        { nodeId: "node-1", draft: activeState.currentDraft },
+        { nodeId: "node-2", draft: generatedDraft }
+      ]
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: chosenState }) })
+      .mockResolvedValueOnce(draftStream.response)
+      .mockResolvedValueOnce(optionsStream.response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByRole("group", { name: "移动端主面板" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "choose displayed option" }));
+    await vi.waitFor(() => {
+      expect(screen.getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    act(() => {
+      draftStream.push({ type: "draft", draft: generatedDraft, streamingField: "body" });
+      draftStream.push({ type: "done", state: generatedState });
+      draftStream.close();
+    });
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        6,
+        "/api/sessions/session-1/options",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(mobileTabBadge("树图")).toHaveTextContent("新");
+    });
+
+    expect(mobileTabBadge("草稿")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "树图" }));
+
+    expect(screen.getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
+    expect(mobileTabBadge("树图")).not.toBeInTheDocument();
+  });
+
+  it("switches to the draft panel when a mobile historical branch starts generation", async () => {
+    installMobileViewport();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByRole("group", { name: "移动端主面板" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "activate historical branch" }));
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        4,
+        "/api/sessions/session-1/branch",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    expect(screen.getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps the tree panel active when mobile options are regenerated", async () => {
+    installMobileViewport();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce(optionsNdjsonResponse(activeState));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByRole("group", { name: "移动端主面板" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "regenerate focused options" }));
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        4,
+        "/api/sessions/session-1/options",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    expect(screen.getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps the tree panel active when viewing a historical node without generation", async () => {
+    installMobileViewport();
+    const historicalNode = {
+      ...activeState.currentNode,
+      id: "node-2",
+      parentId: "node-1",
+      roundIndex: 2
+    };
+    const state = {
+      ...activeState,
+      treeNodes: [activeState.currentNode, historicalNode],
+      nodeDrafts: [
+        { nodeId: "node-1", draft: activeState.currentDraft },
+        { nodeId: "node-2", draft: { title: "History", body: "History body", hashtags: [], imagePrompt: "" } }
+      ]
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByRole("group", { name: "移动端主面板" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "view historical node" }));
+
+    expect(screen.getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("respects a manual mobile tree switch during active generation and resets it for the next generation", async () => {
+    installMobileViewport();
+    const draftStream = controlledNdjsonResponse();
+    const childNode = {
+      ...activeState.currentNode,
+      id: "node-2",
+      parentId: "node-1",
+      parentOptionId: "a" as const,
+      roundIndex: 2,
+      options: [],
+      selectedOptionId: null
+    };
+    const chosenState = {
+      ...activeState,
+      session: { ...activeState.session, currentNodeId: "node-2" },
+      currentNode: childNode,
+      currentDraft: null,
+      nodeDrafts: [{ nodeId: "node-1", draft: activeState.currentDraft }],
+      selectedPath: [activeState.currentNode, childNode]
+    };
+    const generatedDraft = { title: "Generated", body: "Generated body", hashtags: ["#AI"], imagePrompt: "Tree" };
+    const generatedState = {
+      ...chosenState,
+      currentDraft: generatedDraft,
+      nodeDrafts: [
+        { nodeId: "node-1", draft: activeState.currentDraft },
+        { nodeId: "node-2", draft: generatedDraft }
+      ]
+    };
+    const generatedOptionsState = {
+      ...generatedState,
+      currentNode: {
+        ...generatedState.currentNode,
+        options: activeState.currentNode.options
+      }
+    };
+    const secondChildNode = {
+      ...activeState.currentNode,
+      id: "node-3",
+      parentId: "node-2",
+      parentOptionId: "a" as const,
+      roundIndex: 3,
+      options: [],
+      selectedOptionId: null
+    };
+    const secondChosenState = {
+      ...generatedOptionsState,
+      session: { ...generatedOptionsState.session, currentNodeId: "node-3" },
+      currentNode: secondChildNode,
+      currentDraft: null,
+      selectedPath: [activeState.currentNode, childNode, secondChildNode]
+    };
+    const secondDraft = { title: "Second", body: "Second body", hashtags: ["#AI"], imagePrompt: "Tree" };
+    const secondDraftState = {
+      ...secondChosenState,
+      currentDraft: secondDraft,
+      nodeDrafts: [...generatedState.nodeDrafts, { nodeId: "node-3", draft: secondDraft }]
+    };
+    const secondOptionsState = {
+      ...secondDraftState,
+      currentNode: {
+        ...secondDraftState.currentNode,
+        options: activeState.currentNode.options
+      }
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: chosenState }) })
+      .mockResolvedValueOnce(draftStream.response)
+      .mockResolvedValueOnce(optionsNdjsonResponse(generatedOptionsState))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: secondChosenState }) })
+      .mockResolvedValueOnce(optionsNdjsonResponse(secondDraftState))
+      .mockResolvedValueOnce(optionsNdjsonResponse(secondOptionsState));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByRole("group", { name: "移动端主面板" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "choose displayed option" }));
+    await vi.waitFor(() => {
+      expect(screen.getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "树图" }));
+    expect(screen.getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
+
+    act(() => {
+      draftStream.push({ type: "draft", draft: generatedDraft, streamingField: "body" });
+    });
+
+    await vi.waitFor(() => {
+      expect(mobileTabBadge("草稿")).toHaveTextContent("新");
+    });
+
+    act(() => {
+      draftStream.push({ type: "done", state: generatedState });
+      draftStream.close();
+    });
+
+    await vi.waitFor(() => {
+      expect(liveDraftMock).toHaveBeenLastCalledWith(expect.objectContaining({ draft: generatedDraft }));
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        6,
+        "/api/sessions/session-1/options",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(screen.getByTestId("canvas-options")).toHaveTextContent("A|B|C");
+    });
+    expect(screen.getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(screen.getByRole("button", { name: "choose displayed option" }));
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        7,
+        "/api/sessions/session-1/choose",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(screen.getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "true");
+    });
   });
 
   it("uses the viewed historical node as the source for custom directions", async () => {
@@ -1642,6 +2071,7 @@ describe("TreeableApp", () => {
   });
 
   it("shows a retry action after draft generation fails for a draftless current node", async () => {
+    installMobileViewport();
     const nodeOnlyState = {
       ...activeState,
       session: { ...activeState.session, currentNodeId: "node-2" },
@@ -1698,7 +2128,10 @@ describe("TreeableApp", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("流式生成失败");
     expect(within(screen.getByTestId("mock-draft-actions")).queryByRole("button", { name: "重试生成" })).not.toBeInTheDocument();
     const retryActionArea = screen.getByTestId("mock-draft-empty-actions");
-    await userEvent.click(within(retryActionArea).getByRole("button", { name: "重试生成" }));
+    await userEvent.click(screen.getByRole("button", { name: "树图" }));
+    expect(screen.getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(within(retryActionArea).getByRole("button", { hidden: true, name: "重试生成" }));
+    expect(screen.getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "true");
 
     await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenNthCalledWith(

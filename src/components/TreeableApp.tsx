@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   SessionStateSchema,
   type BranchOption,
@@ -27,6 +27,8 @@ import { TreeCanvas } from "@/components/tree/TreeCanvas";
 import { createNdjsonParser } from "@/lib/stream/ndjson";
 
 type LoadState = "loading" | "root" | "ready" | "error";
+type MobilePanel = "tree" | "draft";
+type MobilePanelUnreadState = Record<MobilePanel, boolean>;
 type DraftComparisonSelection = { fromNodeId: string | null; toNodeId: string | null };
 type DraftComparisonEntry = { nodeId: string; label: string; draft: Draft };
 type NodeGenerationStage = { nodeId: string; stage: "draft" | "options" };
@@ -69,6 +71,9 @@ type OptionsStreamEvent =
   | { type: "options"; nodeId: string; options: BranchOption[] }
   | { type: "done"; state: SessionState }
   | { type: "error"; error: string };
+
+const MOBILE_LAYOUT_QUERY = "(max-width: 980px)";
+const EMPTY_MOBILE_UNREAD: MobilePanelUnreadState = { tree: false, draft: false };
 
 const preferenceText: Record<string, string> = {
   Product: "产品",
@@ -369,10 +374,60 @@ export function TreeableApp() {
   const [streamingDraft, setStreamingDraft] = useState<StreamingDraftEntry | null>(null);
   const [streamingOptions, setStreamingOptions] = useState<StreamingOptionsEntry | null>(null);
   const [generatedDiffNodeId, setGeneratedDiffNodeId] = useState<string | null>(null);
+  const [activeMobilePanel, setActiveMobilePanel] = useState<MobilePanel>("tree");
+  const [mobileUnreadPanels, setMobileUnreadPanels] = useState<MobilePanelUnreadState>(EMPTY_MOBILE_UNREAD);
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
+  const activeMobilePanelRef = useRef<MobilePanel>("tree");
+  const isMobileLayoutRef = useRef(false);
+  const mobileGenerationPanelOverrideRef = useRef(false);
 
   useEffect(() => {
     void loadRoot();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+
+    const mediaQuery = window.matchMedia(MOBILE_LAYOUT_QUERY);
+    const syncMobileLayout = (event?: MediaQueryListEvent) => {
+      setIsMobileLayout(event?.matches ?? mediaQuery.matches);
+    };
+
+    syncMobileLayout();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncMobileLayout);
+
+      return () => {
+        mediaQuery.removeEventListener("change", syncMobileLayout);
+      };
+    }
+
+    mediaQuery.addListener(syncMobileLayout);
+
+    return () => {
+      mediaQuery.removeListener(syncMobileLayout);
+    };
+  }, []);
+
+  useEffect(() => {
+    isMobileLayoutRef.current = isMobileLayout;
+    if (!isMobileLayout) {
+      setMobileUnreadPanels((panels) => (panels.tree || panels.draft ? EMPTY_MOBILE_UNREAD : panels));
+    }
+  }, [isMobileLayout]);
+
+  useEffect(() => {
+    activeMobilePanelRef.current = activeMobilePanel;
+    setMobileUnreadPanels((panels) =>
+      panels[activeMobilePanel] ? { ...panels, [activeMobilePanel]: false } : panels
+    );
+  }, [activeMobilePanel]);
+
+  useEffect(() => {
+    if (!isBusy && !generationStage) {
+      mobileGenerationPanelOverrideRef.current = false;
+    }
+  }, [generationStage, isBusy]);
 
   useEffect(() => {
     if (sessionState?.currentNode?.id) {
@@ -381,6 +436,39 @@ export function TreeableApp() {
       setDraftComparison(null);
     }
   }, [sessionState?.currentNode?.id]);
+
+  function mobilePanelClassName(panel: MobilePanel) {
+    return `mobile-panel mobile-panel--${panel}${activeMobilePanel === panel ? " mobile-panel--active" : ""}`;
+  }
+
+  function markMobilePanelUnread(panel: MobilePanel) {
+    if (!isMobileLayoutRef.current || activeMobilePanelRef.current === panel) return;
+    setMobileUnreadPanels((panels) => (panels[panel] ? panels : { ...panels, [panel]: true }));
+  }
+
+  function clearMobilePanelUnread(panel: MobilePanel) {
+    setMobileUnreadPanels((panels) => (panels[panel] ? { ...panels, [panel]: false } : panels));
+  }
+
+  function showMobilePanel(panel: MobilePanel) {
+    if (isBusy || generationStage) {
+      mobileGenerationPanelOverrideRef.current = true;
+    }
+    activeMobilePanelRef.current = panel;
+    setActiveMobilePanel(panel);
+    clearMobilePanelUnread(panel);
+  }
+
+  function showMobileDraftForGeneration() {
+    if (!isMobileLayout) return;
+    if (mobileGenerationPanelOverrideRef.current) {
+      markMobilePanelUnread("draft");
+      return;
+    }
+    activeMobilePanelRef.current = "draft";
+    setActiveMobilePanel("draft");
+    clearMobilePanelUnread("draft");
+  }
 
   async function loadRoot() {
     try {
@@ -580,6 +668,7 @@ export function TreeableApp() {
     if (!sessionState?.currentNode) return;
     const trimmedNote = note?.trim();
     const customOptionForChoice = isCustomBranchOptionId(optionId) ? customOptionOverride ?? customOption : null;
+    showMobileDraftForGeneration();
     setPendingChoice(optionId);
     setGeneratedDiffNodeId(null);
     setIsBusy(true);
@@ -628,6 +717,7 @@ export function TreeableApp() {
     if (!sessionState) return;
     const trimmedNote = note?.trim();
     const customOptionForBranch = isCustomBranchOptionId(optionId) ? customOptionOverride ?? customOption : null;
+    showMobileDraftForGeneration();
     setPendingBranch({ nodeId, optionId });
     setGeneratedDiffNodeId(null);
     setViewNodeId(nodeId);
@@ -675,6 +765,7 @@ export function TreeableApp() {
     if (!nodeId || draftForNode(state, nodeId)) return state;
 
     setGenerationStage({ nodeId, stage: "draft" });
+    markMobilePanelUnread("draft");
     const requestOptions = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -717,12 +808,14 @@ export function TreeableApp() {
 
       if (value.type === "draft") {
         setStreamingDraft({ nodeId, draft: value.draft, streamingField: value.streamingField ?? null });
+        markMobilePanelUnread("draft");
         receivedDraft = true;
         return;
       }
 
       if (value.type === "done") {
         doneState = value.state;
+        markMobilePanelUnread("draft");
         receivedDone = true;
         return;
       }
@@ -765,6 +858,7 @@ export function TreeableApp() {
 
     setGenerationStage({ nodeId, stage: "options" });
     setStreamingOptions({ nodeId, options: [] });
+    markMobilePanelUnread("tree");
     const response = await fetch(`/api/sessions/${state.session.id}/options`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -811,12 +905,14 @@ export function TreeableApp() {
           setGenerationStage({ nodeId, stage: "options" });
           setStreamingOptions({ nodeId, options: [] });
         }
+        markMobilePanelUnread("tree");
         setLoadState("ready");
         return;
       }
 
       if (value.type === "options") {
         setStreamingOptions({ nodeId: value.nodeId, options: value.options });
+        markMobilePanelUnread("tree");
         receivedOptions = true;
         return;
       }
@@ -824,6 +920,7 @@ export function TreeableApp() {
       if (value.type === "done") {
         doneState = value.state;
         receivedDone = true;
+        markMobilePanelUnread("tree");
         setGenerationStage(null);
         setStreamingOptions(null);
         return;
@@ -868,6 +965,7 @@ export function TreeableApp() {
       setSessionState(nextState);
       setViewNodeId(generatedNodeId ?? null);
       setGeneratedDiffNodeId(generatedNodeId ?? null);
+      markMobilePanelUnread("draft");
       await allowDraftRender();
     }
 
@@ -1191,6 +1289,7 @@ export function TreeableApp() {
   async function retryDraftGeneration() {
     if (!sessionState || !activeViewNodeId || isBusy) return;
 
+    showMobileDraftForGeneration();
     setGeneratedDiffNodeId(null);
     setStreamingDraft(null);
     setStreamingOptions(null);
@@ -1233,6 +1332,36 @@ export function TreeableApp() {
           </button>
         </div>
       </header>
+      {isMobileLayout ? (
+        <div aria-label="移动端主面板" className="mobile-panel-switcher" role="group">
+          <button
+            aria-pressed={activeMobilePanel === "tree"}
+            className="mobile-panel-tab"
+            onClick={() => showMobilePanel("tree")}
+            type="button"
+          >
+            <span>树图</span>
+            {mobileUnreadPanels.tree ? (
+              <span aria-hidden="true" className="mobile-panel-tab__badge">
+                新
+              </span>
+            ) : null}
+          </button>
+          <button
+            aria-pressed={activeMobilePanel === "draft"}
+            className="mobile-panel-tab"
+            onClick={() => showMobilePanel("draft")}
+            type="button"
+          >
+            <span>草稿</span>
+            {mobileUnreadPanels.draft ? (
+              <span aria-hidden="true" className="mobile-panel-tab__badge">
+                新
+              </span>
+            ) : null}
+          </button>
+        </div>
+      ) : null}
       {isSkillLibraryOpen ? (
         <SkillLibraryPanel
           error={skillLibraryMessage}
@@ -1244,101 +1373,112 @@ export function TreeableApp() {
           skills={skills}
         />
       ) : null}
-      <section className="canvas-region">
-        <TreeCanvas
-          changedDraftNodeIds={changedDraftNodeIds}
-          comparisonNodeIds={draftComparison}
-          currentNode={currentNodeForCanvas}
-          focusedNodeId={activeViewNodeId}
-          generationStage={generationStage}
-          isComparisonMode={Boolean(draftComparison)}
-          isBusy={treeChoicesDisabled}
-          onActivateBranch={activateHistoricalBranch}
-          onAddCustomOption={activeViewNodeId ? addAndChooseCustomOption : undefined}
-          onChoose={chooseFromViewedNode}
-          onRegenerateOptions={canRegenerateOptions ? regenerateOptionsForCurrentNode : undefined}
-          onSelectComparisonNode={selectDraftComparisonNode}
-          onViewNode={(nodeId) => void viewNode(nodeId)}
-          pendingBranch={pendingBranch}
-          pendingChoice={pendingChoice}
-          selectedPath={sessionState?.selectedPath ?? []}
-          skills={enabledSkills}
-          treeNodes={sessionState?.treeNodes}
-        />
-      </section>
-      <LiveDraft
-        canCompareDrafts={comparisonEntries.length >= 2}
-        comparisonDrafts={comparisonDrafts}
-        comparisonLabels={comparisonLabels}
-        comparisonSelectionCount={comparisonSelectionCount}
-        draft={viewedDraft}
-        emptyStateActions={
-          canRetryDraftGeneration ? (
-            <button className="secondary-button" onClick={() => void retryDraftGeneration()} type="button">
-              重试生成
-            </button>
-          ) : null
-        }
-        headerActions={
-          <>
-            <button
-              aria-expanded={isSkillPanelOpen}
-              className="draft-skill-button"
-              disabled={isBusy || !sessionState}
-              onClick={() => {
-                setIsSkillLibraryOpen(false);
-                setIsSkillPanelOpen((open) => !open);
-              }}
-              type="button"
-            >
-              {enabledSkillIds.length} 个技能
-            </button>
-          </>
-        }
-        headerPanel={
-          isSkillPanelOpen && sessionState ? (
-            <aside aria-label="本作品技能" className="draft-skill-panel">
-              <header className="draft-skill-panel__header">
-                <div>
-                  <p className="eyebrow">本作品技能</p>
-                  <p className="draft-skill-panel__summary">已启用 {enabledSkillIds.length} 个</p>
-                </div>
-                <button
-                  className="secondary-button"
+      <div
+        aria-hidden={isMobileLayout && activeMobilePanel !== "tree" ? "true" : undefined}
+        className={mobilePanelClassName("tree")}
+      >
+        <section className="canvas-region">
+          <TreeCanvas
+            changedDraftNodeIds={changedDraftNodeIds}
+            comparisonNodeIds={draftComparison}
+            currentNode={currentNodeForCanvas}
+            focusedNodeId={activeViewNodeId}
+            generationStage={generationStage}
+            isComparisonMode={Boolean(draftComparison)}
+            isBusy={treeChoicesDisabled}
+            isMobileLayout={isMobileLayout}
+            onActivateBranch={activateHistoricalBranch}
+            onAddCustomOption={activeViewNodeId ? addAndChooseCustomOption : undefined}
+            onChoose={chooseFromViewedNode}
+            onRegenerateOptions={canRegenerateOptions ? regenerateOptionsForCurrentNode : undefined}
+            onSelectComparisonNode={selectDraftComparisonNode}
+            onViewNode={(nodeId) => void viewNode(nodeId)}
+            pendingBranch={pendingBranch}
+            pendingChoice={pendingChoice}
+            selectedPath={sessionState?.selectedPath ?? []}
+            skills={enabledSkills}
+            treeNodes={sessionState?.treeNodes}
+          />
+        </section>
+      </div>
+      <div
+        aria-hidden={isMobileLayout && activeMobilePanel !== "draft" ? "true" : undefined}
+        className={mobilePanelClassName("draft")}
+      >
+        <LiveDraft
+          canCompareDrafts={comparisonEntries.length >= 2}
+          comparisonDrafts={comparisonDrafts}
+          comparisonLabels={comparisonLabels}
+          comparisonSelectionCount={comparisonSelectionCount}
+          draft={viewedDraft}
+          emptyStateActions={
+            canRetryDraftGeneration ? (
+              <button className="secondary-button" onClick={() => void retryDraftGeneration()} type="button">
+                重试生成
+              </button>
+            ) : null
+          }
+          headerActions={
+            <>
+              <button
+                aria-expanded={isSkillPanelOpen}
+                className="draft-skill-button"
+                disabled={isBusy || !sessionState}
+                onClick={() => {
+                  setIsSkillLibraryOpen(false);
+                  setIsSkillPanelOpen((open) => !open);
+                }}
+                type="button"
+              >
+                {enabledSkillIds.length} 个技能
+              </button>
+            </>
+          }
+          headerPanel={
+            isSkillPanelOpen && sessionState ? (
+              <aside aria-label="本作品技能" className="draft-skill-panel">
+                <header className="draft-skill-panel__header">
+                  <div>
+                    <p className="eyebrow">本作品技能</p>
+                    <p className="draft-skill-panel__summary">已启用 {enabledSkillIds.length} 个</p>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    disabled={isBusy}
+                    onClick={() => {
+                      setIsSkillPanelOpen(false);
+                      setIsSkillLibraryOpen(true);
+                    }}
+                    type="button"
+                  >
+                    管理技能库
+                  </button>
+                </header>
+                <SkillPicker
                   disabled={isBusy}
-                  onClick={() => {
-                    setIsSkillPanelOpen(false);
-                    setIsSkillLibraryOpen(true);
-                  }}
-                  type="button"
-                >
-                  管理技能库
-                </button>
-              </header>
-              <SkillPicker
-                disabled={isBusy}
-                onChange={(ids) => void saveSessionSkills(ids)}
-                selectedSkillIds={enabledSkillIds}
-                skills={skills}
-              />
-            </aside>
-          ) : null
-        }
-        isBusy={isBusy}
-        isComparisonMode={Boolean(draftComparison)}
-        isEditable={Boolean(activeViewNodeId)}
-        isLiveDiff={shouldShowGeneratedDiff}
-        isLiveDiffStreaming={isLiveDraftStreaming}
-        liveDiffStreamingField={liveDiffStreamingField}
-        mode={isViewingCurrentNode ? "current" : "history"}
-        onCancelComparison={cancelDraftComparison}
-        onDismissLiveDiff={() => setGeneratedDiffNodeId(null)}
-        onRewriteSelection={rewriteDraftSelection}
-        onSave={saveDraft}
-        onStartComparison={startDraftComparison}
-        previousDraft={previousDraft}
-        publishPackage={null}
-      />
+                  onChange={(ids) => void saveSessionSkills(ids)}
+                  selectedSkillIds={enabledSkillIds}
+                  skills={skills}
+                />
+              </aside>
+            ) : null
+          }
+          isBusy={isBusy}
+          isComparisonMode={Boolean(draftComparison)}
+          isEditable={Boolean(activeViewNodeId)}
+          isLiveDiff={shouldShowGeneratedDiff}
+          isLiveDiffStreaming={isLiveDraftStreaming}
+          liveDiffStreamingField={liveDiffStreamingField}
+          mode={isViewingCurrentNode ? "current" : "history"}
+          onCancelComparison={cancelDraftComparison}
+          onDismissLiveDiff={() => setGeneratedDiffNodeId(null)}
+          onRewriteSelection={rewriteDraftSelection}
+          onSave={saveDraft}
+          onStartComparison={startDraftComparison}
+          previousDraft={previousDraft}
+          publishPackage={null}
+        />
+      </div>
       {message ? (
         <div className="toast" role="status">
           {message}
