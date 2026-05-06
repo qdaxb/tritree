@@ -673,6 +673,26 @@ describe("LiveDraft", () => {
     expect(screen.queryAllByRole("button", { name: /选择差异/ })).toHaveLength(0);
   });
 
+  it("shows a stronger visual status block while the draft is streaming", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
+        isBusy
+        isLiveDiff
+        isLiveDiffStreaming
+        previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+      />
+    );
+
+    const status = screen.getByRole("status", { name: "草稿生成状态" });
+    expect(status).toHaveClass("draft-streaming-status");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(within(status).getByText("AI 正在生成下一版草稿...")).toBeInTheDocument();
+    expect(status.querySelector(".draft-streaming-status__pulse")).not.toBeNull();
+    expect(status.querySelector(".draft-streaming-status__bar")).not.toBeNull();
+  });
+
   it("keeps ungenerated parent body text in the read-only merge editor during streaming", () => {
     render(
       <LiveDraft
