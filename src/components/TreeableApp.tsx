@@ -28,6 +28,7 @@ import { createNdjsonParser } from "@/lib/stream/ndjson";
 
 type LoadState = "loading" | "root" | "ready" | "error";
 type MobilePanel = "tree" | "draft";
+type MobilePanelUnreadState = Record<MobilePanel, boolean>;
 type DraftComparisonSelection = { fromNodeId: string | null; toNodeId: string | null };
 type DraftComparisonEntry = { nodeId: string; label: string; draft: Draft };
 type NodeGenerationStage = { nodeId: string; stage: "draft" | "options" };
@@ -72,6 +73,7 @@ type OptionsStreamEvent =
   | { type: "error"; error: string };
 
 const MOBILE_LAYOUT_QUERY = "(max-width: 980px)";
+const EMPTY_MOBILE_UNREAD: MobilePanelUnreadState = { tree: false, draft: false };
 
 const preferenceText: Record<string, string> = {
   Product: "产品",
@@ -373,7 +375,10 @@ export function TreeableApp() {
   const [streamingOptions, setStreamingOptions] = useState<StreamingOptionsEntry | null>(null);
   const [generatedDiffNodeId, setGeneratedDiffNodeId] = useState<string | null>(null);
   const [activeMobilePanel, setActiveMobilePanel] = useState<MobilePanel>("tree");
+  const [mobileUnreadPanels, setMobileUnreadPanels] = useState<MobilePanelUnreadState>(EMPTY_MOBILE_UNREAD);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
+  const activeMobilePanelRef = useRef<MobilePanel>("tree");
+  const isMobileLayoutRef = useRef(false);
   const mobileGenerationPanelOverrideRef = useRef(false);
 
   useEffect(() => {
@@ -405,6 +410,20 @@ export function TreeableApp() {
   }, []);
 
   useEffect(() => {
+    isMobileLayoutRef.current = isMobileLayout;
+    if (!isMobileLayout) {
+      setMobileUnreadPanels((panels) => (panels.tree || panels.draft ? EMPTY_MOBILE_UNREAD : panels));
+    }
+  }, [isMobileLayout]);
+
+  useEffect(() => {
+    activeMobilePanelRef.current = activeMobilePanel;
+    setMobileUnreadPanels((panels) =>
+      panels[activeMobilePanel] ? { ...panels, [activeMobilePanel]: false } : panels
+    );
+  }, [activeMobilePanel]);
+
+  useEffect(() => {
     if (!isBusy && !generationStage) {
       mobileGenerationPanelOverrideRef.current = false;
     }
@@ -422,20 +441,34 @@ export function TreeableApp() {
     return `mobile-panel mobile-panel--${panel}${activeMobilePanel === panel ? " mobile-panel--active" : ""}`;
   }
 
+  function markMobilePanelUnread(panel: MobilePanel) {
+    if (!isMobileLayoutRef.current || activeMobilePanelRef.current === panel) return;
+    setMobileUnreadPanels((panels) => (panels[panel] ? panels : { ...panels, [panel]: true }));
+  }
+
+  function clearMobilePanelUnread(panel: MobilePanel) {
+    setMobileUnreadPanels((panels) => (panels[panel] ? { ...panels, [panel]: false } : panels));
+  }
+
   function showMobilePanel(panel: MobilePanel) {
     if (isBusy || generationStage) {
       mobileGenerationPanelOverrideRef.current = true;
     }
+    activeMobilePanelRef.current = panel;
     setActiveMobilePanel(panel);
+    clearMobilePanelUnread(panel);
   }
 
   function showMobileDraftForGeneration() {
-    if (!isMobileLayout || mobileGenerationPanelOverrideRef.current) return;
+    if (!isMobileLayout) return;
+    if (mobileGenerationPanelOverrideRef.current) {
+      markMobilePanelUnread("draft");
+      return;
+    }
+    activeMobilePanelRef.current = "draft";
     setActiveMobilePanel("draft");
+    clearMobilePanelUnread("draft");
   }
-
-  const showMobileTreeNudge =
-    isMobileLayout && activeMobilePanel === "draft" && generationStage?.stage === "options";
 
   async function loadRoot() {
     try {
@@ -732,6 +765,7 @@ export function TreeableApp() {
     if (!nodeId || draftForNode(state, nodeId)) return state;
 
     setGenerationStage({ nodeId, stage: "draft" });
+    markMobilePanelUnread("draft");
     const requestOptions = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -774,12 +808,14 @@ export function TreeableApp() {
 
       if (value.type === "draft") {
         setStreamingDraft({ nodeId, draft: value.draft, streamingField: value.streamingField ?? null });
+        markMobilePanelUnread("draft");
         receivedDraft = true;
         return;
       }
 
       if (value.type === "done") {
         doneState = value.state;
+        markMobilePanelUnread("draft");
         receivedDone = true;
         return;
       }
@@ -822,6 +858,7 @@ export function TreeableApp() {
 
     setGenerationStage({ nodeId, stage: "options" });
     setStreamingOptions({ nodeId, options: [] });
+    markMobilePanelUnread("tree");
     const response = await fetch(`/api/sessions/${state.session.id}/options`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -868,12 +905,14 @@ export function TreeableApp() {
           setGenerationStage({ nodeId, stage: "options" });
           setStreamingOptions({ nodeId, options: [] });
         }
+        markMobilePanelUnread("tree");
         setLoadState("ready");
         return;
       }
 
       if (value.type === "options") {
         setStreamingOptions({ nodeId: value.nodeId, options: value.options });
+        markMobilePanelUnread("tree");
         receivedOptions = true;
         return;
       }
@@ -881,6 +920,7 @@ export function TreeableApp() {
       if (value.type === "done") {
         doneState = value.state;
         receivedDone = true;
+        markMobilePanelUnread("tree");
         setGenerationStage(null);
         setStreamingOptions(null);
         return;
@@ -925,6 +965,7 @@ export function TreeableApp() {
       setSessionState(nextState);
       setViewNodeId(generatedNodeId ?? null);
       setGeneratedDiffNodeId(generatedNodeId ?? null);
+      markMobilePanelUnread("draft");
       await allowDraftRender();
     }
 
@@ -1293,11 +1334,31 @@ export function TreeableApp() {
       </header>
       {isMobileLayout ? (
         <div aria-label="移动端主面板" className="mobile-panel-switcher" role="group">
-          <button aria-pressed={activeMobilePanel === "tree"} onClick={() => showMobilePanel("tree")} type="button">
-            树图
+          <button
+            aria-pressed={activeMobilePanel === "tree"}
+            className="mobile-panel-tab"
+            onClick={() => showMobilePanel("tree")}
+            type="button"
+          >
+            <span>树图</span>
+            {mobileUnreadPanels.tree ? (
+              <span aria-hidden="true" className="mobile-panel-tab__badge">
+                新
+              </span>
+            ) : null}
           </button>
-          <button aria-pressed={activeMobilePanel === "draft"} onClick={() => showMobilePanel("draft")} type="button">
-            草稿
+          <button
+            aria-pressed={activeMobilePanel === "draft"}
+            className="mobile-panel-tab"
+            onClick={() => showMobilePanel("draft")}
+            type="button"
+          >
+            <span>草稿</span>
+            {mobileUnreadPanels.draft ? (
+              <span aria-hidden="true" className="mobile-panel-tab__badge">
+                新
+              </span>
+            ) : null}
           </button>
         </div>
       ) : null}
@@ -1342,16 +1403,8 @@ export function TreeableApp() {
       </div>
       <div
         aria-hidden={isMobileLayout && activeMobilePanel !== "draft" ? "true" : undefined}
-        className={`${mobilePanelClassName("draft")}${showMobileTreeNudge ? " mobile-panel--with-nudge" : ""}`}
+        className={mobilePanelClassName("draft")}
       >
-        {showMobileTreeNudge ? (
-          <div aria-label="树图切换提示" className="mobile-panel-nudge" role="status">
-            <span>下一组方向正在生成</span>
-            <button onClick={() => showMobilePanel("tree")} type="button">
-              查看树图
-            </button>
-          </div>
-        ) : null}
         <LiveDraft
           canCompareDrafts={comparisonEntries.length >= 2}
           comparisonDrafts={comparisonDrafts}

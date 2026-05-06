@@ -379,6 +379,10 @@ function installDesktopViewport() {
   installViewport(1280);
 }
 
+function mobileTabBadge(tabName: "树图" | "草稿") {
+  return screen.getByRole("button", { name: tabName }).querySelector(".mobile-panel-tab__badge");
+}
+
 describe("TreeableApp", () => {
   afterEach(() => {
     liveDraftMock.mockClear();
@@ -873,7 +877,7 @@ describe("TreeableApp", () => {
     expect(document.querySelector(".mobile-panel--draft")).toHaveClass("mobile-panel--active");
   });
 
-  it("guides mobile draft readers back to the tree while the next options are generating", async () => {
+  it("marks the tree tab when next options are generating behind the mobile draft tab", async () => {
     installMobileViewport();
     const draftStream = controlledNdjsonResponse();
     const optionsStream = controlledNdjsonResponse();
@@ -933,13 +937,14 @@ describe("TreeableApp", () => {
         "/api/sessions/session-1/options",
         expect.objectContaining({ method: "POST" })
       );
-      expect(screen.getByRole("status", { name: "树图切换提示" })).toHaveTextContent("下一组方向正在生成");
+      expect(mobileTabBadge("树图")).toHaveTextContent("新");
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "查看树图" }));
+    expect(mobileTabBadge("草稿")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "树图" }));
 
     expect(screen.getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("status", { name: "树图切换提示" })).not.toBeInTheDocument();
+    expect(mobileTabBadge("树图")).not.toBeInTheDocument();
   });
 
   it("switches to the draft panel when a mobile historical branch starts generation", async () => {
@@ -1116,6 +1121,13 @@ describe("TreeableApp", () => {
 
     act(() => {
       draftStream.push({ type: "draft", draft: generatedDraft, streamingField: "body" });
+    });
+
+    await vi.waitFor(() => {
+      expect(mobileTabBadge("草稿")).toHaveTextContent("新");
+    });
+
+    act(() => {
       draftStream.push({ type: "done", state: generatedState });
       draftStream.close();
     });

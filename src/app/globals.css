@@ -555,10 +555,6 @@ button:disabled {
   display: contents;
 }
 
-.mobile-panel-nudge {
-  display: none;
-}
-
 .brand-mark {
   width: 42px;
   height: 42px;
@@ -2499,7 +2495,11 @@ button:disabled {
   }
 
   .mobile-panel-switcher button {
+    position: relative;
     min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: #475569;
     background: transparent;
     border: 0;
@@ -2511,6 +2511,25 @@ button:disabled {
     color: #0f766e;
     background: #ffffff;
     box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  }
+
+  .mobile-panel-tab__badge {
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    min-width: 17px;
+    height: 17px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0 4px;
+    color: #ffffff;
+    font-size: 0.62rem;
+    font-weight: 900;
+    line-height: 1;
+    background: #ef4444;
+    border: 2px solid #ffffff;
+    border-radius: 999px;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.24);
   }
 
   .mobile-panel {
@@ -2531,40 +2550,9 @@ button:disabled {
     grid-template-rows: minmax(0, 1fr);
   }
 
-  .mobile-panel--draft.mobile-panel--with-nudge.mobile-panel--active {
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
   .mobile-panel > .canvas-region,
   .mobile-panel > .draft-panel {
     min-height: 0;
-  }
-
-  .mobile-panel-nudge {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 10px;
-    padding: 10px 12px;
-    color: #0f766e;
-    font-size: 0.86rem;
-    font-weight: 840;
-    background: rgba(204, 251, 241, 0.78);
-    border: 1px solid rgba(20, 184, 166, 0.28);
-    border-radius: 8px;
-  }
-
-  .mobile-panel-nudge button {
-    flex: 0 0 auto;
-    min-height: 32px;
-    padding: 0 11px;
-    color: #ffffff;
-    background: #0f766e;
-    border: 0;
-    border-radius: 8px;
-    font-size: 0.8rem;
-    font-weight: 850;
   }
 
   .draft-panel {
