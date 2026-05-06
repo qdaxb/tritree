@@ -906,7 +906,7 @@ describe("TreeCanvas", () => {
     expect(optionNode!.targetX - latestHistoryNode!.targetX).toBeGreaterThanOrEqual(160);
   });
 
-  it("renders long routes inside a browsable tree viewport with recenter controls", () => {
+  it("renders long routes with horizontal tree browsing controls", () => {
     const selectedPath = buildLongSelectedPath(9);
 
     const { container } = render(
@@ -923,10 +923,10 @@ describe("TreeCanvas", () => {
     const viewport = screen.getByRole("region", { name: "长任务树图浏览区" });
 
     expect(viewport).toHaveAttribute("tabindex", "0");
-    expect(viewport).toHaveAttribute("data-pan-axis", "both");
+    expect(viewport).toHaveAttribute("data-pan-axis", "x");
     expect(screen.getByRole("button", { name: "查看较早节点" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "向上浏览" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "向下浏览" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "向上浏览" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "向下浏览" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "回到最新节点" })).toBeInTheDocument();
     expect(container.querySelector(".tree-scroll-controls")).toBeInTheDocument();
   });
@@ -1016,19 +1016,22 @@ describe("TreeCanvas", () => {
     expect(mobileRule).toContain("margin-left: 0");
   });
 
-  it("keeps the tree card from adding a duplicate scrollbar", () => {
+  it("lets the page own vertical overflow instead of nesting desktop scrollbars", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const shellRule = css.match(/\.app-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const canvasRegionRule = css.match(/\.canvas-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const canvasRule = css.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const viewportRule = css.match(/\.tree-viewport\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
-    expect(shellRule).toContain("min-height: 0");
-    expect(canvasRegionRule).toContain("overflow: auto");
+    expect(shellRule).toContain("min-height: 100dvh");
+    expect(shellRule).toContain("height: auto");
+    expect(shellRule).toContain("overflow: visible");
+    expect(canvasRegionRule).toContain("overflow: visible");
     expect(canvasRule).toContain("min-height: 100%");
     expect(canvasRule).toContain("height: auto");
-    expect(canvasRule).toContain("overflow: hidden");
-    expect(viewportRule).toContain("overflow: auto");
+    expect(canvasRule).toContain("grid-template-rows: auto auto");
+    expect(viewportRule).toContain("overflow-x: auto");
+    expect(viewportRule).toContain("overflow-y: hidden");
   });
 
   it("keeps the More Directions editor inside the bottom tray bounds", () => {
@@ -1134,6 +1137,28 @@ describe("TreeCanvas", () => {
     fireEvent.pointerDown(historicalNode!, { button: 0, clientX: 20, clientY: 20, pointerId: 1 });
 
     expect(setPointerCapture).not.toHaveBeenCalled();
+  });
+
+  it("leaves vertical pointer drags available for page scrolling", () => {
+    render(
+      <TreeCanvas
+        currentNode={currentNode}
+        isBusy={false}
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[selectedNodeWithFolded]}
+      />
+    );
+    const viewport = screen.getByRole("region", { name: "长任务树图浏览区" });
+    const setPointerCapture = vi.fn();
+    Object.defineProperty(viewport, "setPointerCapture", { configurable: true, value: setPointerCapture });
+
+    fireEvent.pointerDown(viewport, { button: 0, clientX: 20, clientY: 20, pointerId: 1 });
+    const moveWasNotPrevented = fireEvent.pointerMove(viewport, { clientX: 22, clientY: 78, pointerId: 1 });
+
+    expect(moveWasNotPrevented).toBe(true);
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(viewport).not.toHaveClass("tree-viewport--dragging");
   });
 
   it("starts folded side-path links at the actual source node center", () => {
