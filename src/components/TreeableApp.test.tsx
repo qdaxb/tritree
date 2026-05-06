@@ -873,6 +873,75 @@ describe("TreeableApp", () => {
     expect(document.querySelector(".mobile-panel--draft")).toHaveClass("mobile-panel--active");
   });
 
+  it("guides mobile draft readers back to the tree while the next options are generating", async () => {
+    installMobileViewport();
+    const draftStream = controlledNdjsonResponse();
+    const optionsStream = controlledNdjsonResponse();
+    const childNode = {
+      ...activeState.currentNode,
+      id: "node-2",
+      parentId: "node-1",
+      parentOptionId: "a" as const,
+      roundIndex: 2,
+      options: [],
+      selectedOptionId: null
+    };
+    const chosenState = {
+      ...activeState,
+      session: { ...activeState.session, currentNodeId: "node-2" },
+      currentNode: childNode,
+      currentDraft: null,
+      nodeDrafts: [{ nodeId: "node-1", draft: activeState.currentDraft }],
+      selectedPath: [activeState.currentNode, childNode]
+    };
+    const generatedDraft = { title: "Generated", body: "Generated body", hashtags: ["#AI"], imagePrompt: "Tree" };
+    const generatedState = {
+      ...chosenState,
+      currentDraft: generatedDraft,
+      nodeDrafts: [
+        { nodeId: "node-1", draft: activeState.currentDraft },
+        { nodeId: "node-2", draft: generatedDraft }
+      ]
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: chosenState }) })
+      .mockResolvedValueOnce(draftStream.response)
+      .mockResolvedValueOnce(optionsStream.response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByRole("group", { name: "移动端主面板" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "choose displayed option" }));
+    await vi.waitFor(() => {
+      expect(screen.getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    act(() => {
+      draftStream.push({ type: "draft", draft: generatedDraft, streamingField: "body" });
+      draftStream.push({ type: "done", state: generatedState });
+      draftStream.close();
+    });
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        6,
+        "/api/sessions/session-1/options",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(screen.getByRole("status", { name: "树图切换提示" })).toHaveTextContent("下一组方向正在生成");
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "查看树图" }));
+
+    expect(screen.getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("status", { name: "树图切换提示" })).not.toBeInTheDocument();
+  });
+
   it("switches to the draft panel when a mobile historical branch starts generation", async () => {
     installMobileViewport();
     const fetchMock = vi

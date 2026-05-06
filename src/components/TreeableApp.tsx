@@ -434,6 +434,9 @@ export function TreeableApp() {
     setActiveMobilePanel("draft");
   }
 
+  const showMobileTreeNudge =
+    isMobileLayout && activeMobilePanel === "draft" && generationStage?.stage === "options";
+
   async function loadRoot() {
     try {
       const skillsResponse = await fetch("/api/skills");
@@ -1322,6 +1325,7 @@ export function TreeableApp() {
             generationStage={generationStage}
             isComparisonMode={Boolean(draftComparison)}
             isBusy={treeChoicesDisabled}
+            isMobileLayout={isMobileLayout}
             onActivateBranch={activateHistoricalBranch}
             onAddCustomOption={activeViewNodeId ? addAndChooseCustomOption : undefined}
             onChoose={chooseFromViewedNode}
@@ -1338,8 +1342,16 @@ export function TreeableApp() {
       </div>
       <div
         aria-hidden={isMobileLayout && activeMobilePanel !== "draft" ? "true" : undefined}
-        className={mobilePanelClassName("draft")}
+        className={`${mobilePanelClassName("draft")}${showMobileTreeNudge ? " mobile-panel--with-nudge" : ""}`}
       >
+        {showMobileTreeNudge ? (
+          <div aria-label="树图切换提示" className="mobile-panel-nudge" role="status">
+            <span>下一组方向正在生成</span>
+            <button onClick={() => showMobilePanel("tree")} type="button">
+              查看树图
+            </button>
+          </div>
+        ) : null}
         <LiveDraft
           canCompareDrafts={comparisonEntries.length >= 2}
           comparisonDrafts={comparisonDrafts}

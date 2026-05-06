@@ -555,6 +555,10 @@ button:disabled {
   display: contents;
 }
 
+.mobile-panel-nudge {
+  display: none;
+}
+
 .brand-mark {
   width: 42px;
   height: 42px;
@@ -2527,9 +2531,40 @@ button:disabled {
     grid-template-rows: minmax(0, 1fr);
   }
 
+  .mobile-panel--draft.mobile-panel--with-nudge.mobile-panel--active {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
   .mobile-panel > .canvas-region,
   .mobile-panel > .draft-panel {
     min-height: 0;
+  }
+
+  .mobile-panel-nudge {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    color: #0f766e;
+    font-size: 0.86rem;
+    font-weight: 840;
+    background: rgba(204, 251, 241, 0.78);
+    border: 1px solid rgba(20, 184, 166, 0.28);
+    border-radius: 8px;
+  }
+
+  .mobile-panel-nudge button {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 0 11px;
+    color: #ffffff;
+    background: #0f766e;
+    border: 0;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 850;
   }
 
   .draft-panel {
@@ -2622,6 +2657,14 @@ button:disabled {
   }
 
   .branch-option-tray {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-option-tray__controls > .branch-side-action {
+    margin-left: 0;
+  }
+
+  .branch-option-main {
     grid-template-columns: 1fr;
   }
 
