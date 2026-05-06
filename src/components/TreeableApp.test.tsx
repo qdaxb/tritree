@@ -378,6 +378,31 @@ describe("TreeableApp", () => {
     expect(topbar).toHaveTextContent(/^Seed：我想写 AI 产品经理的真实困境 \| 本次创作要求：改成英文的$/);
   });
 
+  it("shows the current user display name and role in the topbar", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <TreeableApp
+        currentUser={{
+          id: "user-1",
+          username: "awei",
+          displayName: "Awei",
+          role: "admin",
+          isAdmin: true
+        }}
+      />
+    );
+
+    expect(await screen.findByText("Awei")).toBeInTheDocument();
+    expect(screen.getByText("管理员")).toBeInTheDocument();
+    expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
+  });
+
   it("opens the seed screen when no existing tree is available", async () => {
     const fetchMock = vi
       .fn()

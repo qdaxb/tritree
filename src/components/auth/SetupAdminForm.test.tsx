@@ -70,4 +70,23 @@ describe("SetupAdminForm", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(await screen.findByRole("alert")).toHaveTextContent("两次输入的密码不一致。");
   });
+
+  it("displays server errors without redirecting", async () => {
+    const assign = mockLocationAssign();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "管理员已经初始化。" })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SetupAdminForm />);
+
+    await userEvent.type(screen.getByLabelText("用户名"), "awei");
+    await userEvent.type(screen.getByLabelText("显示名称"), "Awei");
+    await userEvent.type(screen.getByLabelText("密码"), "password-123");
+    await userEvent.type(screen.getByLabelText("确认密码"), "password-123");
+    await userEvent.click(screen.getByRole("button", { name: "初始化管理员" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("管理员已经初始化。");
+    expect(assign).not.toHaveBeenCalled();
+  });
 });

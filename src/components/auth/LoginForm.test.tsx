@@ -61,6 +61,12 @@ describe("LoginForm", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("用户名或密码不正确。");
   });
 
+  it("hides the OIDC sign-in button when OIDC is disabled", () => {
+    render(<LoginForm isOidcEnabled={false} />);
+
+    expect(screen.queryByRole("button", { name: "使用 OIDC 登录" })).not.toBeInTheDocument();
+  });
+
   it("renders and starts OIDC sign-in when enabled", async () => {
     render(<LoginForm isOidcEnabled={true} />);
 
