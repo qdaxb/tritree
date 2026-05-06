@@ -515,24 +515,24 @@ button:disabled {
 }
 
 .app-shell {
-  min-height: 100dvh;
-  height: auto;
+  height: max(100dvh, calc(56px + 12px + 300px + 24px));
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
-  grid-template-rows: 72px minmax(calc(100dvh - 120px), auto);
-  gap: 16px;
-  padding: 16px;
-  overflow: visible;
+  grid-template-rows: 56px minmax(300px, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
 }
 
 .topbar {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  min-height: 72px;
-  padding: 12px 16px;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 12px;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -556,8 +556,8 @@ button:disabled {
 }
 
 .brand-mark {
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
   background:
     radial-gradient(circle at 50% 28%, var(--gold) 0 13%, transparent 14%),
@@ -571,15 +571,15 @@ button:disabled {
 }
 
 .topbar strong {
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 .topbar span {
   max-width: 860px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.35;
+  font-size: 0.82rem;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -780,19 +780,23 @@ button:disabled {
 }
 
 .canvas-region {
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
   display: grid;
-  gap: 12px;
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+  gap: 10px;
   overflow: visible;
 }
 
 .tree-canvas {
   --tree-canvas-inset: 18px;
   position: relative;
-  min-height: 100%;
-  height: auto;
+  min-height: 300px;
+  height: 100%;
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: minmax(300px, 1fr) auto;
+  align-content: start;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -832,9 +836,10 @@ button:disabled {
 
 .tree-viewport {
   min-width: 0;
-  min-height: 0;
+  min-height: 300px;
+  height: 100%;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
   padding: var(--tree-canvas-inset) 0 0 var(--tree-canvas-inset);
   border-radius: 8px;
   overscroll-behavior: contain;
@@ -860,7 +865,7 @@ button:disabled {
 .mind-map-svg {
   display: block;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-height: 0;
   pointer-events: auto;
 }
@@ -1245,27 +1250,27 @@ button:disabled {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   align-items: stretch;
-  margin: 16px var(--tree-canvas-inset) var(--tree-canvas-inset);
-  padding-top: 12px;
+  margin: 10px var(--tree-canvas-inset) 12px;
+  padding-top: 10px;
   border-top: 1px solid rgba(148, 163, 184, 0.22);
 }
 
 .branch-option-main {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
   align-items: start;
 }
 
 .branch-card {
   width: 100%;
-  min-height: 58px;
+  min-height: 48px;
   display: grid;
   align-content: center;
   gap: 0;
-  padding: 12px 14px;
+  padding: 10px 12px;
   color: #172033;
   text-align: left;
   background: #ffffff;
@@ -1310,8 +1315,8 @@ button:disabled {
 
 .branch-card__header {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 8px;
   align-items: start;
 }
 
@@ -1327,8 +1332,8 @@ button:disabled {
 .branch-card__choice {
   display: inline-grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   color: #075985;
   font-size: 0.76rem;
   font-weight: 900;
@@ -1339,16 +1344,16 @@ button:disabled {
 .branch-card__label {
   display: -webkit-box;
   overflow: hidden;
-  font-size: 1.02rem;
+  font-size: 0.95rem;
   font-weight: 850;
-  line-height: 1.2;
+  line-height: 1.18;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   word-break: break-word;
 }
 
 .branch-card--option:not(.branch-card--side) {
-  min-height: 92px;
+  min-height: 76px;
   align-content: start;
 }
 
@@ -1801,12 +1806,13 @@ button:disabled {
 .draft-panel {
   flex: 1 1 auto;
   position: relative;
-  min-height: 100%;
+  min-height: 300px;
+  height: 100%;
   display: grid;
-  grid-template-rows: auto auto;
-  align-content: start;
-  padding: 18px 0 18px 18px;
-  overflow: visible;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+  padding: 14px 0 14px 14px;
+  overflow: hidden;
 }
 
 .draft-panel__popover {
@@ -2053,8 +2059,11 @@ button:disabled {
 
 .draft-panel__scroll {
   min-height: 0;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 18px;
+  scrollbar-gutter: stable;
 }
 
 .panel-heading {
@@ -2807,6 +2816,11 @@ button:disabled {
     min-height: 580px;
     height: auto;
     grid-template-rows: 300px auto;
+  }
+
+  .tree-viewport {
+    min-height: 0;
+    height: auto;
   }
 
   .branch-option-tray {

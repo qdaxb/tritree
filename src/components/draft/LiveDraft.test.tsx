@@ -1378,20 +1378,6 @@ describe("LiveDraft", () => {
     expect(container.querySelector(".draft-panel__scroll")).toContainElement(screen.getByText("Draft body"));
   });
 
-  it("lets the page own tall draft overflow while preserving panel padding", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
-    const panelRule = [...css.matchAll(/(?:^|\n)\.draft-panel\s*\{(?<body>[^}]+)\}/g)].at(-1)?.groups?.body ?? "";
-    const headingRule = css.match(/\.panel-heading\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const scrollRule = css.match(/\.draft-panel__scroll\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-
-    expect(panelRule).toContain("padding: 18px 0 18px 18px");
-    expect(panelRule).toContain("overflow: visible");
-    expect(panelRule).toContain("align-content: start");
-    expect(headingRule).toContain("padding-right: 18px");
-    expect(scrollRule).toContain("padding-right: 18px");
-    expect(scrollRule).toContain("overflow: visible");
-  });
-
   it("keeps header popovers outside the draft scroll area", () => {
     const { container } = render(
       <LiveDraft

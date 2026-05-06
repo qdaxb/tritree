@@ -46,16 +46,16 @@ type TreeCanvasProps = {
   skills?: Skill[];
 };
 
-const CANVAS_HEIGHT = 560;
+const CANVAS_HEIGHT = 380;
 const MIN_CANVAS_WIDTH = 320;
 const COMPACT_LABEL_LIMIT = 15;
 const SEED_ROOT_LABEL = "种子念头";
 const OPTION_GROUPS = { a: 0, b: 4, c: 8, custom: 2 };
 const OPTION_RANK = { a: 0, b: 1, c: 2, custom: 3 };
-const SIDE_BRANCH_Y_SPREAD = 96;
+const SIDE_BRANCH_Y_SPREAD = 72;
 const DENSE_ROUTE_MIN_HISTORY_COUNT = 3;
 const DENSE_ROUTE_HISTORY_Y_SPAN = 48;
-const DENSE_ROUTE_OPTION_Y_SPREAD = 160;
+const DENSE_ROUTE_OPTION_Y_SPREAD = 132;
 const DENSE_ROUTE_EXTRA_Y_PAD = 320;
 const DENSE_ROUTE_EXTRA_Y_PER_NODE = 24;
 const TREE_LABEL_MIN_Y_GAP = 64;
@@ -135,7 +135,7 @@ export function getOptionBranchLayout(canvasWidth: number, historyNodeCount = 0)
     center[0] + Math.max(180, historyNodeCount * HISTORY_NODE_MIN_STEP + HISTORY_TO_OPTION_GAP);
   const optionX = Math.max(defaultOptionX, longRouteOptionX);
   const width = Math.max(viewportWidth, Math.ceil(optionX + CANVAS_RIGHT_PAD));
-  const optionSpread = Math.min(124, Math.max(86, viewportWidth * 0.11));
+  const optionSpread = Math.min(82, Math.max(62, viewportWidth * 0.07));
 
   return {
     cardHeight,
@@ -1076,7 +1076,7 @@ export function TreeCanvas({
           height={branchLayout.height}
           ref={svgRef}
           role="img"
-          style={{ height: branchLayout.height, width: branchLayout.width }}
+          style={{ height: branchLayout.height, minHeight: 300, width: branchLayout.width }}
           viewBox={`0 0 ${branchLayout.width} ${branchLayout.height}`}
           width={branchLayout.width}
         />
