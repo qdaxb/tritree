@@ -1355,6 +1355,82 @@ describe("TreeCanvas", () => {
     expect(pendingFoldedNode?.querySelector(".tree-node__spinner")).toBeInTheDocument();
   });
 
+  it("keeps the generation spinner mounted when streamed option details change", () => {
+    const { container, rerender } = render(
+      <TreeCanvas
+        currentNode={currentNode}
+        generationStage={{ nodeId: currentNode.id, stage: "options" }}
+        isBusy
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[currentNode]}
+      />
+    );
+    const spinner = container.querySelector(".tree-node__spinner");
+
+    rerender(
+      <TreeCanvas
+        currentNode={{
+          ...currentNode,
+          options: currentNode.options.map((option) =>
+            option.id === "a" ? { ...option, description: `${option.description}，继续补充一段流式说明。` } : option
+          )
+        }}
+        generationStage={{ nodeId: currentNode.id, stage: "options" }}
+        isBusy
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[currentNode]}
+      />
+    );
+
+    expect(container.querySelector(".tree-node__spinner")).toBe(spinner);
+  });
+
+  it("updates changed tree labels without remounting the generation spinner", () => {
+    vi.useFakeTimers();
+    try {
+      const { container, rerender } = render(
+        <TreeCanvas
+          currentNode={currentNode}
+          generationStage={{ nodeId: currentNode.id, stage: "options" }}
+          isBusy
+          onChoose={vi.fn()}
+          pendingChoice={null}
+          selectedPath={[currentNode]}
+        />
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(1100);
+      });
+
+      const spinner = container.querySelector(".tree-node__spinner");
+      expect(container).toHaveTextContent("具体场景");
+
+      rerender(
+        <TreeCanvas
+          currentNode={{
+            ...currentNode,
+            options: currentNode.options.map((option) =>
+              option.id === "a" ? { ...option, label: "新的具体场景" } : option
+            )
+          }}
+          generationStage={{ nodeId: currentNode.id, stage: "options" }}
+          isBusy
+          onChoose={vi.fn()}
+          pendingChoice={null}
+          selectedPath={[currentNode]}
+        />
+      );
+
+      expect(container).toHaveTextContent("新的具体场景");
+      expect(container.querySelector(".tree-node__spinner")).toBe(spinner);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("hides stale option cards, including prior custom branches, while a historical branch is generating", () => {
     render(
       <TreeCanvas
