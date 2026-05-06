@@ -1,12 +1,9 @@
+import { Agent } from "@mastra/core/agent";
+import { z } from "zod";
 import { skillsForTarget, type Draft, type Skill } from "@/lib/domain";
-import {
-  createDirectorStreamHttpError,
-  getDirectorAuthToken,
-  getDirectorBaseUrl,
-  getDirectorModel,
-  parseDirectorJsonObject
-} from "./director";
-import { parseAnthropicSseTextDeltas } from "./director-stream";
+import { parseDirectorJsonObject } from "./director";
+import { createTreeableAnthropicModel } from "./mastra-agents";
+import type { MemoryScope } from "./mastra-executor";
 import { formatEnabledSkills, type DirectorMessage } from "./prompts";
 
 export type SelectionRewriteField = "body";
@@ -22,30 +19,46 @@ export type SelectionRewriteInput = {
   selectedText: string;
 };
 
-type SelectionRewriteRequest = {
-  body: {
-    max_tokens: number;
-    messages: DirectorMessage[];
-    model: string;
-    stream?: boolean;
-    system: string;
-  };
-  headers: Record<string, string>;
-  url: string;
-};
+export const SelectionRewriteOutputSchema = z.object({
+  replacementText: z.string()
+});
 
-type SelectionRewriteFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+export type SelectionRewriteOutput = z.infer<typeof SelectionRewriteOutputSchema>;
 
 type RewriteSelectedDraftTextOptions = {
   env?: Record<string, string | undefined>;
-  fetcher?: SelectionRewriteFetch;
+  memory?: MemoryScope;
   onText?: (event: { accumulatedText: string; delta: string; partialReplacementText: string }) => void;
+  selectionRewriteAgent?: SelectionRewriteAgentLike;
   signal?: AbortSignal;
 };
 
-export type SelectionRewriteOutput = {
-  replacementText: string;
+type SelectionRewriteAgentLike = {
+  generate: (
+    messages: DirectorMessage[],
+    options: {
+      abortSignal?: AbortSignal;
+      memory: MemoryScope;
+      structuredOutput: { schema: typeof SelectionRewriteOutputSchema };
+    }
+  ) => Promise<{ object?: unknown; output?: unknown }>;
+  stream?: (
+    messages: DirectorMessage[],
+    options: {
+      abortSignal?: AbortSignal;
+      memory: MemoryScope;
+      structuredOutput: { schema: typeof SelectionRewriteOutputSchema };
+    }
+  ) => Promise<StructuredObjectStreamResult>;
 };
+
+type StructuredObjectStreamResult = {
+  objectStream?: StreamSource<unknown>;
+  object?: Promise<unknown> | unknown;
+  output?: Promise<unknown> | unknown;
+};
+
+type StreamSource<T> = AsyncIterable<T> | ReadableStream<T> | (() => AsyncIterable<T>);
 
 const SELECTION_REWRITE_SYSTEM_PROMPT = `
 You rewrite only the selected passage from an existing Treeable draft.
@@ -101,122 +114,94 @@ replacementText 不能为空。
 `.trim();
 }
 
-export function buildSelectionRewriteRequest(
-  input: SelectionRewriteInput,
-  env: Record<string, string | undefined> = process.env
-): SelectionRewriteRequest {
-  const authToken = getDirectorAuthToken(env);
-  if (!authToken) {
-    throw new Error("KIMI_API_KEY is not configured.");
-  }
-
-  return {
-    body: {
-      model: getDirectorModel(env),
-      max_tokens: 800,
-      system: SELECTION_REWRITE_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildSelectionRewritePrompt(input) }]
-    },
-    headers: {
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-      "x-api-key": authToken
-    },
-    url: `${getDirectorBaseUrl(env)}/v1/messages`
-  };
+export function createSelectionRewriteAgent(env: Record<string, string | undefined> = process.env) {
+  return new Agent({
+    id: "treeable-selection-rewrite-agent",
+    name: "Treeable Selection Rewrite Agent",
+    instructions: SELECTION_REWRITE_SYSTEM_PROMPT,
+    model: createTreeableAnthropicModel(env)
+  });
 }
 
 export async function rewriteSelectedDraftText(
   input: SelectionRewriteInput,
   options: RewriteSelectedDraftTextOptions = {}
 ): Promise<SelectionRewriteOutput> {
-  const request = buildSelectionRewriteRequest(input, options.env);
-  const fetcher = options.fetcher ?? fetch;
-  const response = await fetcher(request.url, {
-    method: "POST",
-    headers: request.headers,
-    body: JSON.stringify(request.body),
-    signal: options.signal
+  const agent =
+    options.selectionRewriteAgent ??
+    (createSelectionRewriteAgent(options.env) as unknown as SelectionRewriteAgentLike);
+  const result = await agent.generate(selectionRewriteMessages(input), {
+    abortSignal: options.signal,
+    memory: options.memory ?? memoryScopeForSelectionRewrite(input),
+    structuredOutput: { schema: SelectionRewriteOutputSchema }
   });
 
-  if (!response.ok) {
-    throw await createDirectorStreamHttpError(response);
-  }
-
-  const payload = (await response.json()) as unknown;
-  return parseSelectionRewriteText(readAnthropicTextContent(payload));
+  return parseSelectionRewriteOutput(result.object ?? result.output);
 }
 
 export async function streamSelectedDraftText(
   input: SelectionRewriteInput,
   options: RewriteSelectedDraftTextOptions = {}
 ): Promise<SelectionRewriteOutput> {
-  const request = buildSelectionRewriteRequest(input, options.env);
-  const fetcher = options.fetcher ?? fetch;
-  const response = await fetcher(request.url, {
-    method: "POST",
-    headers: request.headers,
-    body: JSON.stringify({
-      ...request.body,
-      stream: true
-    }),
-    signal: options.signal
-  });
-
-  if (!response.ok) {
-    throw await createDirectorStreamHttpError(response);
-  }
-
-  if (!response.body) {
-    throw new Error("AI rewrite stream returned no response body.");
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let pendingSseText = "";
-  let accumulatedText = "";
+  const agent =
+    options.selectionRewriteAgent ??
+    (createSelectionRewriteAgent(options.env) as unknown as SelectionRewriteAgentLike);
+  const messages = selectionRewriteMessages(input);
+  const memory = options.memory ?? memoryScopeForSelectionRewrite(input);
   let lastPartialReplacementText = "";
-
-  const emitSseBlocks = (blocks: string[]) => {
-    for (const delta of parseAnthropicSseTextDeltas(blocks.join("\n\n"))) {
-      accumulatedText += delta;
-      const partialReplacementText = extractPartialSelectionRewriteText(accumulatedText);
-      if (partialReplacementText && partialReplacementText !== lastPartialReplacementText) {
-        lastPartialReplacementText = partialReplacementText;
-        options.onText?.({ accumulatedText, delta, partialReplacementText });
-      }
+  const emitPartial = (partial: unknown) => {
+    if (!isRecord(partial) || typeof partial.replacementText !== "string" || !partial.replacementText) {
+      return;
     }
+
+    if (partial.replacementText === lastPartialReplacementText) {
+      return;
+    }
+
+    const delta = partial.replacementText.startsWith(lastPartialReplacementText)
+      ? partial.replacementText.slice(lastPartialReplacementText.length)
+      : partial.replacementText;
+    lastPartialReplacementText = partial.replacementText;
+    options.onText?.({
+      accumulatedText: JSON.stringify(partial),
+      delta,
+      partialReplacementText: partial.replacementText
+    });
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  const stream = agent.stream
+    ? await agent.stream(messages, {
+        abortSignal: options.signal,
+        memory,
+        structuredOutput: { schema: SelectionRewriteOutputSchema }
+      })
+    : null;
 
-    pendingSseText += decoder.decode(value, { stream: true });
-    const parsed = takeCompleteSseBlocks(pendingSseText);
-    pendingSseText = parsed.remainder;
-    emitSseBlocks(parsed.blocks);
+  if (!stream) {
+    const output = await rewriteSelectedDraftText(input, {
+      ...options,
+      memory,
+      selectionRewriteAgent: agent
+    });
+    emitPartial(output);
+    return output;
   }
 
-  pendingSseText += decoder.decode();
-  if (pendingSseText.trim().length > 0) {
-    emitSseBlocks([pendingSseText]);
+  let latestPartial: unknown = null;
+  if (stream.objectStream) {
+    for await (const partial of toAsyncIterable(stream.objectStream)) {
+      latestPartial = partial;
+      emitPartial(partial);
+    }
   }
 
-  return parseSelectionRewriteText(accumulatedText);
+  const output = parseSelectionRewriteOutput(await resolveStructuredStreamOutput(stream, latestPartial));
+  emitPartial(output);
+  return output;
 }
 
 export function parseSelectionRewriteText(text: string): SelectionRewriteOutput {
-  const parsed = parseDirectorJsonObject(text);
-  if (!isRecord(parsed) || typeof parsed.replacementText !== "string") {
-    throw new Error("AI rewrite returned invalid replacement text.");
-  }
-
-  if (!parsed.replacementText.trim()) {
-    throw new Error("AI rewrite returned empty replacement text.");
-  }
-
-  return { replacementText: parsed.replacementText };
+  return parseSelectionRewriteOutput(parseDirectorJsonObject(text));
 }
 
 export function extractPartialSelectionRewriteText(text: string) {
@@ -226,36 +211,70 @@ export function extractPartialSelectionRewriteText(text: string) {
   return readVisibleJsonString(text, match.index + match[0].length);
 }
 
-function readAnthropicTextContent(payload: unknown) {
-  if (!isRecord(payload) || !Array.isArray(payload.content)) {
-    throw new Error("AI rewrite returned invalid provider response.");
+function parseSelectionRewriteOutput(value: unknown): SelectionRewriteOutput {
+  const parsed = SelectionRewriteOutputSchema.parse(value);
+  if (!parsed.replacementText.trim()) {
+    throw new Error("AI rewrite returned empty replacement text.");
   }
 
-  return payload.content
-    .filter((part): part is { text: string; type?: unknown } => isRecord(part) && typeof part.text === "string")
-    .map((part) => part.text)
-    .join("");
+  return { replacementText: parsed.replacementText };
+}
+
+function selectionRewriteMessages(input: SelectionRewriteInput): DirectorMessage[] {
+  return [{ role: "user", content: buildSelectionRewritePrompt(input) }];
+}
+
+function memoryScopeForSelectionRewrite(input: SelectionRewriteInput): MemoryScope {
+  const basis = input.pathSummary || input.currentDraft.body || input.rootSummary || "selection-rewrite";
+  return {
+    resource: "treeable-selection-rewrite",
+    thread: encodeURIComponent(basis).slice(0, 128) || "selection-rewrite"
+  };
+}
+
+async function resolveStructuredStreamOutput(stream: StructuredObjectStreamResult, latestPartial: unknown) {
+  if (stream.object !== undefined) {
+    return stream.object instanceof Promise ? await stream.object : stream.object;
+  }
+
+  if (stream.output !== undefined) {
+    return stream.output instanceof Promise ? await stream.output : stream.output;
+  }
+
+  return latestPartial;
+}
+
+async function* toAsyncIterable<T>(source: StreamSource<T>): AsyncIterable<T> {
+  const resolved = typeof source === "function" ? source() : source;
+
+  if (isAsyncIterable<T>(resolved)) {
+    yield* resolved;
+    return;
+  }
+
+  const readable = resolved as ReadableStream<T>;
+  if (typeof (readable as { getReader?: unknown }).getReader !== "function") {
+    throw new Error("Mastra structured stream did not expose an async iterable or readable object stream.");
+  }
+
+  const reader = readable.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      yield value;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
+  return typeof (value as { [Symbol.asyncIterator]?: unknown })?.[Symbol.asyncIterator] === "function";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function splitSseBlocks(text: string) {
-  return text.split(/\r?\n\r?\n/).filter((block) => block.trim().length > 0);
-}
-
-function takeCompleteSseBlocks(text: string) {
-  const blocks = splitSseBlocks(text);
-  const endsWithSeparator = /\r?\n\r?\n$/.test(text);
-  if (endsWithSeparator) {
-    return { blocks, remainder: "" };
-  }
-
-  return {
-    blocks: blocks.slice(0, -1),
-    remainder: blocks.at(-1) ?? ""
-  };
 }
 
 function readVisibleJsonString(text: string, startIndex: number) {

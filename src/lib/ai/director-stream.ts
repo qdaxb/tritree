@@ -1,19 +1,11 @@
 import type { BranchOption, DirectorDraftOutput, DirectorOptionsOutput, Draft } from "@/lib/domain";
-import {
-  buildDirectorDraftStreamRequest,
-  buildDirectorOptionsStreamRequest,
-  parseDirectorDraftText,
-  parseDirectorOptionsText
-} from "./director";
 import { streamTreeDraft, streamTreeOptions, type MemoryScope } from "./mastra-executor";
 import type { DirectorInputParts } from "./prompts";
 
-type DirectorDraftFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 export type DirectorDraftField = "title" | "body" | "hashtags" | "imagePrompt";
 
 type DirectorDraftStreamOptions = {
   env?: Record<string, string | undefined>;
-  fetcher?: DirectorDraftFetch;
   memory?: MemoryScope;
   onText?: (event: { delta: string; accumulatedText: string; partialDraft: Draft | null }) => void;
   signal?: AbortSignal;
@@ -21,7 +13,6 @@ type DirectorDraftStreamOptions = {
 
 type DirectorOptionsStreamOptions = {
   env?: Record<string, string | undefined>;
-  fetcher?: DirectorDraftFetch;
   memory?: MemoryScope;
   onText?: (event: { delta: string; accumulatedText: string; partialOptions: BranchOption[] | null }) => void;
   signal?: AbortSignal;
@@ -31,217 +22,54 @@ export async function streamDirectorDraft(
   parts: DirectorInputParts,
   options: DirectorDraftStreamOptions = {}
 ): Promise<DirectorDraftOutput> {
-  if (!options.fetcher) {
-    let accumulatedText = "";
-    const emit = (value: unknown) => {
-      const text = JSON.stringify(value);
-      if (!text || text === accumulatedText) return;
-      accumulatedText = text;
-      options.onText?.({
-        delta: text,
-        accumulatedText,
-        partialDraft: extractPartialDirectorDraft(accumulatedText)
-      });
-    };
-    const output = await streamTreeDraft({
-      parts,
-      env: options.env,
-      memory: options.memory,
-      signal: options.signal,
-      onPartialObject: emit
-    });
-    emit(output);
-    return output;
-  }
-
-  const request = buildDirectorDraftStreamRequest(parts, options.env);
-  logDirectorPrompt("draft", request.body);
-  const fetcher = options.fetcher;
-  const response = await fetcher(request.url, {
-    method: "POST",
-    headers: request.headers,
-    body: JSON.stringify(request.body),
-    signal: options.signal
-  });
-
-  if (!response.ok) {
-    throw await createDirectorStreamHttpError(response);
-  }
-
-  if (!response.body) {
-    throw new Error("AI Director stream returned no response body.");
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let pendingSseText = "";
   let accumulatedText = "";
+  const emit = (value: unknown) => {
+    const text = JSON.stringify(value);
+    if (!text || text === accumulatedText) return;
+    accumulatedText = text;
+    options.onText?.({
+      delta: text,
+      accumulatedText,
+      partialDraft: extractPartialDirectorDraft(accumulatedText)
+    });
+  };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    pendingSseText += decoder.decode(value, { stream: true });
-    const parsed = takeCompleteSseBlocks(pendingSseText);
-    pendingSseText = parsed.remainder;
-    accumulatedText = emitTextDeltas(parsed.blocks, accumulatedText, options.onText);
-  }
-
-  pendingSseText += decoder.decode();
-  if (pendingSseText.trim().length > 0) {
-    accumulatedText = emitTextDeltas([pendingSseText], accumulatedText, options.onText);
-  }
-
-  return parseDirectorDraftText(accumulatedText);
+  const output = await streamTreeDraft({
+    parts,
+    env: options.env,
+    memory: options.memory,
+    signal: options.signal,
+    onPartialObject: emit
+  });
+  emit(output);
+  return output;
 }
 
 export async function streamDirectorOptions(
   parts: DirectorInputParts,
   options: DirectorOptionsStreamOptions = {}
 ): Promise<DirectorOptionsOutput> {
-  if (!options.fetcher) {
-    let accumulatedText = "";
-    const emit = (value: unknown) => {
-      const text = JSON.stringify(value);
-      if (!text || text === accumulatedText) return;
-      accumulatedText = text;
-      options.onText?.({
-        delta: text,
-        accumulatedText,
-        partialOptions: extractPartialDirectorOptions(accumulatedText)
-      });
-    };
-    const output = await streamTreeOptions({
-      parts,
-      env: options.env,
-      memory: options.memory,
-      signal: options.signal,
-      onPartialObject: emit
-    });
-    emit(output);
-    return output;
-  }
-
-  const request = buildDirectorOptionsStreamRequest(parts, options.env);
-  logDirectorPrompt("options", request.body);
-  const accumulatedText = await streamDirectorText(request, {
-    fetcher: options.fetcher,
-    signal: options.signal,
-    onText(event) {
-      options.onText?.({
-        ...event,
-        partialOptions: extractPartialDirectorOptions(event.accumulatedText)
-      });
-    }
-  });
-
-  return parseDirectorOptionsText(accumulatedText);
-}
-
-function logDirectorPrompt(kind: "draft" | "options", body: ReturnType<typeof buildDirectorDraftStreamRequest>["body"]) {
-  console.info(
-    `[treeable:director-prompt:${kind}]`,
-    JSON.stringify(
-      {
-        model: body.model,
-        stream: body.stream ?? false,
-        system: body.system,
-        messages: body.messages
-      },
-      null,
-      2
-    )
-  );
-}
-
-async function streamDirectorText(
-  request: ReturnType<typeof buildDirectorDraftStreamRequest>,
-  options: {
-    fetcher?: DirectorDraftFetch;
-    onText?: (event: { delta: string; accumulatedText: string }) => void;
-    signal?: AbortSignal;
-  }
-) {
-  const fetcher = options.fetcher ?? fetch;
-  const response = await fetcher(request.url, {
-    method: "POST",
-    headers: request.headers,
-    body: JSON.stringify(request.body),
-    signal: options.signal
-  });
-
-  if (!response.ok) {
-    throw await createDirectorStreamHttpError(response);
-  }
-
-  if (!response.body) {
-    throw new Error("AI Director stream returned no response body.");
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let pendingSseText = "";
   let accumulatedText = "";
+  const emit = (value: unknown) => {
+    const text = JSON.stringify(value);
+    if (!text || text === accumulatedText) return;
+    accumulatedText = text;
+    options.onText?.({
+      delta: text,
+      accumulatedText,
+      partialOptions: extractPartialDirectorOptions(accumulatedText)
+    });
+  };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    pendingSseText += decoder.decode(value, { stream: true });
-    const parsed = takeCompleteSseBlocks(pendingSseText);
-    pendingSseText = parsed.remainder;
-    accumulatedText = emitPlainTextDeltas(parsed.blocks, accumulatedText, options.onText);
-  }
-
-  pendingSseText += decoder.decode();
-  if (pendingSseText.trim().length > 0) {
-    accumulatedText = emitPlainTextDeltas([pendingSseText], accumulatedText, options.onText);
-  }
-
-  return accumulatedText;
-}
-
-export function parseAnthropicSseTextDeltas(text: string): string[] {
-  const deltas: string[] = [];
-
-  for (const block of splitSseBlocks(text)) {
-    const dataLines = block
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice("data:".length).trimStart());
-
-    if (dataLines.length === 0) {
-      continue;
-    }
-
-    const data = dataLines.join("\n");
-    if (data === "[DONE]") {
-      continue;
-    }
-
-    const payload = JSON.parse(data) as unknown;
-    if (!isRecord(payload) || typeof payload.type !== "string") {
-      continue;
-    }
-
-    if (payload.type === "error") {
-      throw new Error(getProviderErrorMessage(payload));
-    }
-
-    if (payload.type !== "content_block_delta" || !isRecord(payload.delta)) {
-      continue;
-    }
-
-    if (payload.delta.type === "text_delta" && typeof payload.delta.text === "string") {
-      deltas.push(payload.delta.text);
-    }
-  }
-
-  return deltas;
+  const output = await streamTreeOptions({
+    parts,
+    env: options.env,
+    memory: options.memory,
+    signal: options.signal,
+    onPartialObject: emit
+  });
+  emit(output);
+  return output;
 }
 
 export function extractPartialDirectorDraft(text: string): Draft | null {
@@ -335,50 +163,6 @@ export function extractActiveDirectorDraftField(text: string): DirectorDraftFiel
   }
 
   return activeField;
-}
-
-function emitTextDeltas(
-  sseBlocks: string[],
-  accumulatedText: string,
-  onText: DirectorDraftStreamOptions["onText"]
-) {
-  return emitPlainTextDeltas(sseBlocks, accumulatedText, (event) => {
-    onText?.({
-      ...event,
-      partialDraft: extractPartialDirectorDraft(event.accumulatedText)
-    });
-  });
-}
-
-function emitPlainTextDeltas(
-  sseBlocks: string[],
-  accumulatedText: string,
-  onText?: (event: { delta: string; accumulatedText: string }) => void
-) {
-  let nextAccumulatedText = accumulatedText;
-  for (const delta of parseAnthropicSseTextDeltas(sseBlocks.join("\n\n"))) {
-    nextAccumulatedText += delta;
-    onText?.({ delta, accumulatedText: nextAccumulatedText });
-  }
-
-  return nextAccumulatedText;
-}
-
-function splitSseBlocks(text: string) {
-  return text.split(/\r?\n\r?\n/).filter((block) => block.trim().length > 0);
-}
-
-function takeCompleteSseBlocks(text: string) {
-  const blocks = splitSseBlocks(text);
-  const endsWithSeparator = /\r?\n\r?\n$/.test(text);
-  if (endsWithSeparator) {
-    return { blocks, remainder: "" };
-  }
-
-  return {
-    blocks: blocks.slice(0, -1),
-    remainder: blocks.at(-1) ?? ""
-  };
 }
 
 function extractStringField(text: string, fieldName: string) {
@@ -592,39 +376,6 @@ function parseJsonString(rawValue: string) {
   } catch {
     return rawValue;
   }
-}
-
-function getProviderErrorMessage(payload: Record<string, unknown>) {
-  if (isRecord(payload.error) && typeof payload.error.message === "string") {
-    return payload.error.message;
-  }
-
-  if (typeof payload.message === "string") {
-    return payload.message;
-  }
-
-  return "AI Director stream returned an error.";
-}
-
-async function createDirectorStreamHttpError(response: Response) {
-  const contentType = response.headers.get("Content-Type") ?? "";
-  const body = contentType.includes("application/json")
-    ? ((await response.json().catch(() => null)) as unknown)
-    : await response.text().catch(() => "");
-
-  if (isRecord(body) && isRecord(body.error) && typeof body.error.message === "string") {
-    return new Error(body.error.message);
-  }
-
-  if (typeof body === "string" && body.trim().length > 0) {
-    return new Error(body);
-  }
-
-  return new Error(`Kimi Anthropic-compatible API stream request failed with status ${response.status}.`);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function escapeRegExp(value: string) {

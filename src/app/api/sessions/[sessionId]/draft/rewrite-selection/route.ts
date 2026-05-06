@@ -77,6 +77,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
 
         try {
           const output = await streamSelectedDraftText(input, {
+            memory: { resource: focusedState.rootMemory.id, thread: params.sessionId },
             signal: request.signal,
             onText(event) {
               send({ type: "replacement", replacementText: event.partialReplacementText });
@@ -96,7 +97,10 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   }
 
   try {
-    const output = await rewriteSelectedDraftText(input, { signal: request.signal });
+    const output = await rewriteSelectedDraftText(input, {
+      memory: { resource: focusedState.rootMemory.id, thread: params.sessionId },
+      signal: request.signal
+    });
     return NextResponse.json(output);
   } catch (error) {
     console.error("[treeable:rewrite-selection]", error);

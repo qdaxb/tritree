@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildSelectionRewritePrompt,
-  buildSelectionRewriteRequest,
   extractPartialSelectionRewriteText,
   parseSelectionRewriteText,
   rewriteSelectedDraftText,
@@ -111,80 +110,65 @@ describe("extractPartialSelectionRewriteText", () => {
   });
 });
 
-describe("buildSelectionRewriteRequest", () => {
-  it("builds an Anthropic-compatible non-streaming request", () => {
-    const request = buildSelectionRewriteRequest(input, { ANTHROPIC_AUTH_TOKEN: "token", ANTHROPIC_MODEL: "model-x" });
-
-    expect(request.url).toBe("https://api.moonshot.ai/anthropic/v1/messages");
-    expect(request.headers["x-api-key"]).toBe("token");
-    expect(request.body.model).toBe("model-x");
-    expect(request.body.stream).toBeUndefined();
-    expect(request.body.messages[0].content).toContain("补一个真实工作细节");
-  });
-});
-
 describe("rewriteSelectedDraftText", () => {
-  it("returns the parsed replacement from the provider response", async () => {
-    const response = new Response(
-      JSON.stringify({
-        content: [{ type: "text", text: '{"replacementText":"第二句加入了排期会上的真实追问。"}' }]
-      }),
-      { status: 200 }
-    );
-    const fetcher = vi.fn().mockResolvedValue(response);
+  it("returns the parsed replacement from the Mastra structured agent", async () => {
+    const signal = new AbortController().signal;
+    const memory = { resource: "root", thread: "session-1" };
+    const fakeAgent = {
+      generate: vi.fn(async () => ({
+        object: { replacementText: "第二句加入了排期会上的真实追问。" }
+      }))
+    };
 
     await expect(
       rewriteSelectedDraftText(input, {
-        env: { ANTHROPIC_AUTH_TOKEN: "token" },
-        fetcher
+        memory,
+        selectionRewriteAgent: fakeAgent,
+        signal
       })
     ).resolves.toEqual({ replacementText: "第二句加入了排期会上的真实追问。" });
-    expect(fetcher).toHaveBeenCalledWith(
-      "https://api.moonshot.ai/anthropic/v1/messages",
-      expect.objectContaining({ method: "POST" })
+
+    expect(fakeAgent.generate).toHaveBeenCalledWith(
+      [{ role: "user", content: expect.stringContaining("补一个真实工作细节") }],
+      expect.objectContaining({
+        abortSignal: signal,
+        memory,
+        structuredOutput: expect.objectContaining({ schema: expect.anything() })
+      })
     );
   });
 });
 
 describe("streamSelectedDraftText", () => {
   it("streams partial replacement text before returning the final replacement", async () => {
-    const encoder = new TextEncoder();
-    const response = new Response(
-      new ReadableStream({
-        start(controller) {
-          controller.enqueue(
-            encoder.encode(
-              [
-                "event: content_block_delta",
-                'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\\"replacementText\\":\\"第二句"}}',
-                "",
-                "event: content_block_delta",
-                'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"加入排期会细节。\\"}"}}',
-                "",
-                "event: message_stop",
-                'data: {"type":"message_stop"}',
-                ""
-              ].join("\n")
-            )
-          );
-          controller.close();
-        }
-      }),
-      { status: 200, headers: { "Content-Type": "text/event-stream" } }
-    );
-    const fetcher = vi.fn().mockResolvedValue(response);
+    const finalObject = { replacementText: "第二句加入排期会细节。" };
+    const fakeAgent = {
+      stream: vi.fn(async () => ({
+        objectStream: async function* () {
+          yield { replacementText: "第二句" };
+          yield finalObject;
+        },
+        object: Promise.resolve(finalObject)
+      })),
+      generate: vi.fn()
+    };
     const onText = vi.fn();
 
     await expect(
       streamSelectedDraftText(input, {
-        env: { ANTHROPIC_AUTH_TOKEN: "token" },
-        fetcher,
+        selectionRewriteAgent: fakeAgent,
         onText
       })
     ).resolves.toEqual({ replacementText: "第二句加入排期会细节。" });
 
-    const requestBody = JSON.parse(fetcher.mock.calls[0][1].body as string);
-    expect(requestBody.stream).toBe(true);
+    expect(fakeAgent.stream).toHaveBeenCalledWith(
+      [{ role: "user", content: expect.stringContaining("补一个真实工作细节") }],
+      expect.objectContaining({
+        memory: expect.objectContaining({ resource: "treeable-selection-rewrite" }),
+        structuredOutput: expect.objectContaining({ schema: expect.anything() })
+      })
+    );
+    expect(fakeAgent.generate).not.toHaveBeenCalled();
     expect(onText).toHaveBeenCalledWith(
       expect.objectContaining({
         partialReplacementText: "第二句"

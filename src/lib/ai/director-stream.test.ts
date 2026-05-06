@@ -14,7 +14,6 @@ import {
   extractActiveDirectorDraftField,
   extractPartialDirectorOptions,
   extractPartialDirectorDraft,
-  parseAnthropicSseTextDeltas,
   streamDirectorDraft,
   streamDirectorOptions
 } from "./director-stream";
@@ -32,29 +31,6 @@ const directorInput = {
 beforeEach(() => {
   mastraMocks.streamTreeDraft.mockReset();
   mastraMocks.streamTreeOptions.mockReset();
-});
-
-describe("parseAnthropicSseTextDeltas", () => {
-  it("extracts text_delta chunks and ignores non-text events", () => {
-    const chunks = parseAnthropicSseTextDeltas(
-      [
-        "event: message_start",
-        'data: {"type":"message_start","message":{"id":"m1"}}',
-        "",
-        "event: content_block_delta",
-        'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\\"draft\\":"}}',
-        "",
-        "event: ping",
-        'data: {"type":"ping"}',
-        "",
-        "event: content_block_delta",
-        'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\\"body\\":\\"新\\"}"}}',
-        ""
-      ].join("\n")
-    );
-
-    expect(chunks).toEqual(['{"draft":', '{"body":"新"}']);
-  });
 });
 
 describe("extractPartialDirectorDraft", () => {
@@ -192,7 +168,7 @@ describe("extractPartialDirectorOptions", () => {
 });
 
 describe("streamDirectorDraft", () => {
-  it("uses the Mastra tree draft stream when no low-level fetcher is injected", async () => {
+  it("uses the Mastra tree draft stream", async () => {
     const output = {
       roundIntent: "扩写",
       draft: { title: "新标题", body: "新正文", hashtags: ["#AI"], imagePrompt: "新图" },
@@ -236,90 +212,10 @@ describe("streamDirectorDraft", () => {
       })
     );
   });
-
-  it("calls onText with accumulated text and returns the final parsed draft", async () => {
-    const encoder = new TextEncoder();
-    const response = new Response(
-      new ReadableStream({
-        start(controller) {
-          controller.enqueue(
-            encoder.encode(
-              [
-                "event: content_block_delta",
-                'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\\"roundIntent\\":\\"扩写\\",\\"draft\\":{\\"title\\":\\"新标题\\",\\"body\\":\\"新正文\\",\\"hashtags\\":[\\"#AI\\"],\\"imagePrompt\\":\\"新图\\"},\\"memoryObservation\\":\\"观察\\",\\"finishAvailable\\":false,\\"publishPackage\\":null}"}}',
-                "",
-                "event: message_stop",
-                'data: {"type":"message_stop"}',
-                ""
-              ].join("\n")
-            )
-          );
-          controller.close();
-        }
-      }),
-      { status: 200, headers: { "Content-Type": "text/event-stream" } }
-    );
-    const fetchMock = vi.fn().mockResolvedValue(response);
-    const onText = vi.fn();
-
-    const output = await streamDirectorDraft(directorInput, {
-      env: { ANTHROPIC_AUTH_TOKEN: "token" },
-      fetcher: fetchMock,
-      onText
-    });
-
-    expect(onText).toHaveBeenCalledWith(expect.objectContaining({ accumulatedText: expect.stringContaining("新正文") }));
-    expect(output.draft.body).toBe("新正文");
-  });
-
-  it("logs the director prompt before sending the draft request", async () => {
-    const encoder = new TextEncoder();
-    const response = new Response(
-      new ReadableStream({
-        start(controller) {
-          controller.enqueue(
-            encoder.encode(
-              [
-                "event: content_block_delta",
-                'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\\"roundIntent\\":\\"扩写\\",\\"draft\\":{\\"title\\":\\"新标题\\",\\"body\\":\\"新正文\\",\\"hashtags\\":[],\\"imagePrompt\\":\\"\\"},\\"memoryObservation\\":\\"观察\\",\\"finishAvailable\\":false,\\"publishPackage\\":null}"}}',
-                "",
-                "event: message_stop",
-                'data: {"type":"message_stop"}',
-                ""
-              ].join("\n")
-            )
-          );
-          controller.close();
-        }
-      }),
-      { status: 200, headers: { "Content-Type": "text/event-stream" } }
-    );
-    const fetchMock = vi.fn().mockResolvedValue(response);
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-
-    try {
-      await streamDirectorDraft(directorInput, {
-        env: { ANTHROPIC_AUTH_TOKEN: "token" },
-        fetcher: fetchMock
-      });
-
-      expect(infoSpy).toHaveBeenCalledWith(
-        "[treeable:director-prompt:draft]",
-        expect.stringContaining('"system"')
-      );
-      expect(infoSpy).toHaveBeenCalledWith(
-        "[treeable:director-prompt:draft]",
-        expect.stringContaining('"messages"')
-      );
-      expect(infoSpy.mock.calls.map((call) => call.join("\n")).join("\n")).not.toContain("token");
-    } finally {
-      infoSpy.mockRestore();
-    }
-  });
 });
 
 describe("streamDirectorOptions", () => {
-  it("uses the Mastra tree options stream when no low-level fetcher is injected", async () => {
+  it("uses the Mastra tree options stream", async () => {
     const output = {
       roundIntent: "下一步",
       options: [
@@ -377,49 +273,5 @@ describe("streamDirectorOptions", () => {
         partialOptions: output.options
       })
     );
-  });
-
-  it("calls onText with partial options and returns the final parsed options", async () => {
-    const encoder = new TextEncoder();
-    const finalText = JSON.stringify({
-      roundIntent: "下一步",
-      options: [
-        { id: "a", label: "补场景", description: "A", impact: "A", kind: "explore" },
-        { id: "b", label: "深挖", description: "B", impact: "B", kind: "deepen" },
-        { id: "c", label: "换角度", description: "C", impact: "C", kind: "reframe" }
-      ],
-      memoryObservation: "偏好具体表达。"
-    });
-    const response = new Response(
-      new ReadableStream({
-        start(controller) {
-          controller.enqueue(
-            encoder.encode(
-              [
-                "event: content_block_delta",
-                `data: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: finalText } })}`,
-                "",
-                "event: message_stop",
-                'data: {"type":"message_stop"}',
-                ""
-              ].join("\n")
-            )
-          );
-          controller.close();
-        }
-      }),
-      { status: 200, headers: { "Content-Type": "text/event-stream" } }
-    );
-    const fetchMock = vi.fn().mockResolvedValue(response);
-    const onText = vi.fn();
-
-    const output = await streamDirectorOptions(directorInput, {
-      env: { ANTHROPIC_AUTH_TOKEN: "token" },
-      fetcher: fetchMock,
-      onText
-    });
-
-    expect(onText).toHaveBeenCalledWith(expect.objectContaining({ partialOptions: expect.any(Array) }));
-    expect(output.options.map((option) => option.label)).toEqual(["补场景", "深挖", "换角度"]);
   });
 });

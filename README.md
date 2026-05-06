@@ -25,7 +25,7 @@ Tritree 的核心交互是一棵不断生长的创作树。每一轮，AI 导演
 | 层级 | 技术 |
 |------|------|
 | 框架 | Next.js 16 + React 19 |
-| AI 接口 | Anthropic API（默认接入 Kimi K2.5，兼容 OpenAI 格式） |
+| AI 接口 | Mastra Agent |
 | 数据库 | SQLite（通过 Drizzle ORM） |
 | 可视化 | D3.js |
 | 样式 | CSS Modules / 全局 CSS |
@@ -55,10 +55,10 @@ cp .env.example .env.local
 编辑 `.env.local`：
 
 ```env
-# Anthropic 兼容接口地址
+# AI SDK Anthropic provider 兼容接口地址
 ANTHROPIC_BASE_URL=https://api.moonshot.ai/anthropic
 
-# 你的 API 密钥
+# 你的 provider API 密钥
 ANTHROPIC_AUTH_TOKEN=your_api_key_here
 
 # 使用的模型
@@ -68,7 +68,7 @@ ANTHROPIC_MODEL=kimi-k2.5
 TREEABLE_DB_PATH=.treeable/treeable.sqlite
 ```
 
-> 如需使用 OpenAI 原生接口，将 `ANTHROPIC_BASE_URL` 改为 `https://api.openai.com` 并填入对应密钥和模型名称即可。
+> AI 调用统一通过 Mastra Agent 和 AI SDK provider 执行，不再保留手写 HTTP provider 分支。
 
 ### 启动开发服务器
 
