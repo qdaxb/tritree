@@ -25,6 +25,13 @@ describe("password hashing", () => {
     await expect(verifyPassword("anything", "not-a-valid-hash")).resolves.toBe(false);
   });
 
+  it("rejects hashes with extra trailing fields", async () => {
+    const hash = await hashPassword("correct horse battery staple");
+    const tamperedHash = `${hash}$extra`;
+
+    await expect(verifyPassword("correct horse battery staple", tamperedHash)).resolves.toBe(false);
+  });
+
   it("rejects hashes with an unexpected derived-key length", async () => {
     const hash = await hashPassword("correct horse battery staple");
     const shortHash = hash.split("$").slice(0, 5).concat("abcd").join("$");

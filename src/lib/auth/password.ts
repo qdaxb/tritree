@@ -24,7 +24,10 @@ export async function hashPassword(password: string) {
 }
 
 export async function verifyPassword(password: string, storedHash: string) {
-  const [scheme, n, r, p, saltHex, hashHex] = storedHash.split("$");
+  const parts = storedHash.split("$");
+  if (parts.length !== 6) return false;
+
+  const [scheme, n, r, p, saltHex, hashHex] = parts;
   if (scheme !== "scrypt" || n !== String(SCRYPT_N) || r !== String(SCRYPT_R) || p !== String(SCRYPT_P)) return false;
   if (!isHex(saltHex, SALT_LENGTH) || !isHex(hashHex, KEY_LENGTH)) return false;
 
