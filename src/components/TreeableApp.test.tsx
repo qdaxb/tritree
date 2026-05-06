@@ -330,6 +330,53 @@ function controlledNdjsonResponse() {
   };
 }
 
+function installViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width
+  });
+
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query: string) => {
+      const matches = query === "(max-width: 980px)" ? width <= 980 : false;
+      const listeners = new Set<(event: MediaQueryListEvent) => void>();
+      const mediaQueryList = {
+        matches,
+        media: query,
+        onchange: null,
+        addEventListener: (_event: "change", listener: (event: MediaQueryListEvent) => void) => {
+          listeners.add(listener);
+        },
+        removeEventListener: (_event: "change", listener: (event: MediaQueryListEvent) => void) => {
+          listeners.delete(listener);
+        },
+        addListener: (listener: (event: MediaQueryListEvent) => void) => {
+          listeners.add(listener);
+        },
+        removeListener: (listener: (event: MediaQueryListEvent) => void) => {
+          listeners.delete(listener);
+        },
+        dispatchEvent: (event: Event) => {
+          listeners.forEach((listener) => listener(event as MediaQueryListEvent));
+          return true;
+        }
+      };
+
+      return mediaQueryList as MediaQueryList;
+    })
+  );
+}
+
+function installMobileViewport() {
+  installViewport(390);
+}
+
+function installDesktopViewport() {
+  installViewport(1280);
+}
+
 describe("TreeableApp", () => {
   afterEach(() => {
     liveDraftMock.mockClear();
@@ -352,6 +399,41 @@ describe("TreeableApp", () => {
     expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions");
     expect(screen.queryByLabelText("历史路径地图")).not.toBeInTheDocument();
+  });
+
+  it("renders mobile panel controls with tree active by default", async () => {
+    installMobileViewport();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByTestId("tree-canvas")).toBeInTheDocument();
+    const switcher = screen.getByRole("group", { name: "移动端主面板" });
+    expect(within(switcher).getByRole("button", { name: "树图" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(switcher).getByRole("button", { name: "草稿" })).toHaveAttribute("aria-pressed", "false");
+    expect(document.querySelector(".mobile-panel--tree")).toHaveClass("mobile-panel--active");
+    expect(document.querySelector(".mobile-panel--draft")).not.toHaveClass("mobile-panel--active");
+  });
+
+  it("does not render mobile panel controls on desktop", async () => {
+    installDesktopViewport();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByTestId("tree-canvas")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "移动端主面板" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("live-draft")).toBeInTheDocument();
   });
 
   it("trims persisted root summary before flattening it in the topbar", async () => {
