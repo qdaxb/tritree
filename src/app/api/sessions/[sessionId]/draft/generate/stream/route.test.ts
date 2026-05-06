@@ -105,6 +105,7 @@ describe("POST /api/sessions/:sessionId/draft/generate/stream", () => {
     extractPartialDirectorDraftMock.mockReturnValueOnce({ title: "新", body: "新", hashtags: [], imagePrompt: "" });
     extractActiveDirectorDraftFieldMock.mockReturnValueOnce("body");
     streamDirectorDraftMock.mockImplementation(async (_parts, options) => {
+      options.onReasoningText({ delta: "先理解选择。", accumulatedText: "先理解选择。" });
       options.onText({ delta: "新", accumulatedText: '{"draft":{"title":"新","body":"新' });
       return finalOutput;
     });
@@ -119,9 +120,12 @@ describe("POST /api/sessions/:sessionId/draft/generate/stream", () => {
     const text = await response.text();
 
     expect(response.headers.get("Content-Type")).toContain("application/x-ndjson");
+    expect(text).toContain('"type":"thinking"');
+    expect(text).toContain('"text":"先理解选择。"');
     expect(text).toContain('"type":"draft"');
     expect(text).toContain('"streamingField":"body"');
     expect(text).toContain('"type":"done"');
+    expect(text.indexOf('"type":"thinking"')).toBeLessThan(text.indexOf('"type":"draft"'));
     expect(text.indexOf('"type":"draft"')).toBeLessThan(text.indexOf('"type":"done"'));
     expect(updateNodeDraft).toHaveBeenCalledWith({
       sessionId: "session-1",

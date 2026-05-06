@@ -68,6 +68,9 @@ export async function POST(request: Request) {
             {
               memory: { resource: rootMemory.id, thread: draftState.session.id },
               signal: request.signal,
+              onReasoningText(event) {
+                send({ type: "thinking", nodeId: draftState.currentNode?.id ?? null, text: event.accumulatedText });
+              },
               onText(event) {
                 if (event.partialOptions && draftState.currentNode) {
                   send({ type: "options", nodeId: draftState.currentNode.id, options: event.partialOptions });

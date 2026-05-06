@@ -69,6 +69,9 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
           {
             memory: { resource: state.rootMemory.id, thread: sessionId },
             signal: request.signal,
+            onReasoningText(event) {
+              send({ type: "thinking", nodeId: targetNode.id, text: event.accumulatedText });
+            },
             onText(event) {
               const draft = extractPartialDirectorDraft(event.accumulatedText);
               if (draft) {

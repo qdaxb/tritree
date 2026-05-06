@@ -274,4 +274,32 @@ describe("streamDirectorOptions", () => {
       })
     );
   });
+
+  it("forwards reasoning text from the Mastra tree options stream", async () => {
+    const output = {
+      roundIntent: "下一步",
+      options: [
+        { id: "a", label: "补场景", description: "A", impact: "A", kind: "explore" },
+        { id: "b", label: "深挖", description: "B", impact: "B", kind: "deepen" },
+        { id: "c", label: "换角度", description: "C", impact: "C", kind: "reframe" }
+      ],
+      memoryObservation: "偏好具体表达。"
+    };
+    mastraMocks.streamTreeOptions.mockImplementation(async ({ onReasoningText }) => {
+      onReasoningText({ delta: "先看当前草稿。", accumulatedText: "先看当前草稿。" });
+      onReasoningText({ delta: "再拆三个选择。", accumulatedText: "先看当前草稿。再拆三个选择。" });
+      return output;
+    });
+    const onReasoningText = vi.fn();
+
+    await streamDirectorOptions(directorInput, {
+      onReasoningText
+    });
+
+    expect(onReasoningText).toHaveBeenCalledTimes(2);
+    expect(onReasoningText).toHaveBeenLastCalledWith({
+      delta: "再拆三个选择。",
+      accumulatedText: "先看当前草稿。再拆三个选择。"
+    });
+  });
 });

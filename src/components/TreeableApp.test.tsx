@@ -107,6 +107,8 @@ vi.mock("@/components/draft/LiveDraft", () => ({
     comparisonSelectionCount?: number;
     draft?: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string } | null;
     emptyStateActions?: ReactNode;
+    generationPhase?: "preparing" | "thinking" | "streaming";
+    generationStage?: "draft" | "options" | null;
     headerActions?: ReactNode;
     headerPanel?: ReactNode;
     isLiveDiff?: boolean;
@@ -125,10 +127,14 @@ vi.mock("@/components/draft/LiveDraft", () => ({
     onSave?: (draft: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string }) => void;
     onStartComparison?: () => void;
     previousDraft?: { title?: string; body: string; hashtags?: string[]; imagePrompt?: string } | null;
+    thinkingText?: string;
   }) => {
     liveDraftMock(props);
     return (
       <div data-testid="live-draft">
+        <div data-testid="live-draft-generation-status">
+          {props.generationStage ? `${props.generationStage}:${props.generationPhase}:${props.thinkingText ?? ""}` : "idle"}
+        </div>
         <div className="draft-panel__actions" data-testid="mock-draft-actions">
           {props.headerActions}
         </div>
@@ -1611,11 +1617,35 @@ describe("TreeableApp", () => {
     });
 
     act(() => {
+      optionsStream.push({ type: "thinking", text: "先看当前草稿，再拆三个方向。" });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("live-draft-generation-status")).toHaveTextContent(
+        "options:thinking:先看当前草稿，再拆三个方向。"
+      );
+    });
+    expect(screen.queryByRole("status", { name: "AI 思考过程" })).not.toBeInTheDocument();
+
+    act(() => {
+      optionsStream.push({ type: "thinking", text: "先看当前草稿，再拆三个方向。第二步排除重复建议。" });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("live-draft-generation-status")).toHaveTextContent(
+        "options:thinking:先看当前草稿，再拆三个方向。第二步排除重复建议。"
+      );
+    });
+
+    act(() => {
       optionsStream.push({ type: "options", nodeId: "node-2", options: [finalOptions[0]] });
     });
 
     await vi.waitFor(() => {
       expect(screen.getByTestId("canvas-options").textContent).toBe("First A");
+      expect(screen.getByTestId("live-draft-generation-status")).toHaveTextContent(
+        "options:streaming:先看当前草稿，再拆三个方向。第二步排除重复建议。"
+      );
     });
 
     act(() => {

@@ -2205,6 +2205,34 @@ button:disabled {
   animation: draft-stream-bar 1.45s ease-in-out infinite;
 }
 
+.draft-streaming-status__thinking {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px;
+  color: #1f2937;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(14, 116, 144, 0.14);
+  border-radius: 7px;
+}
+
+.draft-streaming-status__thinking span {
+  color: #64748b;
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.draft-streaming-status__thinking pre {
+  max-height: 160px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #334155;
+  font: 0.78rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
 .draft-empty-state {
   min-height: 100%;
   display: grid;

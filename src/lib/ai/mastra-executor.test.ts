@@ -363,6 +363,47 @@ describe("tree director compatibility generators", () => {
     ]);
   });
 
+  it("streams reasoning text from Mastra full stream chunks", async () => {
+    const finalObject = {
+      roundIntent: "选择下一步",
+      options: [
+        { id: "a", label: "补具体场景", description: "加入真实场景。", impact: "让文章更具体。", kind: "explore" },
+        { id: "b", label: "压缩表达", description: "删掉重复句子。", impact: "让文章更利落。", kind: "deepen" },
+        { id: "c", label: "检查发布", description: "整理标题和话题。", impact: "让文章接近发布。", kind: "finish" }
+      ],
+      memoryObservation: "用户喜欢具体表达。"
+    };
+    const fakeAgent = {
+      stream: vi.fn(async () => ({
+        fullStream: async function* () {
+          yield { type: "reasoning-delta", payload: { text: "先判断当前稿。" } };
+          yield { type: "reasoning-delta", delta: "再给三个方向。" };
+          yield { type: "object", object: { roundIntent: "选择下一步", options: [{ id: "a", label: "补具体场景" }] } };
+          yield { type: "object-result", object: finalObject };
+        },
+        object: Promise.resolve(finalObject)
+      })),
+      generate: vi.fn()
+    };
+    const reasoningEvents: Array<{ delta: string; accumulatedText: string }> = [];
+    const partials: unknown[] = [];
+
+    await expect(
+      streamTreeOptions({
+        parts: directorParts,
+        treeOptionsAgent: fakeAgent,
+        onPartialObject: (partial) => partials.push(partial),
+        onReasoningText: (event) => reasoningEvents.push(event)
+      })
+    ).resolves.toEqual(finalObject);
+
+    expect(reasoningEvents).toEqual([
+      { delta: "先判断当前稿。", accumulatedText: "先判断当前稿。" },
+      { delta: "再给三个方向。", accumulatedText: "先判断当前稿。再给三个方向。" }
+    ]);
+    expect(partials).toContainEqual({ roundIntent: "选择下一步", options: [{ id: "a", label: "补具体场景" }] });
+  });
+
   it("recovers DeepSeek Anthropic tool-input wrapped structured options from Mastra validation errors", async () => {
     const finalObject = {
       roundIntent: "选择下一步",

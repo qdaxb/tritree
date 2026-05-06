@@ -98,6 +98,7 @@ describe("POST /api/sessions/:sessionId/options", () => {
       updateNodeOptions
     });
     streamDirectorOptionsMock.mockImplementation(async (_parts, options) => {
+      options.onReasoningText({ delta: "先看当前草稿。", accumulatedText: "先看当前草稿。" });
       options.onText({
         delta: "补场景",
         accumulatedText: "",
@@ -118,10 +119,13 @@ describe("POST /api/sessions/:sessionId/options", () => {
     const text = await response.text();
 
     expect(response.headers.get("Content-Type")).toContain("application/x-ndjson");
+    expect(text).toContain('"type":"thinking"');
+    expect(text).toContain('"text":"先看当前草稿。"');
     expect(text).toContain('"type":"options"');
     expect(text).toContain('"label":"补场景"');
     expect(text).not.toContain('"label":"生成中"');
     expect(text).toContain('"type":"done"');
+    expect(text.indexOf('"type":"thinking"')).toBeLessThan(text.indexOf('"type":"options"'));
     expect(text.indexOf('"type":"options"')).toBeLessThan(text.indexOf('"type":"done"'));
     expect(updateNodeOptions).toHaveBeenCalledWith({ sessionId: "session-1", nodeId: "node-1", output });
   });

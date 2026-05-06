@@ -19,6 +19,9 @@ import { Copy, ImagePlus, Send, Sparkles, X } from "lucide-react";
 import type { Draft, PublishPackage } from "@/lib/domain";
 import { resolveDraftTitle } from "@/lib/seed-draft";
 
+type GenerationStage = "draft" | "options";
+type GenerationPhase = "preparing" | "thinking" | "streaming";
+
 export function LiveDraft({
   canCompareDrafts = false,
   comparisonDrafts = null,
@@ -26,6 +29,8 @@ export function LiveDraft({
   comparisonSelectionCount = 0,
   draft,
   emptyStateActions,
+  generationPhase,
+  generationStage,
   headerActions,
   headerPanel,
   isEditable = false,
@@ -40,7 +45,8 @@ export function LiveDraft({
   onRewriteSelection,
   onSave,
   onStartComparison,
-  previousDraft = null
+  previousDraft = null,
+  thinkingText = ""
 }: {
   canCompareDrafts?: boolean;
   comparisonDrafts?: { from: Draft; to: Draft } | null;
@@ -48,6 +54,8 @@ export function LiveDraft({
   comparisonSelectionCount?: number;
   draft: Draft | null;
   emptyStateActions?: ReactNode;
+  generationPhase?: GenerationPhase;
+  generationStage?: GenerationStage | null;
   headerActions?: ReactNode;
   headerPanel?: ReactNode;
   isEditable?: boolean;
@@ -71,6 +79,7 @@ export function LiveDraft({
   onStartComparison?: () => void;
   previousDraft?: Draft | null;
   publishPackage: PublishPackage | null;
+  thinkingText?: string;
 }) {
   const content = draft;
   const initialEditableDraft = comparisonDrafts?.to ?? content;
@@ -99,6 +108,7 @@ export function LiveDraft({
   const [body, setBody] = useState(() => initialEditableDraft?.body ?? "");
   const [hashtags, setHashtags] = useState(() => initialEditableDraft?.hashtags.join(" ") ?? "");
   const [imagePrompt, setImagePrompt] = useState(() => initialEditableDraft?.imagePrompt ?? "");
+  const thinkingPreRef = useRef<HTMLPreElement | null>(null);
   const baseEditableDraft = comparisonDrafts?.to ?? content;
   const hasVisibleStreamingImagePrompt = Boolean(
     content?.imagePrompt.trim() && previousDraft && content.imagePrompt !== previousDraft.imagePrompt
@@ -183,9 +193,19 @@ export function LiveDraft({
     canUseStreamingMergeDiff && liveStreamingField === "imagePrompt" && baseEditableDraft && previousDraft
       ? streamingCurrentLinePosition(previousDraft.imagePrompt || "还没有配图方向。", baseEditableDraft.imagePrompt)
       : null;
+  const activeGenerationStage = generationStage ?? "draft";
+  const activeGenerationPhase = generationPhase ?? (thinkingText.trim() ? "thinking" : "streaming");
+  const streamingStatusTitle = generationStatusTitle(activeGenerationStage, activeGenerationPhase);
+  const trimmedThinkingText = thinkingText.trim();
   const selectedDiffToken =
     selectedDiffAction && draftDiff ? draftDiff[selectedDiffAction.field][selectedDiffAction.tokenIndex] : null;
   const selectedDiffPopoverPosition = selectedDiffAction ? diffPopoverPosition(selectedDiffAction.anchorRect) : null;
+
+  useEffect(() => {
+    const thinkingPre = thinkingPreRef.current;
+    if (!isBusy || !trimmedThinkingText || !thinkingPre) return;
+    thinkingPre.scrollTop = thinkingPre.scrollHeight;
+  }, [isBusy, trimmedThinkingText]);
 
   useEffect(() => {
     setEditingMode(null);
@@ -736,13 +756,19 @@ export function LiveDraft({
           <div aria-label="草稿生成状态" aria-live="polite" className="draft-streaming-status" role="status">
             <div className="draft-streaming-status__content">
               <span aria-hidden="true" className="draft-streaming-status__pulse" />
-              <span className="draft-streaming-status__title">AI 正在生成下一版草稿...</span>
+              <span className="draft-streaming-status__title">{streamingStatusTitle}</span>
               <span aria-hidden="true" className="draft-streaming-status__activity">
                 <span />
                 <span />
                 <span />
               </span>
             </div>
+            {trimmedThinkingText ? (
+              <div className="draft-streaming-status__thinking">
+                <span>thinking</span>
+                <pre ref={thinkingPreRef}>{trimmedThinkingText}</pre>
+              </div>
+            ) : null}
             <div aria-hidden="true" className="draft-streaming-status__bar" />
           </div>
         ) : null}
@@ -1222,6 +1248,18 @@ async function copyTextToClipboard(value: string) {
 function previewSelectionText(value: string) {
   const preview = value.replace(/\s+/g, " ").trim();
   return Array.from(preview).slice(0, 48).join("");
+}
+
+function generationStatusTitle(stage: GenerationStage, phase: GenerationPhase) {
+  if (stage === "options") {
+    if (phase === "thinking") return "AI 正在思考下一步选项...";
+    if (phase === "preparing") return "AI 正在准备下一步选项...";
+    return "AI 正在生成下一步选项...";
+  }
+
+  if (phase === "thinking") return "AI 正在思考下一版草稿...";
+  if (phase === "preparing") return "AI 正在准备下一版草稿...";
+  return "AI 正在生成下一版草稿...";
 }
 
 function parseHashtags(value: string) {

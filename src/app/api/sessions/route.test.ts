@@ -169,6 +169,7 @@ describe("POST /api/sessions", () => {
       memoryObservation: ""
     };
     streamDirectorOptionsMock.mockImplementation(async (_parts, options) => {
+      options.onReasoningText({ delta: "先判断 seed。", accumulatedText: "先判断 seed。" });
       options.onText({
         delta: "拆清楚为什么写",
         accumulatedText: "",
@@ -196,11 +197,14 @@ describe("POST /api/sessions", () => {
     );
     expect(updateNodeOptions).toHaveBeenCalledWith({ sessionId: "session-1", nodeId: "node-1", output });
     expect(text).toContain('"type":"state"');
+    expect(text).toContain('"type":"thinking"');
+    expect(text).toContain('"text":"先判断 seed。"');
     expect(text).toContain('"type":"options"');
     expect(text).toContain('"label":"拆清楚为什么写"');
     expect(text).not.toContain('"label":"生成中"');
     expect(text).toContain('"type":"done"');
-    expect(text.indexOf('"type":"state"')).toBeLessThan(text.indexOf('"type":"options"'));
+    expect(text.indexOf('"type":"state"')).toBeLessThan(text.indexOf('"type":"thinking"'));
+    expect(text.indexOf('"type":"thinking"')).toBeLessThan(text.indexOf('"type":"options"'));
     expect(text.indexOf('"type":"options"')).toBeLessThan(text.indexOf('"type":"done"'));
   });
 

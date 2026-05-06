@@ -67,6 +67,7 @@ type TreeOptionsAgentLike = {
 
 type StructuredObjectStreamResult = {
   objectStream?: StreamSource<unknown>;
+  fullStream?: StreamSource<unknown>;
   object?: Promise<unknown> | unknown;
   output?: Promise<unknown> | unknown;
 };
@@ -92,6 +93,11 @@ type TreeDraftPartial = Partial<Omit<DirectorDraftOutput, "draft">> & {
 
 type TreeOptionsPartial = Partial<Omit<DirectorOptionsOutput, "options">> & {
   options?: Array<Partial<BranchOption>>;
+};
+
+type ReasoningTextEvent = {
+  delta: string;
+  accumulatedText: string;
 };
 
 export async function generateTreeDraft({
@@ -129,10 +135,12 @@ export async function streamTreeDraft({
   memory,
   context,
   treeDraftAgent,
-  onPartialObject
+  onPartialObject,
+  onReasoningText
 }: TreeDirectorExecutionInput & {
   treeDraftAgent?: TreeDraftAgentLike;
   onPartialObject?: (partial: TreeDraftPartial) => void;
+  onReasoningText?: (event: ReasoningTextEvent) => void;
 }): Promise<DirectorDraftOutput> {
   const agentContext = contextForDirectorParts(parts, "writer", context);
   const messages = directorMessagesForParts(parts);
@@ -153,7 +161,12 @@ export async function streamTreeDraft({
   }
 
   let latestPartial: unknown = null;
-  if (stream.objectStream) {
+  if (stream.fullStream) {
+    latestPartial = await consumeStructuredFullStream<TreeDraftPartial>(stream.fullStream, {
+      onPartialObject,
+      onReasoningText
+    });
+  } else if (stream.objectStream) {
     for await (const partial of toAsyncIterable(stream.objectStream)) {
       latestPartial = partial;
       onPartialObject?.(partial as TreeDraftPartial);
@@ -199,10 +212,12 @@ export async function streamTreeOptions({
   memory,
   context,
   treeOptionsAgent,
-  onPartialObject
+  onPartialObject,
+  onReasoningText
 }: TreeDirectorExecutionInput & {
   treeOptionsAgent?: TreeOptionsAgentLike;
   onPartialObject?: (partial: TreeOptionsPartial) => void;
+  onReasoningText?: (event: ReasoningTextEvent) => void;
 }): Promise<DirectorOptionsOutput> {
   const agentContext = contextForDirectorParts(parts, "editor", context);
   const messages = directorMessagesForParts(parts);
@@ -223,7 +238,12 @@ export async function streamTreeOptions({
   }
 
   let latestPartial: unknown = null;
-  if (stream.objectStream) {
+  if (stream.fullStream) {
+    latestPartial = await consumeStructuredFullStream<TreeOptionsPartial>(stream.fullStream, {
+      onPartialObject,
+      onReasoningText
+    });
+  } else if (stream.objectStream) {
     for await (const partial of toAsyncIterable(stream.objectStream)) {
       latestPartial = partial;
       onPartialObject?.(partial as TreeOptionsPartial);
@@ -272,6 +292,68 @@ function directorMessagesForParts(parts: DirectorInputParts): MastraConversation
 
 function streamingStructuredOutput<TSchema>(schema: TSchema) {
   return { schema, jsonPromptInjection: true };
+}
+
+async function consumeStructuredFullStream<TPartial>(
+  fullStream: StreamSource<unknown>,
+  options: {
+    onPartialObject?: (partial: TPartial) => void;
+    onReasoningText?: (event: ReasoningTextEvent) => void;
+  }
+) {
+  let latestPartial: unknown = null;
+  let accumulatedReasoningText = "";
+
+  for await (const chunk of toAsyncIterable(fullStream)) {
+    const reasoningDelta = reasoningDeltaFromStreamChunk(chunk);
+    if (reasoningDelta) {
+      accumulatedReasoningText += reasoningDelta;
+      options.onReasoningText?.({
+        delta: reasoningDelta,
+        accumulatedText: accumulatedReasoningText
+      });
+    }
+
+    const partial = structuredObjectFromStreamChunk(chunk);
+    if (partial !== undefined) {
+      latestPartial = partial;
+      options.onPartialObject?.(partial as TPartial);
+    }
+  }
+
+  return latestPartial;
+}
+
+function reasoningDeltaFromStreamChunk(chunk: unknown) {
+  if (!isRecord(chunk)) return "";
+
+  if (chunk.type === "reasoning-delta") {
+    if (isRecord(chunk.payload) && typeof chunk.payload.text === "string") return chunk.payload.text;
+    if (typeof chunk.delta === "string") return chunk.delta;
+    if (typeof chunk.text === "string") return chunk.text;
+  }
+
+  if (
+    chunk.type === "content_block_delta" &&
+    isRecord(chunk.delta) &&
+    chunk.delta.type === "thinking_delta" &&
+    typeof chunk.delta.thinking === "string"
+  ) {
+    return chunk.delta.thinking;
+  }
+
+  return "";
+}
+
+function structuredObjectFromStreamChunk(chunk: unknown) {
+  if (!isRecord(chunk)) return undefined;
+  if (chunk.type !== "object" && chunk.type !== "object-result" && chunk.type !== "network-object-result") {
+    return undefined;
+  }
+
+  if ("object" in chunk) return chunk.object;
+  if (isRecord(chunk.payload) && "object" in chunk.payload) return chunk.payload.object;
+  return undefined;
 }
 
 function logMastraPrompt(

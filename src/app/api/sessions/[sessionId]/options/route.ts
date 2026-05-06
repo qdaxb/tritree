@@ -66,6 +66,9 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         const output = await streamDirectorOptions(summarizeCurrentDraftOptionsForDirector(focusedState, body.optionMode), {
           memory: { resource: state.rootMemory.id, thread: sessionId },
           signal: request.signal,
+          onReasoningText(event) {
+            send({ type: "thinking", nodeId: body.nodeId, text: event.accumulatedText });
+          },
           onText(event) {
             if (event.partialOptions) {
               send({ type: "options", nodeId: body.nodeId, options: event.partialOptions });

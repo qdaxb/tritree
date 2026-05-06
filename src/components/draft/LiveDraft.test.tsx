@@ -693,6 +693,80 @@ describe("LiveDraft", () => {
     expect(status.querySelector(".draft-streaming-status__bar")).not.toBeNull();
   });
 
+  it("keeps draft thinking text inside the draft streaming status block", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "新标题", body: "旧正文新增句", hashtags: ["#新"], imagePrompt: "新图" }}
+        generationPhase="thinking"
+        generationStage="draft"
+        isBusy
+        isLiveDiff
+        isLiveDiffStreaming
+        previousDraft={{ title: "旧标题", body: "旧正文", hashtags: ["#旧"], imagePrompt: "旧图" }}
+        publishPackage={null}
+        thinkingText="先判断这一版要补什么。"
+      />
+    );
+
+    const status = screen.getByRole("status", { name: "草稿生成状态" });
+    expect(within(status).getByText("AI 正在思考下一版草稿...")).toBeInTheDocument();
+    expect(within(status).getByText("先判断这一版要补什么。")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "AI 思考过程" })).not.toBeInTheDocument();
+  });
+
+  it("uses option-specific copy and thinking text in the same streaming status block", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "当前标题", body: "当前正文", hashtags: ["#当前"], imagePrompt: "当前图" }}
+        generationPhase="thinking"
+        generationStage="options"
+        isBusy
+        publishPackage={null}
+        thinkingText="先看当前草稿，再拆三个方向。"
+      />
+    );
+
+    const status = screen.getByRole("status", { name: "草稿生成状态" });
+    expect(within(status).getByText("AI 正在思考下一步选项...")).toBeInTheDocument();
+    expect(within(status).getByText("先看当前草稿，再拆三个方向。")).toBeInTheDocument();
+  });
+
+  it("uses option streaming copy after option text has started", () => {
+    render(
+      <LiveDraft
+        draft={{ title: "当前标题", body: "当前正文", hashtags: ["#当前"], imagePrompt: "当前图" }}
+        generationPhase="streaming"
+        generationStage="options"
+        isBusy
+        publishPackage={null}
+      />
+    );
+
+    expect(screen.getByText("AI 正在生成下一步选项...")).toBeInTheDocument();
+  });
+
+  it("keeps the latest thinking text visible as thinking grows", async () => {
+    const baseProps = {
+      draft: { title: "当前标题", body: "当前正文", hashtags: ["#当前"], imagePrompt: "当前图" },
+      generationPhase: "thinking" as const,
+      generationStage: "options" as const,
+      isBusy: true,
+      publishPackage: null
+    };
+    const { rerender } = render(<LiveDraft {...baseProps} thinkingText="第一段判断。" />);
+    const thinkingText = screen.getByText("第一段判断。");
+    const pre = thinkingText.closest("pre") as HTMLPreElement;
+    Object.defineProperty(pre, "scrollHeight", { configurable: true, value: 480 });
+    pre.scrollTop = 0;
+
+    rerender(<LiveDraft {...baseProps} thinkingText={"第一段判断。\n第二段最新内容。"} />);
+
+    await waitFor(() => {
+      expect(pre).toHaveTextContent("第二段最新内容。");
+      expect(pre.scrollTop).toBe(480);
+    });
+  });
+
   it("keeps ungenerated parent body text in the read-only merge editor during streaming", () => {
     render(
       <LiveDraft

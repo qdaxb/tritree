@@ -8,6 +8,7 @@ type DirectorDraftStreamOptions = {
   env?: Record<string, string | undefined>;
   memory?: MemoryScope;
   onText?: (event: { delta: string; accumulatedText: string; partialDraft: Draft | null }) => void;
+  onReasoningText?: (event: { delta: string; accumulatedText: string }) => void;
   signal?: AbortSignal;
 };
 
@@ -15,6 +16,7 @@ type DirectorOptionsStreamOptions = {
   env?: Record<string, string | undefined>;
   memory?: MemoryScope;
   onText?: (event: { delta: string; accumulatedText: string; partialOptions: BranchOption[] | null }) => void;
+  onReasoningText?: (event: { delta: string; accumulatedText: string }) => void;
   signal?: AbortSignal;
 };
 
@@ -39,7 +41,8 @@ export async function streamDirectorDraft(
     env: options.env,
     memory: options.memory,
     signal: options.signal,
-    onPartialObject: emit
+    onPartialObject: emit,
+    onReasoningText: options.onReasoningText
   });
   emit(output);
   return output;
@@ -66,7 +69,8 @@ export async function streamDirectorOptions(
     env: options.env,
     memory: options.memory,
     signal: options.signal,
-    onPartialObject: emit
+    onPartialObject: emit,
+    onReasoningText: options.onReasoningText
   });
   emit(output);
   return output;

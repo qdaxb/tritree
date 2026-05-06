@@ -53,6 +53,7 @@ type DraftStreamField = "title" | "body" | "hashtags" | "imagePrompt";
 type LiveDraftStreamingField = "body" | "imagePrompt";
 type StreamingDraftEntry = { nodeId: string; draft: Draft; previousDraft?: Draft | null; streamingField: DraftStreamField | null };
 type StreamingOptionsEntry = { nodeId: string; options: BranchOption[] };
+type StreamingThinkingEntry = { nodeId: string | null; stage: NodeGenerationStage["stage"]; text: string };
 type DraftSelectionRewriteRequest = {
   draft: Draft;
   field: "body";
@@ -63,12 +64,14 @@ type DraftSelectionRewriteRequest = {
 };
 type DraftStreamEvent =
   | { type: "draft"; draft: Draft; streamingField?: DraftStreamField | null }
+  | { type: "thinking"; nodeId?: string | null; text: string }
   | { type: "done"; state: SessionState }
   | { type: "error"; error: string }
   | { type: "text"; text: string };
 type OptionsStreamEvent =
   | { type: "state"; state: SessionState }
   | { type: "options"; nodeId: string; options: BranchOption[] }
+  | { type: "thinking"; nodeId?: string | null; text: string }
   | { type: "done"; state: SessionState }
   | { type: "error"; error: string };
 
@@ -161,6 +164,8 @@ function isDraftStreamEvent(value: unknown): value is DraftStreamEvent {
   switch (value.type) {
     case "draft":
       return isDraft(value.draft) && (value.streamingField == null || isDraftStreamField(value.streamingField));
+    case "thinking":
+      return typeof value.text === "string" && (value.nodeId == null || typeof value.nodeId === "string");
     case "done":
       return SessionStateSchema.safeParse(value.state).success;
     case "error":
@@ -185,6 +190,8 @@ function isOptionsStreamEvent(value: unknown): value is OptionsStreamEvent {
         Array.isArray(value.options) &&
         value.options.every((option) => isBranchOption(option))
       );
+    case "thinking":
+      return typeof value.text === "string" && (value.nodeId == null || typeof value.nodeId === "string");
     case "error":
       return typeof value.error === "string";
     default:
@@ -373,6 +380,7 @@ export function TreeableApp() {
   const [rootSetupDefaults, setRootSetupDefaults] = useState<RootSetupDefaults | null>(null);
   const [streamingDraft, setStreamingDraft] = useState<StreamingDraftEntry | null>(null);
   const [streamingOptions, setStreamingOptions] = useState<StreamingOptionsEntry | null>(null);
+  const [streamingThinking, setStreamingThinking] = useState<StreamingThinkingEntry | null>(null);
   const [generatedDiffNodeId, setGeneratedDiffNodeId] = useState<string | null>(null);
   const [activeMobilePanel, setActiveMobilePanel] = useState<MobilePanel>("tree");
   const [mobileUnreadPanels, setMobileUnreadPanels] = useState<MobilePanelUnreadState>(EMPTY_MOBILE_UNREAD);
@@ -552,6 +560,7 @@ export function TreeableApp() {
 
     setSessionState(state);
     setStreamingOptions(null);
+    setStreamingThinking(null);
     setGeneratedDiffNodeId(null);
     setIsSkillPanelOpen(false);
     setIsSkillLibraryOpen(false);
@@ -702,6 +711,7 @@ export function TreeableApp() {
       setGenerationStage(null);
       setStreamingDraft(null);
       setStreamingOptions(null);
+      setStreamingThinking(null);
       setIsBusy(false);
     }
   }
@@ -752,6 +762,7 @@ export function TreeableApp() {
       setGenerationStage(null);
       setStreamingDraft(null);
       setStreamingOptions(null);
+      setStreamingThinking(null);
       setIsBusy(false);
     }
   }
@@ -765,6 +776,7 @@ export function TreeableApp() {
     if (!nodeId || draftForNode(state, nodeId)) return state;
 
     setGenerationStage({ nodeId, stage: "draft" });
+    setStreamingThinking(null);
     markMobilePanelUnread("draft");
     const requestOptions = {
       method: "POST",
@@ -793,6 +805,7 @@ export function TreeableApp() {
 
     let doneState: SessionState | null = null;
     let receivedDraft = false;
+    let receivedThinking = false;
     let receivedDone = false;
     let streamError: string | null = null;
     const decoder = new TextDecoder();
@@ -813,10 +826,18 @@ export function TreeableApp() {
         return;
       }
 
+      if (value.type === "thinking") {
+        setStreamingThinking({ nodeId: value.nodeId ?? nodeId, stage: "draft", text: value.text });
+        markMobilePanelUnread("draft");
+        receivedThinking = true;
+        return;
+      }
+
       if (value.type === "done") {
         doneState = value.state;
         markMobilePanelUnread("draft");
         receivedDone = true;
+        setStreamingThinking(null);
         return;
       }
 
@@ -825,8 +846,9 @@ export function TreeableApp() {
       }
     });
     const maybeAllowDraftRender = async () => {
-      const shouldAllowDraftRender = receivedDraft && !receivedDone;
+      const shouldAllowDraftRender = (receivedDraft || receivedThinking) && !receivedDone;
       receivedDraft = false;
+      receivedThinking = false;
       receivedDone = false;
       if (shouldAllowDraftRender) await allowDraftRender();
     };
@@ -858,6 +880,7 @@ export function TreeableApp() {
 
     setGenerationStage({ nodeId, stage: "options" });
     setStreamingOptions({ nodeId, options: [] });
+    setStreamingThinking(null);
     markMobilePanelUnread("tree");
     const response = await fetch(`/api/sessions/${state.session.id}/options`, {
       method: "POST",
@@ -885,6 +908,7 @@ export function TreeableApp() {
     let doneState: SessionState | null = null;
     let streamError: string | null = null;
     let receivedOptions = false;
+    let receivedThinking = false;
     let receivedDone = false;
     const decoder = new TextDecoder();
     const reader = response.body.getReader();
@@ -917,12 +941,24 @@ export function TreeableApp() {
         return;
       }
 
+      if (value.type === "thinking") {
+        setStreamingThinking({
+          nodeId: value.nodeId ?? fallbackNodeId ?? null,
+          stage: "options",
+          text: value.text
+        });
+        markMobilePanelUnread("tree");
+        receivedThinking = true;
+        return;
+      }
+
       if (value.type === "done") {
         doneState = value.state;
         receivedDone = true;
         markMobilePanelUnread("tree");
         setGenerationStage(null);
         setStreamingOptions(null);
+        setStreamingThinking(null);
         return;
       }
 
@@ -931,8 +967,9 @@ export function TreeableApp() {
       }
     });
     const maybeAllowOptionsRender = async () => {
-      const shouldAllowOptionsRender = receivedOptions && !receivedDone;
+      const shouldAllowOptionsRender = (receivedOptions || receivedThinking) && !receivedDone;
       receivedOptions = false;
+      receivedThinking = false;
       receivedDone = false;
       if (shouldAllowOptionsRender) await allowDraftRender();
     };
@@ -974,6 +1011,7 @@ export function TreeableApp() {
       setSessionState(optionsState);
       setViewNodeId(optionsState.currentNode?.id ?? null);
       setStreamingOptions(null);
+      setStreamingThinking(null);
       nextState = optionsState;
     }
 
@@ -1002,6 +1040,7 @@ export function TreeableApp() {
       setGenerationStage(null);
       setStreamingDraft(null);
       setStreamingOptions(null);
+      setStreamingThinking(null);
       setIsBusy(false);
     }
   }
@@ -1028,6 +1067,7 @@ export function TreeableApp() {
       setGenerationStage(null);
       setStreamingDraft(null);
       setStreamingOptions(null);
+      setStreamingThinking(null);
       setIsBusy(false);
     }
   }
@@ -1069,6 +1109,7 @@ export function TreeableApp() {
     setGenerationStage(null);
     setStreamingDraft(null);
     setStreamingOptions(null);
+    setStreamingThinking(null);
     setGeneratedDiffNodeId(null);
     setViewNodeId(null);
     setIsSkillPanelOpen(false);
@@ -1135,6 +1176,7 @@ export function TreeableApp() {
       setGenerationStage(null);
       setStreamingDraft(null);
       setStreamingOptions(null);
+      setStreamingThinking(null);
       setIsBusy(false);
     }
   }
@@ -1226,6 +1268,23 @@ export function TreeableApp() {
   );
   const streamedActiveViewNode = activeViewNode ? withStreamingOptions(activeViewNode, streamingOptions) : null;
   const currentNodeForCanvas = streamedActiveViewNode ? withCustomOption(streamedActiveViewNode, customOption) : null;
+  const activeThinking =
+    streamingThinking && (!streamingThinking.nodeId || streamingThinking.nodeId === activeViewNodeId) ? streamingThinking : null;
+  const liveDraftGenerationStage =
+    generationStage && (!generationStage.nodeId || generationStage.nodeId === activeViewNodeId) ? generationStage.stage : null;
+  const hasLiveGenerationOutput =
+    liveDraftGenerationStage === "draft"
+      ? Boolean(activeStreamingDraft)
+      : liveDraftGenerationStage === "options"
+        ? Boolean(streamingOptions?.nodeId === activeViewNodeId && streamingOptions.options.length > 0)
+        : false;
+  const liveDraftGenerationPhase = liveDraftGenerationStage
+    ? hasLiveGenerationOutput
+      ? "streaming"
+      : activeThinking?.stage === liveDraftGenerationStage
+        ? "thinking"
+        : "preparing"
+    : undefined;
   const enabledSkillIds = sessionState?.enabledSkillIds ?? [];
   const enabledSkills: Skill[] = (sessionState?.enabledSkills ?? []).map((skill) => ({
     ...skill,
@@ -1293,6 +1352,7 @@ export function TreeableApp() {
     setGeneratedDiffNodeId(null);
     setStreamingDraft(null);
     setStreamingOptions(null);
+    setStreamingThinking(null);
     setIsBusy(true);
     setMessage("");
     try {
@@ -1306,6 +1366,7 @@ export function TreeableApp() {
       setGenerationStage(null);
       setStreamingDraft(null);
       setStreamingOptions(null);
+      setStreamingThinking(null);
       setIsBusy(false);
     }
   }
@@ -1463,6 +1524,8 @@ export function TreeableApp() {
               </aside>
             ) : null
           }
+          generationPhase={liveDraftGenerationPhase}
+          generationStage={liveDraftGenerationStage}
           isBusy={isBusy}
           isComparisonMode={Boolean(draftComparison)}
           isEditable={Boolean(activeViewNodeId)}
@@ -1477,6 +1540,7 @@ export function TreeableApp() {
           onStartComparison={startDraftComparison}
           previousDraft={previousDraft}
           publishPackage={null}
+          thinkingText={activeThinking?.text}
         />
       </div>
       {message ? (
