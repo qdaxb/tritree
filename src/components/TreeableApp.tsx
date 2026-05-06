@@ -397,6 +397,12 @@ export function TreeableApp() {
   }, []);
 
   useEffect(() => {
+    if (!isBusy && !generationStage) {
+      mobileGenerationPanelOverrideRef.current = false;
+    }
+  }, [generationStage, isBusy]);
+
+  useEffect(() => {
     if (sessionState?.currentNode?.id) {
       setViewNodeId(sessionState.currentNode.id);
       setCustomOption(null);
