@@ -16,7 +16,8 @@ export class AuthApiError extends Error {
   }
 }
 
-export function authErrorResponse(error: AuthApiError) {
+export function authErrorResponse(error: unknown) {
+  if (!(error instanceof AuthApiError)) return null;
   return NextResponse.json({ error: error.message }, { status: error.status });
 }
 

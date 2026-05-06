@@ -44,6 +44,16 @@ describe("auth config", () => {
     await expect(authorizeCredentials(undefined, repository)).resolves.toBeNull();
   });
 
+  it("returns null without calling the repository for schema-invalid credentials", async () => {
+    const repository = createRepository();
+
+    await expect(authorizeCredentials({ username: "   ", password: "password-123" }, repository)).resolves.toBeNull();
+    await expect(authorizeCredentials({ username: "awei" }, repository)).resolves.toBeNull();
+    await expect(authorizeCredentials({ username: "a".repeat(81), password: "password-123" }, repository)).resolves.toBeNull();
+
+    expect(repository.verifyPasswordLogin).not.toHaveBeenCalled();
+  });
+
   it("returns a local auth user for a bound OIDC identity", async () => {
     const repository = createRepository();
     repository.findUserByOidcIdentity.mockReturnValue(localUser);

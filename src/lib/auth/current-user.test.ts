@@ -78,7 +78,14 @@ describe("current user helpers", () => {
   it("returns JSON for auth API errors", async () => {
     const response = authErrorResponse(new AuthApiError(403, "没有权限。"));
 
+    expect(response).not.toBeNull();
+    if (!response) throw new Error("Expected an auth error response.");
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: "没有权限。" });
+  });
+
+  it("returns null for non-auth errors", () => {
+    expect(authErrorResponse(new Error("database failed"))).toBeNull();
+    expect(authErrorResponse("plain failure")).toBeNull();
   });
 });

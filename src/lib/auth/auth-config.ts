@@ -3,7 +3,7 @@ import type { JWT } from "next-auth/jwt";
 import CredentialsProvider from "next-auth/providers/credentials";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 
-import type { User, UserRole } from "@/lib/auth/types";
+import { CredentialsLoginSchema, type User, type UserRole } from "@/lib/auth/types";
 import { getRepository } from "@/lib/db/repository";
 
 import { getOidcConfig } from "./env";
@@ -45,19 +45,11 @@ function toAuthUser(user: User): AuthUser {
   };
 }
 
-function readCredential(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
+export async function authorizeCredentials(credentials: unknown, repository: Pick<Repository, "verifyPasswordLogin">) {
+  const parsed = CredentialsLoginSchema.safeParse(credentials);
+  if (!parsed.success) return null;
 
-export async function authorizeCredentials(
-  credentials: Partial<Record<"username" | "password", unknown>> | undefined,
-  repository: Repository
-) {
-  const username = readCredential(credentials?.username);
-  const password = readCredential(credentials?.password);
-  if (!username || !password) return null;
-
-  const user = await repository.verifyPasswordLogin(username, password);
+  const user = await repository.verifyPasswordLogin(parsed.data.username, parsed.data.password);
   return user ? toAuthUser(user) : null;
 }
 
