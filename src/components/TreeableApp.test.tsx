@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ReactNode } from "react";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -435,6 +437,20 @@ describe("TreeableApp", () => {
     expect(await screen.findByTestId("tree-canvas")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "移动端主面板" })).not.toBeInTheDocument();
     expect(screen.getByTestId("live-draft")).toBeInTheDocument();
+  });
+
+  it("defines mobile-only panel visibility rules", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const defaultPanelRule = css.match(/\.mobile-panel\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const mediaRule = css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)
+      ?.groups?.body ?? "";
+
+    expect(defaultPanelRule).toContain("display: contents");
+    expect(mediaRule).toContain(".mobile-panel-switcher");
+    expect(mediaRule).toContain("display: none");
+    expect(mediaRule).toContain(".mobile-panel--active");
+    expect(mediaRule).toContain("display: grid");
+    expect(mediaRule).toContain("grid-template-rows: auto auto minmax(0, 1fr)");
   });
 
   it("trims persisted root summary before flattening it in the topbar", async () => {
