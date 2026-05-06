@@ -5,6 +5,8 @@ import { getRepository } from "@/lib/db/repository";
 
 import { AuthApiError, authErrorResponse, getCurrentUser, requireAdminUser, requireCurrentUser } from "./current-user";
 
+vi.mock("server-only", () => ({}));
+
 vi.mock("@/auth", () => ({
   auth: vi.fn()
 }));

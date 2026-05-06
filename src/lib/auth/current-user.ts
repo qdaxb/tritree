@@ -1,4 +1,4 @@
-import "next/dist/compiled/server-only/empty";
+import "server-only";
 
 import { NextResponse } from "next/server";
 
