@@ -194,6 +194,36 @@ function displayBranchLabel(label: string) {
   );
 }
 
+function treeGraphOptionSignature(option: BranchOption) {
+  return [option.id, compactBranchLabel(option.label), option.kind, option.mode ?? ""].join(":");
+}
+
+function treeGraphNodeSignature(node: TreeNode | null) {
+  if (!node) return "none";
+
+  return JSON.stringify({
+    foldedOptions: node.foldedOptions.map(treeGraphOptionSignature),
+    id: node.id,
+    parentId: node.parentId,
+    parentOptionId: node.parentOptionId,
+    options: node.options.map(treeGraphOptionSignature),
+    roundIndex: node.roundIndex,
+    roundIntent: compactBranchLabel(node.roundIntent),
+    selectedOptionId: node.selectedOptionId
+  });
+}
+
+function useStableTreeGraphNode(node: TreeNode | null) {
+  const stableNodeRef = useRef<{ node: TreeNode | null; signature: string } | null>(null);
+  const signature = treeGraphNodeSignature(node);
+
+  if (!stableNodeRef.current || stableNodeRef.current.signature !== signature) {
+    stableNodeRef.current = { node, signature };
+  }
+
+  return stableNodeRef.current.node;
+}
+
 function canRepresentDraft(node: ForceTreeNode) {
   return node.kind === "history";
 }
@@ -212,6 +242,23 @@ function nodeBadgeOrder(datum: ForceTreeNode) {
 function nodeBadgeDy(datum: ForceTreeNode, badge: NodeBadgeKind) {
   const slotIndex = nodeBadgeOrder(datum).indexOf(badge);
   return -18 - Math.max(slotIndex, 0) * 14;
+}
+
+function linkKey(link: ForceTreeLink) {
+  return `${link.source}->${link.target}`;
+}
+
+function shouldShowSpinner(
+  datum: ForceTreeNode,
+  pendingChoice: BranchOption["id"] | null,
+  pendingBranch: PendingBranch | null
+) {
+  return (
+    datum.kind === "loading" ||
+    Boolean(datum.generationStage) ||
+    isPendingOption(datum, pendingChoice) ||
+    isPendingBranchDatum(datum, pendingBranch)
+  );
 }
 
 function markDraftFocusedNodes(nodes: ForceTreeNode[], focusedNodeId: string | null) {
@@ -580,12 +627,13 @@ export function TreeCanvas({
   const isRevealing = Boolean(
     graphCurrentNode && !currentNodeHasChildren && effectiveVisibleOptionCount < currentPrimaryOptionCount
   );
+  const stableGraphCurrentNode = useStableTreeGraphNode(graphCurrentNode);
   const graph = useMemo(
     () =>
       createForceTreeGraph({
         changedDraftNodeIds,
         comparisonNodeIds,
-        currentNode: graphCurrentNode,
+        currentNode: stableGraphCurrentNode,
         focusedNodeId,
         generationStage,
         isGeneratingInitial: isBusy && !currentNode && !pendingBranch,
@@ -600,11 +648,10 @@ export function TreeCanvas({
       branchLayout,
       changedDraftNodeIds,
       comparisonNodeIds,
-      currentNode,
       effectiveVisibleOptionCount,
       focusedNodeId,
       generationStage,
-      graphCurrentNode,
+      stableGraphCurrentNode,
       isBusy,
       currentNodeHasChildren,
       pendingBranch,
@@ -801,27 +848,38 @@ export function TreeCanvas({
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     const color = d3.scaleOrdinal<string, string>(d3.schemeCategory10);
     const svg = d3.select(svgElement);
-    svg.selectAll("*").remove();
+    svg.selectAll("g.tree-stage:not(.tree-stage-layer)").remove();
 
     const stage = svg
-      .append("g")
+      .selectAll<SVGGElement, null>("g.tree-stage-layer")
+      .data([null])
+      .join("g")
       .attr(
         "class",
         clsx(
+          "tree-stage-layer",
           "tree-stage",
           (pendingChoice || isRevealing) && "tree-stage--focused",
           isComparisonMode && "tree-stage--comparison"
         )
       );
 
-    stage
-      .append("g")
+    const linkLayer = stage
+      .selectAll<SVGGElement, null>("g.force-links")
+      .data([null])
+      .join("g")
       .attr("class", "force-links")
       .attr("stroke", "#9a9a9a")
-      .attr("stroke-opacity", 0.55)
+      .attr("stroke-opacity", 0.55);
+
+    linkLayer
       .selectAll<SVGPathElement, ForceTreeLink>("path")
-      .data(links)
-      .join("path")
+      .data(links, (datum) => linkKey(datum as ForceTreeLink))
+      .join(
+        (enter) => enter.append("path").attr("fill", "none"),
+        (update) => update,
+        (exit) => exit.remove()
+      )
       .attr("class", (datum) =>
         linkClassName(datum, nodeById, pendingChoice as BranchOption["id"] | null, pendingBranch ?? null)
       )
@@ -830,12 +888,26 @@ export function TreeCanvas({
       .attr("stroke", (datum) => linkStroke(datum, nodeById, color))
       .attr("stroke-width", (datum) => Math.sqrt(datum.value) * 1.35);
 
-    const node = stage
-      .append("g")
+    const nodeLayer = stage
+      .selectAll<SVGGElement, null>("g.force-nodes")
+      .data([null])
+      .join("g")
+      .attr("class", "force-nodes");
+
+    const node = nodeLayer
       .attr("class", "force-nodes")
       .selectAll<SVGGElement, ForceTreeNode>("g")
-      .data(nodes)
-      .join("g")
+      .data(nodes, (datum) => (datum as ForceTreeNode).id)
+      .join(
+        (enter) => {
+          const group = enter.append("g");
+          group.append("circle").attr("class", "tree-node__core");
+          group.append("title");
+          return group;
+        },
+        (update) => update,
+        (exit) => exit.remove()
+      )
       .attr("class", (datum) =>
         nodeClassName(datum, pendingChoice as BranchOption["id"] | null, pendingBranch ?? null)
       )
@@ -864,8 +936,7 @@ export function TreeCanvas({
       });
 
     node
-      .append("circle")
-      .attr("class", "tree-node__core")
+      .select<SVGCircleElement>(".tree-node__core")
       .attr("r", (datum) => datum.radius + (datum.isDraftFocused ? 1.5 : datum.isDraftChanged ? 0.8 : 0))
       .attr("fill", (datum) => nodeFill(datum, color))
       .attr("stroke", (datum) => {
@@ -883,63 +954,87 @@ export function TreeCanvas({
       );
 
     node
-      .filter((datum) => datum.isDraftFocused === true)
-      .insert("circle", ".tree-node__core")
-      .attr("class", "tree-node__draft-halo")
+      .selectAll<SVGCircleElement, ForceTreeNode>("circle.tree-node__draft-halo")
+      .data((datum) => (datum.isDraftFocused === true ? [datum] : []))
+      .join(
+        (enter) => enter.insert("circle", ".tree-node__core").attr("class", "tree-node__draft-halo"),
+        (update) => update,
+        (exit) => exit.remove()
+      )
       .attr("r", (datum) => datum.radius + 11)
       .attr("fill", "none");
 
     node
-      .filter(
-        (datum) =>
-          datum.kind === "loading" ||
-          Boolean(datum.generationStage) ||
-          isPendingOption(datum, pendingChoice as BranchOption["id"] | null) ||
-          isPendingBranchDatum(datum, pendingBranch ?? null)
+      .selectAll<SVGCircleElement, ForceTreeNode>("circle.tree-node__spinner")
+      .data((datum) =>
+        shouldShowSpinner(datum, pendingChoice as BranchOption["id"] | null, pendingBranch ?? null) ? [datum] : []
       )
-      .append("circle")
-      .attr("class", "tree-node__spinner")
+      .join(
+        (enter) => enter.append("circle").attr("class", "tree-node__spinner"),
+        (update) => update,
+        (exit) => exit.remove()
+      )
       .attr("r", 13)
       .attr("fill", "none");
 
-    node.append("title").text((datum) => datum.label);
+    node.select("title").text((datum) => datum.label);
 
     node
-      .filter((datum) => datum.kind !== "loading")
-      .append("text")
-      .attr("class", "force-labels")
+      .selectAll<SVGTextElement, ForceTreeNode>("text.force-labels")
+      .data((datum) => (datum.kind !== "loading" ? [datum] : []))
+      .join(
+        (enter) => enter.append("text").attr("class", "force-labels"),
+        (update) => update,
+        (exit) => exit.remove()
+      )
       .attr("dy", 24)
       .attr("text-anchor", "middle")
       .text((datum) => datum.label);
 
     node
-      .filter((datum) => datum.isDraftFocused === true)
-      .append("text")
-      .attr("class", "tree-node__draft-badge")
+      .selectAll<SVGTextElement, ForceTreeNode>("text.tree-node__draft-badge")
+      .data((datum) => (datum.isDraftFocused === true ? [datum] : []))
+      .join(
+        (enter) => enter.append("text").attr("class", "tree-node__draft-badge"),
+        (update) => update,
+        (exit) => exit.remove()
+      )
       .attr("dy", (datum) => nodeBadgeDy(datum, "draft"))
       .attr("text-anchor", "middle")
       .text("草稿");
 
     node
-      .filter((datum) => Boolean(datum.generationStage))
-      .append("text")
-      .attr("class", "tree-node__generation-badge")
+      .selectAll<SVGTextElement, ForceTreeNode>("text.tree-node__generation-badge")
+      .data((datum) => (datum.generationStage ? [datum] : []))
+      .join(
+        (enter) => enter.append("text").attr("class", "tree-node__generation-badge"),
+        (update) => update,
+        (exit) => exit.remove()
+      )
       .attr("dy", (datum) => nodeBadgeDy(datum, "generation"))
       .attr("text-anchor", "middle")
       .text((datum) => (datum.generationStage === "draft" ? "生成草稿" : "生成选项"));
 
     node
-      .filter((datum) => Boolean(datum.comparisonRole))
-      .append("text")
-      .attr("class", "tree-node__compare-badge")
+      .selectAll<SVGTextElement, ForceTreeNode>("text.tree-node__compare-badge")
+      .data((datum) => (datum.comparisonRole ? [datum] : []))
+      .join(
+        (enter) => enter.append("text").attr("class", "tree-node__compare-badge"),
+        (update) => update,
+        (exit) => exit.remove()
+      )
       .attr("dy", (datum) => nodeBadgeDy(datum, "compare"))
       .attr("text-anchor", "middle")
       .text((datum) => (datum.comparisonRole === "from" ? "起点" : "终点"));
 
     node
-      .filter((datum) => datum.isDraftChanged === true)
-      .append("text")
-      .attr("class", "tree-node__changed-badge")
+      .selectAll<SVGTextElement, ForceTreeNode>("text.tree-node__changed-badge")
+      .data((datum) => (datum.isDraftChanged === true ? [datum] : []))
+      .join(
+        (enter) => enter.append("text").attr("class", "tree-node__changed-badge"),
+        (update) => update,
+        (exit) => exit.remove()
+      )
       .attr("dy", (datum) => nodeBadgeDy(datum, "changed"))
       .attr("text-anchor", "middle")
       .text("已编辑");

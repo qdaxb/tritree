@@ -362,4 +362,196 @@ describe("tree director compatibility generators", () => {
       }
     ]);
   });
+
+  it("recovers DeepSeek Anthropic tool-input wrapped structured options from Mastra validation errors", async () => {
+    const finalObject = {
+      roundIntent: "选择下一步",
+      options: [
+        { id: "a", label: "补具体场景", description: "加入真实场景。", impact: "让文章更具体。", kind: "explore" },
+        { id: "b", label: "压缩表达", description: "删掉重复句子。", impact: "让文章更利落。", kind: "deepen" },
+        { id: "c", label: "检查发布", description: "整理标题和话题。", impact: "让文章接近发布。", kind: "finish" }
+      ],
+      memoryObservation: "用户喜欢具体表达。"
+    };
+    const validationError = Object.assign(new Error("Structured output validation failed"), {
+      id: "STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED",
+      details: { value: JSON.stringify({ input: finalObject }) }
+    });
+    const fakeAgent = {
+      stream: vi.fn(async () => ({
+        object: Promise.reject(validationError)
+      })),
+      generate: vi.fn()
+    };
+
+    await expect(
+      streamTreeOptions({
+        parts: directorParts,
+        treeOptionsAgent: fakeAgent
+      })
+    ).resolves.toEqual(finalObject);
+  });
+
+  it("falls back to the latest complete streamed option object when Mastra reports an undefined final object", async () => {
+    const finalObject = {
+      roundIntent: "选择下一步",
+      options: [
+        { id: "a", label: "补具体场景", description: "加入真实场景。", impact: "让文章更具体。", kind: "explore" },
+        { id: "b", label: "压缩表达", description: "删掉重复句子。", impact: "让文章更利落。", kind: "deepen" },
+        { id: "c", label: "检查发布", description: "整理标题和话题。", impact: "让文章接近发布。", kind: "finish" }
+      ],
+      memoryObservation: "用户喜欢具体表达。"
+    };
+    const validationError = Object.assign(new Error("Structured output validation failed"), {
+      id: "STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED",
+      details: { value: "undefined" }
+    });
+    const fakeAgent = {
+      stream: vi.fn(async () => ({
+        objectStream: async function* () {
+          yield { roundIntent: "选择下一步", options: [{ id: "a", label: "补具体场景" }] };
+          yield finalObject;
+        },
+        object: Promise.reject(validationError)
+      })),
+      generate: vi.fn()
+    };
+
+    await expect(
+      streamTreeOptions({
+        parts: directorParts,
+        treeOptionsAgent: fakeAgent
+      })
+    ).resolves.toEqual(finalObject);
+  });
+
+  it("falls back to the latest streamed option object when Mastra resolves an undefined final object", async () => {
+    const finalObject = {
+      roundIntent: "选择下一步",
+      options: [
+        { id: "a", label: "补具体场景", description: "加入真实场景。", impact: "让文章更具体。", kind: "explore" },
+        { id: "b", label: "压缩表达", description: "删掉重复句子。", impact: "让文章更利落。", kind: "deepen" },
+        { id: "c", label: "检查发布", description: "整理标题和话题。", impact: "让文章接近发布。", kind: "finish" }
+      ],
+      memoryObservation: "用户喜欢具体表达。"
+    };
+    const fakeAgent = {
+      stream: vi.fn(async () => ({
+        objectStream: async function* () {
+          yield { roundIntent: "选择下一步", options: [{ id: "a", label: "补具体场景" }] };
+          yield finalObject;
+        },
+        object: Promise.resolve(undefined)
+      })),
+      generate: vi.fn()
+    };
+
+    await expect(
+      streamTreeOptions({
+        parts: directorParts,
+        treeOptionsAgent: fakeAgent
+      })
+    ).resolves.toEqual(finalObject);
+  });
+
+  it("uses JSON prompt injection for structured option streams", async () => {
+    const finalObject = {
+      roundIntent: "选择下一步",
+      options: [
+        { id: "a", label: "补具体场景", description: "加入真实场景。", impact: "让文章更具体。", kind: "explore" },
+        { id: "b", label: "压缩表达", description: "删掉重复句子。", impact: "让文章更利落。", kind: "deepen" },
+        { id: "c", label: "检查发布", description: "整理标题和话题。", impact: "让文章接近发布。", kind: "finish" }
+      ],
+      memoryObservation: "用户喜欢具体表达。"
+    };
+    const fakeAgent = {
+      stream: vi.fn(async () => ({ object: Promise.resolve(finalObject) })),
+      generate: vi.fn()
+    };
+
+    await expect(
+      streamTreeOptions({
+        parts: directorParts,
+        treeOptionsAgent: fakeAgent
+      })
+    ).resolves.toEqual(finalObject);
+
+    expect(fakeAgent.stream).toHaveBeenCalledWith(
+      directorParts.messages,
+      expect.objectContaining({
+        structuredOutput: expect.objectContaining({
+          jsonPromptInjection: true,
+          schema: expect.anything()
+        })
+      })
+    );
+    expect(fakeAgent.generate).not.toHaveBeenCalled();
+  });
+
+  it("uses JSON prompt injection for structured draft streams", async () => {
+    const finalObject = {
+      roundIntent: "继续完善",
+      draft: { title: "测试", body: "测试正文", hashtags: [], imagePrompt: "" },
+      memoryObservation: "用户喜欢具体表达。"
+    };
+    const fakeAgent = {
+      stream: vi.fn(async () => ({ object: Promise.resolve(finalObject) })),
+      generate: vi.fn()
+    };
+
+    await expect(
+      streamTreeDraft({
+        parts: directorParts,
+        treeDraftAgent: fakeAgent
+      })
+    ).resolves.toEqual(finalObject);
+
+    expect(fakeAgent.stream).toHaveBeenCalledWith(
+      directorParts.messages,
+      expect.objectContaining({
+        structuredOutput: expect.objectContaining({
+          jsonPromptInjection: true,
+          schema: expect.anything()
+        })
+      })
+    );
+    expect(fakeAgent.generate).not.toHaveBeenCalled();
+  });
+
+  it("uses the same structured stream mode for Anthropic-compatible providers", async () => {
+    const finalObject = {
+      roundIntent: "选择下一步",
+      options: [
+        { id: "a", label: "补具体场景", description: "加入真实场景。", impact: "让文章更具体。", kind: "explore" },
+        { id: "b", label: "压缩表达", description: "删掉重复句子。", impact: "让文章更利落。", kind: "deepen" },
+        { id: "c", label: "检查发布", description: "整理标题和话题。", impact: "让文章接近发布。", kind: "finish" }
+      ],
+      memoryObservation: "用户喜欢具体表达。"
+    };
+    const fakeAgent = {
+      stream: vi.fn(async () => ({ object: Promise.resolve(finalObject) })),
+      generate: vi.fn()
+    };
+
+    await streamTreeOptions({
+      parts: directorParts,
+      env: {
+        ANTHROPIC_AUTH_TOKEN: "compatible-token",
+        ANTHROPIC_BASE_URL: "https://compatible.example/anthropic",
+        ANTHROPIC_MODEL: "compatible-model"
+      },
+      treeOptionsAgent: fakeAgent
+    });
+
+    expect(fakeAgent.stream).toHaveBeenCalledWith(
+      directorParts.messages,
+      expect.objectContaining({
+        structuredOutput: expect.objectContaining({
+          jsonPromptInjection: true,
+          schema: expect.anything()
+        })
+      })
+    );
+    expect(fakeAgent.generate).not.toHaveBeenCalled();
+  });
 });

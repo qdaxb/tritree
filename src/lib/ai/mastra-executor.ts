@@ -41,7 +41,7 @@ type TreeDraftAgentLike = {
     options: {
       abortSignal?: AbortSignal;
       memory: MemoryScope;
-      structuredOutput: { schema: typeof DirectorDraftOutputSchema };
+      structuredOutput: { schema: typeof DirectorDraftOutputSchema; jsonPromptInjection?: boolean };
     }
   ) => Promise<StructuredObjectStreamResult>;
 };
@@ -60,7 +60,7 @@ type TreeOptionsAgentLike = {
     options: {
       abortSignal?: AbortSignal;
       memory: MemoryScope;
-      structuredOutput: { schema: typeof DirectorOptionsOutputSchema };
+      structuredOutput: { schema: typeof DirectorOptionsOutputSchema; jsonPromptInjection?: boolean };
     }
   ) => Promise<StructuredObjectStreamResult>;
 };
@@ -108,13 +108,18 @@ export async function generateTreeDraft({
   const messages = directorMessagesForParts(parts);
   logMastraPrompt("draft", agentContext, messages);
   const agent = treeDraftAgent ?? (createTreeDraftAgent(agentContext, env) as unknown as TreeDraftAgentLike);
-  const result = await agent.generate(messages, {
-    abortSignal: signal,
-    memory: memory ?? memoryScopeForDirectorParts(parts),
-    structuredOutput: { schema: DirectorDraftOutputSchema }
-  });
+  let result: Awaited<ReturnType<TreeDraftAgentLike["generate"]>>;
+  try {
+    result = await agent.generate(messages, {
+      abortSignal: signal,
+      memory: memory ?? memoryScopeForDirectorParts(parts),
+      structuredOutput: { schema: DirectorDraftOutputSchema }
+    });
+  } catch (error) {
+    return DirectorDraftOutputSchema.parse(recoverMastraStructuredOutputValidationValue(error));
+  }
 
-  return DirectorDraftOutputSchema.parse(result.object ?? result.output);
+  return DirectorDraftOutputSchema.parse(unwrapMastraToolInput(result.object ?? result.output));
 }
 
 export async function streamTreeDraft({
@@ -137,7 +142,7 @@ export async function streamTreeDraft({
     ? await agent.stream(messages, {
         abortSignal: signal,
         memory: memory ?? memoryScopeForDirectorParts(parts),
-        structuredOutput: { schema: DirectorDraftOutputSchema }
+        structuredOutput: streamingStructuredOutput(DirectorDraftOutputSchema)
       })
     : null;
 
@@ -173,13 +178,18 @@ export async function generateTreeOptions({
   const messages = directorMessagesForParts(parts);
   logMastraPrompt("options", agentContext, messages);
   const agent = treeOptionsAgent ?? (createTreeOptionsAgent(agentContext, env) as unknown as TreeOptionsAgentLike);
-  const result = await agent.generate(messages, {
-    abortSignal: signal,
-    memory: memory ?? memoryScopeForDirectorParts(parts),
-    structuredOutput: { schema: DirectorOptionsOutputSchema }
-  });
+  let result: Awaited<ReturnType<TreeOptionsAgentLike["generate"]>>;
+  try {
+    result = await agent.generate(messages, {
+      abortSignal: signal,
+      memory: memory ?? memoryScopeForDirectorParts(parts),
+      structuredOutput: { schema: DirectorOptionsOutputSchema }
+    });
+  } catch (error) {
+    return DirectorOptionsOutputSchema.parse(recoverMastraStructuredOutputValidationValue(error));
+  }
 
-  return DirectorOptionsOutputSchema.parse(result.object ?? result.output);
+  return DirectorOptionsOutputSchema.parse(unwrapMastraToolInput(result.object ?? result.output));
 }
 
 export async function streamTreeOptions({
@@ -202,7 +212,7 @@ export async function streamTreeOptions({
     ? await agent.stream(messages, {
         abortSignal: signal,
         memory: memory ?? memoryScopeForDirectorParts(parts),
-        structuredOutput: { schema: DirectorOptionsOutputSchema }
+        structuredOutput: streamingStructuredOutput(DirectorOptionsOutputSchema)
       })
     : null;
 
@@ -260,6 +270,10 @@ function directorMessagesForParts(parts: DirectorInputParts): MastraConversation
   return parts.messages ?? [{ role: "user", content: buildDirectorInput(parts) }];
 }
 
+function streamingStructuredOutput<TSchema>(schema: TSchema) {
+  return { schema, jsonPromptInjection: true };
+}
+
 function logMastraPrompt(
   kind: "draft" | "options",
   context: SharedAgentContextInput,
@@ -281,14 +295,88 @@ function logMastraPrompt(
 
 async function resolveStructuredStreamOutput(stream: StructuredObjectStreamResult, latestPartial: unknown) {
   if (stream.object !== undefined) {
-    return stream.object instanceof Promise ? await stream.object : stream.object;
+    try {
+      const output = stream.object instanceof Promise ? await stream.object : stream.object;
+      return unwrapMastraToolInputOrFallback(output, latestPartial);
+    } catch (error) {
+      return recoverMastraStructuredOutputValidationValue(error, latestPartial);
+    }
   }
 
   if (stream.output !== undefined) {
-    return stream.output instanceof Promise ? await stream.output : stream.output;
+    try {
+      const output = stream.output instanceof Promise ? await stream.output : stream.output;
+      return unwrapMastraToolInputOrFallback(output, latestPartial);
+    } catch (error) {
+      return recoverMastraStructuredOutputValidationValue(error, latestPartial);
+    }
   }
 
-  return latestPartial;
+  return unwrapMastraToolInput(latestPartial);
+}
+
+function recoverMastraStructuredOutputValidationValue(error: unknown, fallback?: unknown) {
+  const value = findMastraStructuredOutputValidationValue(error);
+  if (value === undefined) {
+    throw error;
+  }
+
+  const recovered = unwrapMastraToolInput(parseMaybeJson(value));
+  if (isRecord(recovered)) {
+    return recovered;
+  }
+
+  if (fallback !== undefined && fallback !== null) {
+    return unwrapMastraToolInput(fallback);
+  }
+
+  throw error;
+}
+
+function unwrapMastraToolInputOrFallback(value: unknown, fallback: unknown) {
+  const unwrapped = unwrapMastraToolInput(value);
+  if ((unwrapped === undefined || unwrapped === null) && fallback !== undefined && fallback !== null) {
+    return unwrapMastraToolInput(fallback);
+  }
+
+  return unwrapped;
+}
+
+function findMastraStructuredOutputValidationValue(error: unknown): unknown {
+  if (!isRecord(error)) {
+    return undefined;
+  }
+
+  if (
+    error.id === "STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED" &&
+    isRecord(error.details) &&
+    "value" in error.details
+  ) {
+    return error.details.value;
+  }
+
+  return findMastraStructuredOutputValidationValue((error as { cause?: unknown }).cause);
+}
+
+function unwrapMastraToolInput(value: unknown) {
+  const parsed = parseMaybeJson(value);
+  if (!isRecord(parsed) || Object.keys(parsed).length !== 1 || !("input" in parsed)) {
+    return parsed;
+  }
+
+  return parseMaybeJson(parsed.input);
+}
+
+function parseMaybeJson(value: unknown) {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
 }
 
 async function* toAsyncIterable<T>(source: StreamSource<T>): AsyncIterable<T> {
@@ -318,4 +406,8 @@ async function* toAsyncIterable<T>(source: StreamSource<T>): AsyncIterable<T> {
 
 function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
   return typeof (value as { [Symbol.asyncIterator]?: unknown })?.[Symbol.asyncIterator] === "function";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
