@@ -82,6 +82,7 @@ function createSchema(sqlite: DatabaseSync) {
 
     CREATE TABLE IF NOT EXISTS root_memory (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id),
       preferences_json TEXT NOT NULL,
       summary TEXT NOT NULL,
       learned_summary TEXT NOT NULL,
@@ -91,6 +92,7 @@ function createSchema(sqlite: DatabaseSync) {
 
     CREATE TABLE IF NOT EXISTS skills (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id),
       title TEXT NOT NULL,
       category TEXT NOT NULL,
       description TEXT NOT NULL,
@@ -105,6 +107,7 @@ function createSchema(sqlite: DatabaseSync) {
 
     CREATE TABLE IF NOT EXISTS creation_request_options (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id),
       label TEXT NOT NULL,
       sort_order INTEGER NOT NULL,
       is_archived INTEGER NOT NULL,
@@ -114,6 +117,7 @@ function createSchema(sqlite: DatabaseSync) {
 
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id),
       root_memory_id TEXT NOT NULL REFERENCES root_memory(id),
       title TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('active', 'finished')),
