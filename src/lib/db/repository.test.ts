@@ -219,6 +219,7 @@ describe("Treeable repository", () => {
 
     expect(repo.listUsers().map((user) => user.username)).toEqual(["awei", "writer"]);
     expect(repo.listUsers()[0]).not.toHaveProperty("passwordHash");
+    expect(repo.updateUserDisplayName(member.id, "Updated Writer")).toEqual(expect.objectContaining({ displayName: "Updated Writer" }));
     expect(repo.setUserRole(member.id, "admin")).toEqual(expect.objectContaining({ role: "admin" }));
     expect(repo.setUserRole(admin.id, "member")).toEqual(expect.objectContaining({ role: "member" }));
     expect(() => repo.setUserActive(member.id, false)).toThrow("Cannot deactivate the final active administrator.");
@@ -239,9 +240,31 @@ describe("Treeable repository", () => {
     expect(repo.findUserByOidcIdentity("https://issuer.example.com", "oidc-subject-1")).toEqual(
       expect.objectContaining({ id: admin.id, username: "awei" })
     );
+    expect(repo.listUsersWithOidcIdentities()).toEqual([
+      expect.objectContaining({
+        id: admin.id,
+        oidcIdentities: [expect.objectContaining({ id: identity.id, subject: "oidc-subject-1" })]
+      })
+    ]);
     expect(() =>
       repo.bindOidcIdentity(admin.id, { issuer: "https://issuer.example.com", subject: "oidc-subject-1" })
     ).toThrow("OIDC identity is already bound.");
+  });
+
+  it("deletes OIDC identities only through the owning user", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
+    const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
+    const identity = repo.bindOidcIdentity(admin.id, {
+      issuer: "https://issuer.example.com",
+      subject: "oidc-subject-1"
+    });
+
+    expect(() => repo.deleteOidcIdentityForUser(member.id, identity.id)).toThrow("OIDC identity was not found.");
+
+    repo.deleteOidcIdentityForUser(admin.id, identity.id);
+
+    expect(repo.findUserByOidcIdentity("https://issuer.example.com", "oidc-subject-1")).toBeNull();
   });
 
   it("isolates root memory by user", async () => {

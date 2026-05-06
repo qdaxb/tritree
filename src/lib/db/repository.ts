@@ -14,6 +14,7 @@ import {
   OidcIdentitySchema,
   OidcIdentityUpsertSchema,
   ResetPasswordSchema,
+  UpdateUserSchema,
   UserRoleSchema,
   UserSchema,
   UserWithPasswordHashSchema
@@ -787,6 +788,23 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     return rows.map(toUser);
   }
 
+  function listUsersWithOidcIdentities() {
+    const users = listUsers();
+    const identityRows = db.prepare("SELECT * FROM user_oidc_identities ORDER BY created_at, rowid").all() as OidcIdentityRow[];
+    const identitiesByUserId = new Map<string, OidcIdentity[]>();
+
+    for (const row of identityRows) {
+      const identities = identitiesByUserId.get(row.user_id) ?? [];
+      identities.push(toOidcIdentity(row));
+      identitiesByUserId.set(row.user_id, identities);
+    }
+
+    return users.map((user) => ({
+      ...user,
+      oidcIdentities: identitiesByUserId.get(user.id) ?? []
+    }));
+  }
+
   function getUser(userId: string) {
     const row = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
     return row ? toUser(row) : null;
@@ -824,6 +842,15 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const passwordHash = await hashPassword(parsed.password);
     db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(passwordHash, now(), userId);
 
+    return getUser(userId)!;
+  }
+
+  function updateUserDisplayName(userId: string, displayName: string) {
+    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    if (!existing) throw new Error("User was not found.");
+
+    const parsedDisplayName = UpdateUserSchema.shape.displayName.unwrap().parse(displayName);
+    db.prepare("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?").run(parsedDisplayName, now(), userId);
     return getUser(userId)!;
   }
 
@@ -893,6 +920,13 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
 
   function deleteOidcIdentity(identityId: string) {
     db.prepare("DELETE FROM user_oidc_identities WHERE id = ?").run(identityId);
+  }
+
+  function deleteOidcIdentityForUser(userId: string, identityId: string) {
+    const result = db
+      .prepare("DELETE FROM user_oidc_identities WHERE id = ? AND user_id = ?")
+      .run(identityId, userId) as { changes: number };
+    if (result.changes === 0) throw new Error("OIDC identity was not found.");
   }
 
   function findUserByOidcIdentity(issuer: string, subject: string) {
@@ -1593,14 +1627,17 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     createInitialAdmin,
     createUser,
     listUsers,
+    listUsersWithOidcIdentities,
     getUser,
     getUserWithPasswordHashByUsername,
     verifyPasswordLogin,
     resetUserPassword,
+    updateUserDisplayName,
     setUserActive,
     setUserRole,
     bindOidcIdentity,
     deleteOidcIdentity,
+    deleteOidcIdentityForUser,
     findUserByOidcIdentity,
     hasUsers,
     getRootMemory,

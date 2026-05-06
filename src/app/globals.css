@@ -87,6 +87,254 @@
   width: 100%;
 }
 
+.admin-page {
+  min-height: 100vh;
+  padding: 24px;
+  background: #f7f9fb;
+}
+
+.admin-panel {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+}
+
+.admin-panel__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-panel h1,
+.admin-user-row h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.admin-panel h1 {
+  font-size: 1.45rem;
+  line-height: 1.15;
+}
+
+.admin-panel__header span,
+.admin-user-main p,
+.admin-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.admin-alert {
+  margin: 0;
+  padding: 9px 11px;
+  color: #7c2d12;
+  background: #fff7ed;
+  border: 1px solid rgba(154, 52, 18, 0.22);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.admin-create-form,
+.admin-oidc-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.admin-create-form {
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.admin-create-form label,
+.admin-password-actions label,
+.admin-oidc-form label {
+  display: grid;
+  gap: 5px;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.admin-checkbox {
+  min-height: 38px;
+  display: inline-flex;
+  grid-auto-flow: column;
+  grid-template-columns: auto auto;
+  gap: 8px;
+  align-items: center;
+  justify-content: start;
+}
+
+.admin-checkbox input {
+  width: 16px;
+  height: 16px;
+}
+
+.admin-create-form input,
+.admin-password-actions input,
+.admin-oidc-form input {
+  min-height: 38px;
+  width: 100%;
+  padding: 7px 9px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  outline: none;
+}
+
+.admin-create-form input:focus,
+.admin-password-actions input:focus,
+.admin-oidc-form input:focus {
+  border-color: rgba(37, 99, 235, 0.54);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.admin-user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-user-row {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+}
+
+.admin-user-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.admin-user-row h2 {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.admin-user-meta,
+.admin-actions,
+.admin-password-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-user-meta {
+  justify-content: flex-end;
+}
+
+.admin-user-meta span {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.admin-password-actions {
+  align-items: end;
+}
+
+.admin-password-actions label {
+  width: min(260px, 100%);
+}
+
+.admin-oidc-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-oidc-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.admin-oidc-item div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.admin-oidc-item strong,
+.admin-oidc-item span {
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+
+.admin-oidc-item span {
+  color: var(--muted);
+}
+
+.admin-primary-button,
+.admin-actions button,
+.admin-password-actions button,
+.admin-oidc-item button,
+.admin-oidc-form button {
+  min-height: 38px;
+  padding: 7px 11px;
+  color: #ffffff;
+  background: #0f766e;
+  border: 1px solid #0f766e;
+  border-radius: 8px;
+  font-weight: 850;
+}
+
+.admin-actions button,
+.admin-password-actions button,
+.admin-oidc-item button,
+.admin-oidc-form button {
+  color: #0f172a;
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+@media (max-width: 780px) {
+  .admin-page {
+    padding: 14px;
+  }
+
+  .admin-create-form,
+  .admin-oidc-form,
+  .admin-user-main,
+  .admin-oidc-item {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-user-meta {
+    justify-content: flex-start;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
