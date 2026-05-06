@@ -163,6 +163,7 @@ describe("Treeable repository", () => {
     await expect(repo.createInitialAdmin({ username: "second", displayName: "Second", password: "password-123" })).rejects.toThrow(
       "Initial administrator already exists."
     );
+    await expect(repo.setUserActive(admin.id, false)).rejects.toThrow("Cannot deactivate the final active administrator.");
   });
 
   it("verifies local password login without exposing inactive users", async () => {
@@ -172,13 +173,22 @@ describe("Treeable repository", () => {
       displayName: "Awei",
       password: "correct horse battery staple"
     });
+    const member = await repo.createUser({
+      username: "writer",
+      displayName: "Writer",
+      password: "password-456",
+      role: "member"
+    });
 
     await expect(repo.verifyPasswordLogin("awei", "correct horse battery staple")).resolves.toEqual(
       expect.objectContaining({ id: admin.id, username: "awei", role: "admin" })
     );
     await expect(repo.verifyPasswordLogin("awei", "wrong password")).resolves.toBeNull();
-    await repo.setUserActive(admin.id, false);
-    await expect(repo.verifyPasswordLogin("awei", "correct horse battery staple")).resolves.toBeNull();
+    await expect(repo.verifyPasswordLogin("writer", "password-456")).resolves.toEqual(
+      expect.objectContaining({ id: member.id, username: "writer", role: "member" })
+    );
+    await repo.setUserActive(member.id, false);
+    await expect(repo.verifyPasswordLogin("writer", "password-456")).resolves.toBeNull();
   });
 
   it("manages users and protects the final active administrator", async () => {

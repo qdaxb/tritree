@@ -691,11 +691,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     return row.count > 0;
   }
 
-  function userCount() {
-    const row = db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number };
-    return row.count;
-  }
-
   async function createInitialAdmin(input: CreateInitialAdminInput) {
     const parsed = CreateInitialAdminSchema.parse(input);
     const passwordHash = await hashPassword(parsed.password);
@@ -791,7 +786,6 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     if (!existing) throw new Error("User was not found.");
 
     if (
-      userCount() > 1 &&
       existing.role === "admin" &&
       Boolean(existing.is_active) &&
       !isActive &&
