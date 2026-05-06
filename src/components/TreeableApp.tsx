@@ -19,6 +19,7 @@ import {
   isCustomBranchOptionId,
   isPrimaryBranchOptionId
 } from "@/lib/domain";
+import type { UserRole } from "@/lib/auth/types";
 import { LiveDraft } from "@/components/draft/LiveDraft";
 import { RootMemorySetup } from "@/components/root-memory/RootMemorySetup";
 import { SkillLibraryPanel } from "@/components/skills/SkillLibraryPanel";
@@ -34,6 +35,13 @@ type RootSetupDefaults = {
   creationRequest?: string;
   enabledSkillIds?: string[];
   seed: string;
+};
+type CurrentUserInfo = {
+  id: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  isAdmin: boolean;
 };
 
 function defaultCreationRequestOptions(): CreationRequestOption[] {
@@ -346,7 +354,7 @@ function incomingOptionLabelForNode(node: TreeNode, nodesById: Map<string, TreeN
   return null;
 }
 
-export function TreeableApp() {
+export function TreeableApp({ currentUser }: { currentUser?: CurrentUserInfo } = {}) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [rootMemory, setRootMemory] = useState<RootMemory | null>(null);
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
@@ -1220,6 +1228,12 @@ export function TreeableApp() {
           <span>{formatRootSummary(rootMemory)}</span>
         </div>
         <div className="topbar-actions">
+          {currentUser ? (
+            <div className="topbar-user" title={currentUser.username}>
+              <strong>{currentUser.displayName}</strong>
+              <span>{currentUser.isAdmin ? "管理员" : "成员"}</span>
+            </div>
+          ) : null}
           <button className="start-button" disabled={isBusy} onClick={startNewSeed} type="button">
             新念头
           </button>
