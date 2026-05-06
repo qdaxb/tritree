@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { getCurrentUser } from "@/lib/auth/current-user";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminUsersPage() {
   const user = await getCurrentUser();
 

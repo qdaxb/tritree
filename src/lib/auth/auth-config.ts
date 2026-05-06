@@ -79,9 +79,10 @@ function localTokenFrom(source: LocalTokenSource): JWT {
 
 export function buildAuthConfig({
   env = process.env,
-  repository = getRepository()
+  repository
 }: { env?: AuthEnv; repository?: Repository } = {}): NextAuthOptions {
   const oidcConfig = getOidcConfig(env);
+  const resolveRepository = () => repository ?? getRepository();
   const providers: NextAuthOptions["providers"] = [
     CredentialsProvider({
       name: "Credentials",
@@ -89,7 +90,7 @@ export function buildAuthConfig({
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" }
       },
-      authorize: (credentials) => authorizeCredentials(credentials, repository)
+      authorize: (credentials) => authorizeCredentials(credentials, resolveRepository())
     })
   ];
 
@@ -126,7 +127,7 @@ export function buildAuthConfig({
             account: { ...account, issuer: (account as OidcAccount).issuer ?? oidcConfig?.issuer },
             profile
           },
-          repository
+          resolveRepository()
         );
         if (!localUser) return false;
 

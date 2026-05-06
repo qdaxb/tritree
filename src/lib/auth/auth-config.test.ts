@@ -1,6 +1,12 @@
 import type { Account, Profile } from "next-auth";
 import { describe, expect, it, vi } from "vitest";
 
+const getRepositoryMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/db/repository", () => ({
+  getRepository: getRepositoryMock
+}));
+
 import { authorizeCredentials, buildAuthConfig, resolveOidcUser } from "./auth-config";
 
 const localUser = {
@@ -21,6 +27,13 @@ function createRepository() {
 }
 
 describe("auth config", () => {
+  it("does not instantiate the default repository while building config", () => {
+    const config = buildAuthConfig({ env: {} });
+
+    expect(config.providers.map((provider) => provider.id)).toEqual(["credentials"]);
+    expect(getRepositoryMock).not.toHaveBeenCalled();
+  });
+
   it("returns a local auth user for valid credentials", async () => {
     const repository = createRepository();
     repository.verifyPasswordLogin.mockResolvedValue(localUser);

@@ -5,6 +5,8 @@ import { LoginForm } from "@/components/auth/LoginForm";
 import { isOidcEnabled } from "@/lib/auth/env";
 import { getRepository } from "@/lib/db/repository";
 
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage() {
   const repository = getRepository();
   if (!repository.hasUsers()) redirect("/setup-admin");
