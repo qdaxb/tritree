@@ -863,6 +863,7 @@ button:disabled {
 
 .topbar-actions {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -915,6 +916,42 @@ button:disabled {
   max-width: none;
   color: rgba(71, 85, 105, 0.72);
   font-size: 0.76rem;
+}
+
+.account-controls {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-controls__name {
+  max-width: 160px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-controls a,
+.account-controls button {
+  min-height: 34px;
+  padding: 7px 10px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.account-controls button {
+  cursor: pointer;
 }
 
 .draft-skill-panel {
@@ -2864,6 +2901,10 @@ button:disabled {
   .topbar-actions {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  .account-controls {
+    flex: 1 0 100%;
   }
 
   .topbar-actions .start-button,

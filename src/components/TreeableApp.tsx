@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import {
   SessionStateSchema,
@@ -36,7 +38,7 @@ type RootSetupDefaults = {
   enabledSkillIds?: string[];
   seed: string;
 };
-type CurrentUserInfo = {
+type CurrentUserView = {
   id: string;
   username: string;
   displayName: string;
@@ -354,7 +356,7 @@ function incomingOptionLabelForNode(node: TreeNode, nodesById: Map<string, TreeN
   return null;
 }
 
-export function TreeableApp({ currentUser }: { currentUser?: CurrentUserInfo } = {}) {
+export function TreeableApp({ currentUser }: { currentUser?: CurrentUserView } = {}) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [rootMemory, setRootMemory] = useState<RootMemory | null>(null);
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
@@ -1229,9 +1231,12 @@ export function TreeableApp({ currentUser }: { currentUser?: CurrentUserInfo } =
         </div>
         <div className="topbar-actions">
           {currentUser ? (
-            <div className="topbar-user" title={currentUser.username}>
-              <strong>{currentUser.displayName}</strong>
-              <span>{currentUser.isAdmin ? "管理员" : "成员"}</span>
+            <div className="account-controls" title={currentUser.username}>
+              <span className="account-controls__name">{currentUser.displayName}</span>
+              {currentUser.isAdmin ? <Link href="/admin/users">用户管理</Link> : null}
+              <button onClick={() => signOut({ callbackUrl: "/login" })} type="button">
+                退出登录
+              </button>
             </div>
           ) : null}
           <button className="start-button" disabled={isBusy} onClick={startNewSeed} type="button">
