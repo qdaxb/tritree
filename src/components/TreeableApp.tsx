@@ -389,10 +389,18 @@ export function TreeableApp() {
     };
 
     syncMobileLayout();
-    mediaQuery.addEventListener("change", syncMobileLayout);
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncMobileLayout);
+
+      return () => {
+        mediaQuery.removeEventListener("change", syncMobileLayout);
+      };
+    }
+
+    mediaQuery.addListener(syncMobileLayout);
 
     return () => {
-      mediaQuery.removeEventListener("change", syncMobileLayout);
+      mediaQuery.removeListener(syncMobileLayout);
     };
   }, []);
 
