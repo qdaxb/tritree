@@ -732,7 +732,20 @@ export function LiveDraft({
         </aside>
       ) : null}
       <div className="draft-panel__scroll">
-        {isBusy ? <p className="updating">AI 正在生成下一版草稿...</p> : null}
+        {isBusy ? (
+          <div aria-label="草稿生成状态" aria-live="polite" className="draft-streaming-status" role="status">
+            <div className="draft-streaming-status__content">
+              <span aria-hidden="true" className="draft-streaming-status__pulse" />
+              <span className="draft-streaming-status__title">AI 正在生成下一版草稿...</span>
+              <span aria-hidden="true" className="draft-streaming-status__activity">
+                <span />
+                <span />
+                <span />
+              </span>
+            </div>
+            <div aria-hidden="true" className="draft-streaming-status__bar" />
+          </div>
+        ) : null}
         {isComparisonMode ? (
           <div className="draft-comparison-status" role="status">
             {comparisonDrafts && comparisonLabels
