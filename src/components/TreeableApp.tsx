@@ -415,6 +415,11 @@ export function TreeableApp() {
     setActiveMobilePanel(panel);
   }
 
+  function showMobileDraftForGeneration() {
+    if (!isMobileLayout || mobileGenerationPanelOverrideRef.current) return;
+    setActiveMobilePanel("draft");
+  }
+
   async function loadRoot() {
     try {
       const skillsResponse = await fetch("/api/skills");
@@ -613,6 +618,7 @@ export function TreeableApp() {
     if (!sessionState?.currentNode) return;
     const trimmedNote = note?.trim();
     const customOptionForChoice = isCustomBranchOptionId(optionId) ? customOptionOverride ?? customOption : null;
+    showMobileDraftForGeneration();
     setPendingChoice(optionId);
     setGeneratedDiffNodeId(null);
     setIsBusy(true);
@@ -661,6 +667,7 @@ export function TreeableApp() {
     if (!sessionState) return;
     const trimmedNote = note?.trim();
     const customOptionForBranch = isCustomBranchOptionId(optionId) ? customOptionOverride ?? customOption : null;
+    showMobileDraftForGeneration();
     setPendingBranch({ nodeId, optionId });
     setGeneratedDiffNodeId(null);
     setViewNodeId(nodeId);
@@ -1224,6 +1231,7 @@ export function TreeableApp() {
   async function retryDraftGeneration() {
     if (!sessionState || !activeViewNodeId || isBusy) return;
 
+    showMobileDraftForGeneration();
     setGeneratedDiffNodeId(null);
     setStreamingDraft(null);
     setStreamingOptions(null);
