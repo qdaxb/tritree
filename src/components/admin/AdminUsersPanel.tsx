@@ -219,6 +219,10 @@ export function AdminUsersPanel() {
     }));
   }
 
+  function isRowBusy(userId: string) {
+    return busyAction?.startsWith(`${userId}:`) ?? false;
+  }
+
   return (
     <main className="admin-page">
       <section className="admin-panel" aria-labelledby="admin-users-title">
@@ -279,6 +283,7 @@ export function AdminUsersPanel() {
         <div className="admin-user-list">
           {users.map((user) => {
             const form = oidcFormFor(user.id);
+            const rowBusy = isRowBusy(user.id);
             return (
               <section className="admin-user-row" aria-label={user.username} key={user.id} role="group">
                 <div className="admin-user-main">
@@ -295,12 +300,14 @@ export function AdminUsersPanel() {
 
                 <div className="admin-actions">
                   <button
+                    disabled={rowBusy}
                     type="button"
                     onClick={() => void patchUser(user.id, { isActive: !user.isActive })}
                   >
                     {user.isActive ? "停用" : "启用"}
                   </button>
                   <button
+                    disabled={rowBusy}
                     type="button"
                     onClick={() => void patchUser(user.id, { role: user.role === "admin" ? "member" : "admin" })}
                   >
@@ -320,7 +327,7 @@ export function AdminUsersPanel() {
                     />
                   </label>
                   <button
-                    disabled={busyAction === `${user.id}:reset-password`}
+                    disabled={rowBusy}
                     type="button"
                     onClick={() => void resetPassword(user.id)}
                   >
@@ -338,7 +345,7 @@ export function AdminUsersPanel() {
                           {identity.email ? <span>{identity.email}</span> : null}
                           {identity.name ? <span>{identity.name}</span> : null}
                         </div>
-                        <button type="button" onClick={() => void unbindOidcIdentity(user.id, identity.id)}>
+                        <button disabled={rowBusy} type="button" onClick={() => void unbindOidcIdentity(user.id, identity.id)}>
                           解绑 OIDC
                         </button>
                       </div>
@@ -379,7 +386,7 @@ export function AdminUsersPanel() {
                     />
                   </label>
                   <button
-                    disabled={busyAction === `${user.id}:bind-oidc`}
+                    disabled={rowBusy}
                     type="button"
                     onClick={() => void bindOidcIdentity(user.id)}
                   >

@@ -32,6 +32,14 @@ function jsonResponse(body: unknown, ok = true) {
   };
 }
 
+function deferredResponse<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 describe("AdminUsersPanel", () => {
   let users: TestUser[];
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -205,5 +213,51 @@ describe("AdminUsersPanel", () => {
       expect.objectContaining({ method: "DELETE" })
     );
     await waitFor(() => expect(within(writerRow).queryByText("subject-1")).not.toBeInTheDocument());
+  });
+
+  it("disables row mutation buttons while patch and OIDC unbind actions are pending", async () => {
+    const patchResponse = deferredResponse<ReturnType<typeof jsonResponse>>();
+    const deleteResponse = deferredResponse<ReturnType<typeof jsonResponse>>();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/admin/users" && method === "GET") {
+        return jsonResponse({ users });
+      }
+      if (url === "/api/admin/users/user-2" && method === "PATCH") {
+        return patchResponse.promise;
+      }
+      if (url === "/api/admin/users/user-2/oidc-identities/identity-1" && method === "DELETE") {
+        return deleteResponse.promise;
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    render(<AdminUsersPanel />);
+
+    const writerRow = await screen.findByRole("group", { name: "writer" });
+    const deactivateButton = within(writerRow).getByRole("button", { name: "停用" });
+    const roleButton = within(writerRow).getByRole("button", { name: "设为管理员" });
+    const unbindButton = within(writerRow).getByRole("button", { name: "解绑 OIDC" });
+
+    await userEvent.click(deactivateButton);
+
+    await waitFor(() => expect(deactivateButton).toBeDisabled());
+    expect(roleButton).toBeDisabled();
+    expect(unbindButton).toBeDisabled();
+
+    patchResponse.resolve(jsonResponse({ user: users[1] }));
+    await waitFor(() => expect(deactivateButton).not.toBeDisabled());
+
+    await userEvent.click(unbindButton);
+
+    await waitFor(() => expect(unbindButton).toBeDisabled());
+    expect(deactivateButton).toBeDisabled();
+    expect(roleButton).toBeDisabled();
+
+    deleteResponse.resolve(jsonResponse({ ok: true }));
+    await waitFor(() => expect(unbindButton).not.toBeDisabled());
   });
 });

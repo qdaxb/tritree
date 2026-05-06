@@ -49,13 +49,16 @@ describe("PATCH /api/admin/users/:userId", () => {
   });
 
   it("updates display name, active state, and role", async () => {
-    const updatedName = { ...adminUser, id: "user-2", username: "writer", displayName: "Updated Writer", role: "member" };
-    const updatedActive = { ...updatedName, isActive: false };
-    const updatedRole = { ...updatedActive, role: "admin" };
-    const updateUserDisplayName = vi.fn().mockReturnValue(updatedName);
-    const setUserActive = vi.fn().mockReturnValue(updatedActive);
-    const setUserRole = vi.fn().mockReturnValue(updatedRole);
-    getRepositoryMock.mockReturnValue({ getUser: vi.fn(() => updatedName), updateUserDisplayName, setUserActive, setUserRole });
+    const updatedUser = {
+      ...adminUser,
+      id: "user-2",
+      username: "writer",
+      displayName: "Updated Writer",
+      isActive: false,
+      role: "admin"
+    };
+    const updateUser = vi.fn().mockReturnValue(updatedUser);
+    getRepositoryMock.mockReturnValue({ updateUser });
 
     const response = await PATCH(
       new Request("http://test.local/api/admin/users/user-2", {
@@ -66,34 +69,36 @@ describe("PATCH /api/admin/users/:userId", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(updateUserDisplayName).toHaveBeenCalledWith("user-2", "Updated Writer");
-    expect(setUserActive).toHaveBeenCalledWith("user-2", false);
-    expect(setUserRole).toHaveBeenCalledWith("user-2", "admin");
+    expect(updateUser).toHaveBeenCalledWith("user-2", { displayName: "Updated Writer", isActive: false, role: "admin" });
     expect(await response.json()).toEqual({ user: expect.objectContaining({ displayName: "Updated Writer", role: "admin" }) });
   });
 
   it("propagates final active administrator guard errors as conflicts", async () => {
     const updateUserDisplayName = vi.fn();
-    const setUserActive = vi.fn(() => {
+    const updateUser = vi.fn(() => {
       throw new Error("Cannot deactivate the final active administrator.");
     });
-    const setUserRole = vi.fn();
-    getRepositoryMock.mockReturnValue({ getUser: vi.fn(() => adminUser), updateUserDisplayName, setUserActive, setUserRole });
+    getRepositoryMock.mockReturnValue({ updateUser, updateUserDisplayName });
 
     const response = await PATCH(
-      new Request("http://test.local/api/admin/users/user-1", { method: "PATCH", body: JSON.stringify({ isActive: false }) }),
+      new Request("http://test.local/api/admin/users/user-1", {
+        method: "PATCH",
+        body: JSON.stringify({ displayName: "Renamed Admin", isActive: false })
+      }),
       { params: Promise.resolve({ userId: "user-1" }) }
     );
 
     expect(response.status).toBe(409);
+    expect(updateUser).toHaveBeenCalledWith("user-1", { displayName: "Renamed Admin", isActive: false });
+    expect(updateUserDisplayName).not.toHaveBeenCalled();
     expect(await response.json()).toEqual({ error: "至少需要保留一个启用的管理员。" });
   });
 
   it("propagates final administrator role guard errors as conflicts", async () => {
-    const setUserRole = vi.fn(() => {
+    const updateUser = vi.fn(() => {
       throw new Error("Cannot demote the final active administrator.");
     });
-    getRepositoryMock.mockReturnValue({ getUser: vi.fn(() => adminUser), updateUserDisplayName: vi.fn(), setUserActive: vi.fn(), setUserRole });
+    getRepositoryMock.mockReturnValue({ updateUser });
 
     const response = await PATCH(
       new Request("http://test.local/api/admin/users/user-1", { method: "PATCH", body: JSON.stringify({ role: "member" }) }),

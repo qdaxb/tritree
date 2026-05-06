@@ -225,6 +225,16 @@ describe("Treeable repository", () => {
     expect(() => repo.setUserActive(member.id, false)).toThrow("Cannot deactivate the final active administrator.");
   });
 
+  it("rolls back all user updates when final administrator guards fail", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
+
+    expect(() => repo.updateUser(admin.id, { displayName: "Renamed Admin", isActive: false })).toThrow(
+      "Cannot deactivate the final active administrator."
+    );
+    expect(repo.getUser(admin.id)).toEqual(expect.objectContaining({ displayName: "Awei", isActive: true }));
+  });
+
   it("binds OIDC identities to existing users", async () => {
     const repo = createTreeableRepository(testDbPath());
     const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });

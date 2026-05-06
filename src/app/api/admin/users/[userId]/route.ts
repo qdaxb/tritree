@@ -33,23 +33,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ userI
   try {
     await requireAdminUser();
     const body = UpdateAdminUserBodySchema.parse(await request.json());
-    const repository = getRepository();
-    let user = repository.getUser(userId);
-
-    if (!user) {
-      return NextResponse.json({ error: "没有找到用户。" }, { status: 404 });
-    }
-
-    if (body.displayName !== undefined) {
-      user = repository.updateUserDisplayName(userId, body.displayName);
-    }
-    if (body.isActive !== undefined) {
-      user = repository.setUserActive(userId, body.isActive);
-    }
-    if (body.role !== undefined) {
-      user = repository.setUserRole(userId, body.role);
-    }
-
+    const user = getRepository().updateUser(userId, body);
     return NextResponse.json({ user: publicUser(user) });
   } catch (error) {
     const response = authErrorResponse(error);

@@ -5,6 +5,7 @@ import {
   type CreateUserInput,
   type OidcIdentity,
   type OidcIdentityUpsert,
+  type UpdateUserInput,
   type User,
   type UserRole,
   type UserWithPasswordHash,
@@ -896,6 +897,39 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     return getUser(userId)!;
   }
 
+  function updateUser(userId: string, input: UpdateUserInput) {
+    const parsed = UpdateUserSchema.parse(input);
+
+    return withTransaction(db, () => {
+      const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+      if (!existing) throw new Error("User was not found.");
+
+      const nextRole = parsed.role ?? UserRoleSchema.parse(existing.role);
+      const nextIsActive = parsed.isActive ?? Boolean(existing.is_active);
+      if (existing.role === "admin" && Boolean(existing.is_active) && activeAdminCountExcluding(userId) === 0) {
+        if (!nextIsActive) {
+          throw new Error("Cannot deactivate the final active administrator.");
+        }
+        if (nextRole !== "admin") {
+          throw new Error("Cannot demote the final active administrator.");
+        }
+      }
+
+      const timestamp = now();
+      if (parsed.displayName !== undefined) {
+        db.prepare("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?").run(parsed.displayName, timestamp, userId);
+      }
+      if (parsed.isActive !== undefined) {
+        db.prepare("UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?").run(parsed.isActive ? 1 : 0, timestamp, userId);
+      }
+      if (parsed.role !== undefined) {
+        db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(parsed.role, timestamp, userId);
+      }
+
+      return getUser(userId)!;
+    });
+  }
+
   function bindOidcIdentity(userId: string, input: OidcIdentityUpsert) {
     const user = getUser(userId);
     if (!user) throw new Error("User was not found.");
@@ -1632,6 +1666,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     getUserWithPasswordHashByUsername,
     verifyPasswordLogin,
     resetUserPassword,
+    updateUser,
     updateUserDisplayName,
     setUserActive,
     setUserRole,
