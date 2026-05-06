@@ -789,13 +789,13 @@ button:disabled {
 .tree-canvas {
   --tree-canvas-inset: 18px;
   position: relative;
-  min-height: 0;
-  height: 100%;
+  min-height: 100%;
+  height: auto;
   display: grid;
   grid-template-rows: minmax(360px, 1fr) auto;
   gap: 0;
   padding: 0;
-  overflow: auto;
+  overflow: hidden;
   background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.26);
   border-radius: 8px;

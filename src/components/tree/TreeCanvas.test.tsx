@@ -1016,15 +1016,19 @@ describe("TreeCanvas", () => {
     expect(mobileRule).toContain("margin-left: 0");
   });
 
-  it("lets the left panel scroll instead of clipping a tall option tray", () => {
+  it("keeps the tree card from adding a duplicate scrollbar", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const shellRule = css.match(/\.app-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const canvasRegionRule = css.match(/\.canvas-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const canvasRule = css.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const viewportRule = css.match(/\.tree-viewport\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
     expect(shellRule).toContain("min-height: 0");
     expect(canvasRegionRule).toContain("overflow: auto");
-    expect(canvasRule).toContain("overflow: auto");
+    expect(canvasRule).toContain("min-height: 100%");
+    expect(canvasRule).toContain("height: auto");
+    expect(canvasRule).toContain("overflow: hidden");
+    expect(viewportRule).toContain("overflow: auto");
   });
 
   it("keeps the More Directions editor inside the bottom tray bounds", () => {
