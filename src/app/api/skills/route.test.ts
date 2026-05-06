@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthApiError } from "@/lib/auth/current-user";
 import { GET, POST } from "./route";
 import { PATCH } from "./[skillId]/route";
 
@@ -15,10 +16,15 @@ const currentUser = {
   updatedAt: "2026-05-06T00:00:00.000Z"
 };
 
-vi.mock("@/lib/auth/current-user", () => ({
-  authErrorResponse: () => null,
-  requireCurrentUser: requireCurrentUserMock
-}));
+vi.mock("server-only", () => ({}));
+
+vi.mock("@/lib/auth/current-user", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/auth/current-user")>("@/lib/auth/current-user");
+  return {
+    ...actual,
+    requireCurrentUser: requireCurrentUserMock
+  };
+});
 
 vi.mock("@/lib/db/repository", () => ({
   getRepository: getRepositoryMock
@@ -31,6 +37,15 @@ beforeEach(() => {
 });
 
 describe("/api/skills", () => {
+  it("returns 401 when listing skills without login", async () => {
+    requireCurrentUserMock.mockRejectedValue(new AuthApiError(401, "请先登录。"));
+
+    const response = await GET();
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "请先登录。" });
+  });
+
   it("lists skills", async () => {
     getRepositoryMock.mockReturnValue({
       listCreationRequestOptions: vi.fn().mockReturnValue([{ id: "request-preserve", label: "保留我的原意" }]),

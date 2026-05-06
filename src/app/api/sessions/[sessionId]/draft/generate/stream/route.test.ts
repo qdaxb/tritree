@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthApiError } from "@/lib/auth/current-user";
 import { POST } from "./route";
 
 const streamDirectorDraftMock = vi.hoisted(() => vi.fn());
@@ -23,10 +24,15 @@ vi.mock("@/lib/ai/director-stream", () => ({
   extractActiveDirectorDraftField: extractActiveDirectorDraftFieldMock
 }));
 
-vi.mock("@/lib/auth/current-user", () => ({
-  authErrorResponse: () => null,
-  requireCurrentUser: requireCurrentUserMock
-}));
+vi.mock("server-only", () => ({}));
+
+vi.mock("@/lib/auth/current-user", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/auth/current-user")>("@/lib/auth/current-user");
+  return {
+    ...actual,
+    requireCurrentUser: requireCurrentUserMock
+  };
+});
 
 vi.mock("@/lib/db/repository", () => ({
   getRepository: getRepositoryMock
@@ -102,6 +108,21 @@ beforeEach(() => {
 });
 
 describe("POST /api/sessions/:sessionId/draft/generate/stream", () => {
+  it("returns 401 when generating a draft without login", async () => {
+    requireCurrentUserMock.mockRejectedValue(new AuthApiError(401, "请先登录。"));
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/draft/generate/stream", {
+        method: "POST",
+        body: JSON.stringify({})
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "请先登录。" });
+  });
+
   it("streams partial draft events before persisting and sending done", async () => {
     const finalOutput = {
       roundIntent: "扩写",

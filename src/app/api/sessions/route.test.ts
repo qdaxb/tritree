@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthApiError } from "@/lib/auth/current-user";
 import { createSeedDraft } from "@/lib/seed-draft";
 import { POST } from "./route";
 
@@ -20,10 +21,15 @@ vi.mock("@/lib/ai/director-stream", () => ({
   streamDirectorOptions: streamDirectorOptionsMock
 }));
 
-vi.mock("@/lib/auth/current-user", () => ({
-  authErrorResponse: () => null,
-  requireCurrentUser: requireCurrentUserMock
-}));
+vi.mock("server-only", () => ({}));
+
+vi.mock("@/lib/auth/current-user", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/auth/current-user")>("@/lib/auth/current-user");
+  return {
+    ...actual,
+    requireCurrentUser: requireCurrentUserMock
+  };
+});
 
 vi.mock("@/lib/db/repository", () => ({
   getRepository: getRepositoryMock
@@ -63,6 +69,15 @@ describe("createSeedDraft", () => {
 });
 
 describe("POST /api/sessions", () => {
+  it("returns 401 when starting a session without login", async () => {
+    requireCurrentUserMock.mockRejectedValue(new AuthApiError(401, "请先登录。"));
+
+    const response = await POST(new Request("http://test.local/api/sessions", { method: "POST" }));
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "请先登录。" });
+  });
+
   it("streams first-round options through the same option stream used by existing nodes", async () => {
     const draftState = {
       rootMemory: {
