@@ -515,14 +515,14 @@ button:disabled {
 }
 
 .app-shell {
-  height: 100dvh;
-  min-height: 0;
+  min-height: 100dvh;
+  height: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
-  grid-template-rows: 72px minmax(0, 1fr);
+  grid-template-rows: 72px minmax(calc(100dvh - 120px), auto);
   gap: 16px;
   padding: 16px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .topbar {
@@ -780,10 +780,10 @@ button:disabled {
 }
 
 .canvas-region {
-  min-height: 0;
+  min-height: 100%;
   display: grid;
   gap: 12px;
-  overflow: auto;
+  overflow: visible;
 }
 
 .tree-canvas {
@@ -792,7 +792,7 @@ button:disabled {
   min-height: 100%;
   height: auto;
   display: grid;
-  grid-template-rows: minmax(360px, 1fr) auto;
+  grid-template-rows: auto auto;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -833,7 +833,8 @@ button:disabled {
 .tree-viewport {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: var(--tree-canvas-inset) 0 0 var(--tree-canvas-inset);
   border-radius: 8px;
   overscroll-behavior: contain;
@@ -875,7 +876,7 @@ button:disabled {
   right: 14px;
   z-index: 3;
   display: inline-grid;
-  grid-template-columns: repeat(4, 30px);
+  grid-template-columns: repeat(2, 30px);
   gap: 6px;
   padding: 5px;
   background: rgba(248, 250, 252, 0.9);
@@ -1800,11 +1801,12 @@ button:disabled {
 .draft-panel {
   flex: 1 1 auto;
   position: relative;
-  min-height: 0;
+  min-height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: start;
   padding: 18px 0 18px 18px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .draft-panel__popover {
@@ -2051,7 +2053,7 @@ button:disabled {
 
 .draft-panel__scroll {
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   padding-right: 18px;
 }
 
@@ -2692,7 +2694,7 @@ button:disabled {
 
   .draft-panel {
     min-height: 320px;
-    max-height: 70vh;
+    max-height: none;
   }
 }
 

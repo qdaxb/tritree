@@ -601,10 +601,10 @@ export function TreeCanvas({
   const svgRef = useRef<SVGSVGElement>(null);
   const previousNodeIdRef = useRef<string | null>(null);
   const dragStateRef = useRef<{
+    captured: boolean;
     didDrag: boolean;
     pointerId: number;
     scrollLeft: number;
-    scrollTop: number;
     startX: number;
     startY: number;
   } | null>(null);
@@ -614,7 +614,7 @@ export function TreeCanvas({
   const [visibleOptionCount, setVisibleOptionCount] = useState(0);
   const renderedHistoryCount = useMemo(() => selectedPath.filter(shouldRenderTreeNode).length, [selectedPath]);
   const branchLayout = useMemo(() => getOptionBranchLayout(canvasWidth, renderedHistoryCount), [canvasWidth, renderedHistoryCount]);
-  const isTreeScrollable = branchLayout.width > canvasWidth + 1 || branchLayout.height > CANVAS_HEIGHT;
+  const isTreeScrollable = branchLayout.width > canvasWidth + 1;
   const nodeId = currentNode?.id ?? null;
   const isBranchGenerating = Boolean(pendingBranch);
   const graphCurrentNode = isBranchGenerating ? null : currentNode;
@@ -765,19 +765,9 @@ export function TreeCanvas({
       scrollTreeBy(180, 0);
       return;
     }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      scrollTreeBy(0, -140);
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      scrollTreeBy(0, 140);
-      return;
-    }
     if (event.key === "Home") {
       event.preventDefault();
-      treeViewportRef.current?.scrollTo({ behavior: "smooth", left: 0, top: 0 });
+      treeViewportRef.current?.scrollTo({ behavior: "smooth", left: 0 });
       return;
     }
     if (event.key === "End") {
@@ -792,17 +782,13 @@ export function TreeCanvas({
     if (isClickableTreePointerTarget(event.target)) return;
 
     dragStateRef.current = {
+      captured: false,
       didDrag: false,
       pointerId: event.pointerId,
       scrollLeft: viewport.scrollLeft,
-      scrollTop: viewport.scrollTop,
       startX: event.clientX,
       startY: event.clientY
     };
-    setIsDraggingTree(true);
-    if (typeof event.currentTarget.setPointerCapture === "function") {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    }
   }
 
   function handleTreeViewportPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -812,11 +798,23 @@ export function TreeCanvas({
 
     const deltaX = event.clientX - dragState.startX;
     const deltaY = event.clientY - dragState.startY;
-    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+    if (!dragState.didDrag) {
+      if (absX <= 3 && absY <= 3) return;
+      if (absY > absX) {
+        dragStateRef.current = null;
+        setIsDraggingTree(false);
+        return;
+      }
       dragState.didDrag = true;
+      setIsDraggingTree(true);
+      if (!dragState.captured && typeof event.currentTarget.setPointerCapture === "function") {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragState.captured = true;
+      }
     }
     viewport.scrollLeft = dragState.scrollLeft - deltaX;
-    viewport.scrollTop = dragState.scrollTop - deltaY;
     event.preventDefault();
   }
 
@@ -827,7 +825,7 @@ export function TreeCanvas({
     suppressNextClickRef.current = dragState.didDrag;
     dragStateRef.current = null;
     setIsDraggingTree(false);
-    if (typeof event.currentTarget.releasePointerCapture === "function") {
+    if (dragState.captured && typeof event.currentTarget.releasePointerCapture === "function") {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }
@@ -1061,7 +1059,7 @@ export function TreeCanvas({
           isTreeScrollable && "tree-viewport--scrollable",
           isDraggingTree && "tree-viewport--dragging"
         )}
-        data-pan-axis="both"
+        data-pan-axis="x"
         onClickCapture={handleTreeViewportClick}
         onKeyDown={handleTreeViewportKeyDown}
         onPointerCancel={finishTreeViewportDrag}
@@ -1093,24 +1091,6 @@ export function TreeCanvas({
             type="button"
           >
             <ChevronLeft aria-hidden="true" size={16} strokeWidth={2.4} />
-          </button>
-          <button
-            aria-label="向上浏览"
-            className="tree-scroll-control"
-            onClick={() => scrollTreeBy(0, -180)}
-            title="向上浏览"
-            type="button"
-          >
-            <ChevronUp aria-hidden="true" size={16} strokeWidth={2.4} />
-          </button>
-          <button
-            aria-label="向下浏览"
-            className="tree-scroll-control"
-            onClick={() => scrollTreeBy(0, 180)}
-            title="向下浏览"
-            type="button"
-          >
-            <ChevronDown aria-hidden="true" size={16} strokeWidth={2.4} />
           </button>
           <button
             aria-label="回到最新节点"
