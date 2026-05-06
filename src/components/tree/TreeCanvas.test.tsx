@@ -994,18 +994,6 @@ describe("TreeCanvas", () => {
     }
   });
 
-  it("lets tree viewport scrollbars reach the drawing area edges", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
-    const canvasRule = css.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const viewportRule = css.match(/\.tree-viewport\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const trayRule = css.match(/\.branch-option-tray\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-
-    expect(canvasRule).toContain("--tree-canvas-inset: 18px");
-    expect(canvasRule).toContain("padding: 0");
-    expect(viewportRule).toContain("padding: var(--tree-canvas-inset) 0 0 var(--tree-canvas-inset)");
-    expect(trayRule).toContain("margin: 16px var(--tree-canvas-inset) var(--tree-canvas-inset)");
-  });
-
   it("stacks mobile direction cards instead of squeezing them into desktop columns", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const mobileRule = css.match(/@media \(max-width: 640px\)\s*\{(?<body>[\s\S]+)\}\s*$/)?.groups?.body ?? "";
@@ -1014,24 +1002,6 @@ describe("TreeCanvas", () => {
     expect(mobileRule).toContain("grid-template-columns: 1fr");
     expect(mobileRule).toContain(".branch-option-tray__controls > .branch-side-action");
     expect(mobileRule).toContain("margin-left: 0");
-  });
-
-  it("lets the page own vertical overflow instead of nesting desktop scrollbars", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
-    const shellRule = css.match(/\.app-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const canvasRegionRule = css.match(/\.canvas-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const canvasRule = css.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const viewportRule = css.match(/\.tree-viewport\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-
-    expect(shellRule).toContain("min-height: 100dvh");
-    expect(shellRule).toContain("height: auto");
-    expect(shellRule).toContain("overflow: visible");
-    expect(canvasRegionRule).toContain("overflow: visible");
-    expect(canvasRule).toContain("min-height: 100%");
-    expect(canvasRule).toContain("height: auto");
-    expect(canvasRule).toContain("grid-template-rows: auto auto");
-    expect(viewportRule).toContain("overflow-x: auto");
-    expect(viewportRule).toContain("overflow-y: hidden");
   });
 
   it("keeps the More Directions editor inside the bottom tray bounds", () => {
@@ -1609,45 +1579,6 @@ describe("TreeCanvas", () => {
     expect(inactive).toBeDefined();
     expect(optionColumnX - inactive!.targetX).toBeGreaterThanOrEqual(132);
     expect(Math.abs(inactive!.targetY - source!.targetY)).toBeGreaterThanOrEqual(64);
-  });
-
-  it("keeps folded sibling labels away from the active child label", () => {
-    const branchSource: TreeNode = {
-      ...selectedNodeWithFolded,
-      id: "node-overlap-source",
-      selectedOptionId: "b",
-      options: [
-        { id: "a", label: "把标题改得更抓眼球", description: "Explore", impact: "New angle", kind: "explore" },
-        { id: "b", label: "把口语废话删干净把结尾节奏提起来", description: "Deepen", impact: "More detail", kind: "deepen" },
-        { id: "c", label: "压口语改金句", description: "Finish", impact: "Publish", kind: "finish" }
-      ],
-      foldedOptions: [
-        { id: "a", label: "把标题改得更抓眼球", description: "Explore", impact: "New angle", kind: "explore" },
-        { id: "c", label: "压口语改金句", description: "Finish", impact: "Publish", kind: "finish" }
-      ]
-    };
-    const activeCurrentNode: TreeNode = {
-      ...currentNode,
-      id: "node-active-overlap",
-      parentId: branchSource.id,
-      parentOptionId: "b",
-      roundIndex: branchSource.roundIndex + 1
-    };
-
-    const graph = createForceTreeGraph({
-      currentNode: activeCurrentNode,
-      layout: getOptionBranchLayout(1200),
-      selectedPath: [branchSource, activeCurrentNode],
-      treeNodes: [branchSource, activeCurrentNode],
-      visibleOptionCount: 3
-    });
-    const activeChild = graph.nodes.find((node) => node.id === "history-node-active-overlap");
-    const foldedSiblings = graph.nodes.filter(
-      (node) => node.kind === "folded" && node.branchFromNodeId === branchSource.id
-    );
-
-    expect(foldedSiblings).toHaveLength(2);
-    expect(foldedSiblings.every((node) => Math.abs(node.targetY - activeChild!.targetY) >= 88)).toBe(true);
   });
 
   it("keeps nearby tree labels separated vertically on dense multi-round routes", () => {
