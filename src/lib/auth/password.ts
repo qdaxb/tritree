@@ -1,7 +1,5 @@
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
+import { randomBytes, scrypt as scryptCallback, type BinaryLike, type ScryptOptions, timingSafeEqual } from "node:crypto";
 
-const scrypt = promisify(scryptCallback);
 const SCRYPT_N = 16384;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
@@ -12,13 +10,26 @@ function isHex(value: string, bytes: number) {
   return new RegExp(`^[a-f0-9]{${bytes * 2}}$`).test(value);
 }
 
+function scrypt(password: BinaryLike, salt: BinaryLike, keylen: number, options: ScryptOptions) {
+  return new Promise<Buffer>((resolve, reject) => {
+    scryptCallback(password, salt, keylen, options, (error, derivedKey) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(derivedKey);
+    });
+  });
+}
+
 export async function hashPassword(password: string) {
   const salt = randomBytes(SALT_LENGTH);
-  const derivedKey = (await scrypt(password, salt, KEY_LENGTH, {
+  const derivedKey = await scrypt(password, salt, KEY_LENGTH, {
     N: SCRYPT_N,
     r: SCRYPT_R,
     p: SCRYPT_P
-  })) as Buffer;
+  });
 
   return ["scrypt", SCRYPT_N, SCRYPT_R, SCRYPT_P, salt.toString("hex"), derivedKey.toString("hex")].join("$");
 }
@@ -33,11 +44,11 @@ export async function verifyPassword(password: string, storedHash: string) {
 
   const salt = Buffer.from(saltHex, "hex");
   const expected = Buffer.from(hashHex, "hex");
-  const actual = (await scrypt(password, salt, KEY_LENGTH, {
+  const actual = await scrypt(password, salt, KEY_LENGTH, {
     N: SCRYPT_N,
     r: SCRYPT_R,
     p: SCRYPT_P
-  })) as Buffer;
+  });
 
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
