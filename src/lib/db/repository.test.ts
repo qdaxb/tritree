@@ -321,6 +321,55 @@ describe("Treeable repository", () => {
     expect(repo.listSkills(second.id).map((skill) => skill.id)).toContain("system-analysis");
   });
 
+  it("does not resolve another user's custom skill ids", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const first = await createTestUser(repo, "first");
+    const second = await createTestUser(repo, "second");
+
+    const custom = repo.createSkill(first.id, {
+      title: "第一用户技能",
+      category: "风格",
+      description: "只属于第一个用户。",
+      prompt: "写得更像第一用户。",
+      appliesTo: "writer"
+    });
+
+    expect(repo.resolveSkillsByIds([custom.id], second.id)).toEqual([]);
+  });
+
+  it("does not resolve skills without a user scope", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
+
+    const custom = repo.createSkill(user.id, {
+      title: "用户技能",
+      category: "风格",
+      description: "用户自定义技能。",
+      prompt: "写得更像用户。",
+      appliesTo: "writer"
+    });
+
+    expect(repo.resolveSkillsByIds([custom.id], undefined as unknown as string)).toEqual([]);
+  });
+
+  it("does not resolve legacy null-user non-system skill rows", async () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    const user = await createTestUser(repo, "writer");
+    const sqlite = new DatabaseSync(dbPath);
+    sqlite
+      .prepare(
+        `
+          INSERT INTO skills (id, user_id, title, category, description, prompt, applies_to, is_system, default_enabled, is_archived, created_at, updated_at)
+          VALUES ('legacy-user-skill', NULL, '旧用户技能', '风格', '', '旧提示词。', 'both', 0, 0, 0, '2026-05-01T00:00:00.000Z', '2026-05-01T00:00:00.000Z')
+        `
+      )
+      .run();
+    sqlite.close();
+
+    expect(repo.resolveSkillsByIds(["legacy-user-skill"], user.id)).toEqual([]);
+  });
+
   it("copies and isolates creation request options per user", async () => {
     const repo = createTreeableRepository(testDbPath());
     const first = await createTestUser(repo, "first");
@@ -338,6 +387,17 @@ describe("Treeable repository", () => {
     expect(repo.listCreationRequestOptions(first.id).map((option) => option.label)).toContain("第一用户改过");
     expect(repo.listCreationRequestOptions(second.id).map((option) => option.label)).not.toContain("第一用户改过");
     expect(repo.listCreationRequestOptions(second.id).map((option) => option.label)).toContain(firstOptions[1].label);
+  });
+
+  it("keeps quick request options empty after deleting all until explicit reset", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
+    const options = repo.listCreationRequestOptions(user.id);
+
+    options.forEach((option) => repo.deleteCreationRequestOption(user.id, option.id));
+
+    expect(repo.listCreationRequestOptions(user.id)).toEqual([]);
+    expect(repo.resetCreationRequestOptions(user.id).map((option) => option.label)).toEqual(options.map((option) => option.label));
   });
 
   it("seeds system skills idempotently", async () => {

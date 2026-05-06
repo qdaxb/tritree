@@ -441,7 +441,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
 
   function ensureUserCreationRequestOptions(userId: string) {
     const row = db
-      .prepare("SELECT id FROM creation_request_options WHERE user_id = ? AND is_archived = 0 LIMIT 1")
+      .prepare("SELECT id FROM creation_request_options WHERE user_id = ? LIMIT 1")
       .get(userId);
     if (row) return;
 
@@ -611,19 +611,24 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       .map((skill) => skill.id);
   }
 
-  function resolveSkillsByIds(skillIds: string[], userId?: string) {
+  function resolveSkillsByIds(skillIds: string[], userId: string) {
     const ids = uniqueSkillIds(skillIds);
-    if (ids.length === 0) return [];
+    if (ids.length === 0 || !userId) return [];
     return ids
       .map((id) =>
-        userId
-          ? (db
-              .prepare("SELECT * FROM skills WHERE id = ? AND ((is_system = 1 AND user_id IS NULL) OR user_id = ?)")
-              .get(id, userId) as SkillRow | undefined)
-          : (db.prepare("SELECT * FROM skills WHERE id = ?").get(id) as SkillRow | undefined)
+        db
+          .prepare(
+            `
+              SELECT *
+              FROM skills
+              WHERE id = ?
+                AND is_archived = 0
+                AND ((is_system = 1 AND user_id IS NULL) OR user_id = ?)
+            `
+          )
+          .get(id, userId) as SkillRow | undefined
       )
       .filter((row): row is SkillRow => Boolean(row))
-      .filter((row) => !row.is_archived)
       .map(toSkill);
   }
 
