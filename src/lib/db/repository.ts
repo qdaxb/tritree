@@ -1,4 +1,23 @@
 import { nanoid } from "nanoid";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import {
+  type CreateInitialAdminInput,
+  type CreateUserInput,
+  type OidcIdentity,
+  type OidcIdentityUpsert,
+  type User,
+  type UserRole,
+  type UserWithPasswordHash,
+  CreateInitialAdminSchema,
+  CreateUserSchema,
+  CredentialsLoginSchema,
+  OidcIdentitySchema,
+  OidcIdentityUpsertSchema,
+  ResetPasswordSchema,
+  UserRoleSchema,
+  UserSchema,
+  UserWithPasswordHashSchema
+} from "@/lib/auth/types";
 import {
   type BranchOption,
   type CreationRequestOption,
@@ -31,6 +50,28 @@ import {
   requireThreeOptions
 } from "@/lib/domain";
 import { createDatabase, defaultDbPath } from "./client";
+
+type UserRow = {
+  id: string;
+  username: string;
+  display_name: string;
+  password_hash: string | null;
+  role: string;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type OidcIdentityRow = {
+  id: string;
+  user_id: string;
+  issuer: string;
+  subject: string;
+  email: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+};
 
 type RootMemoryRow = {
   id: string;
@@ -125,6 +166,38 @@ function now() {
 
 function parseJson<T>(value: string): T {
   return JSON.parse(value) as T;
+}
+
+function toUser(row: UserRow): User {
+  return UserSchema.parse({
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+    role: row.role,
+    isActive: Boolean(row.is_active),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+}
+
+function toUserWithPasswordHash(row: UserRow): UserWithPasswordHash {
+  return UserWithPasswordHashSchema.parse({
+    ...toUser(row),
+    passwordHash: row.password_hash
+  });
+}
+
+function toOidcIdentity(row: OidcIdentityRow): OidcIdentity {
+  return OidcIdentitySchema.parse({
+    id: row.id,
+    userId: row.user_id,
+    issuer: row.issuer,
+    subject: row.subject,
+    email: row.email,
+    name: row.name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
 }
 
 function withTransaction<T>(db: ReturnType<typeof createDatabase>, write: () => T) {
@@ -611,6 +684,183 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       saveSessionEnabledSkills(sessionId, skillIds, timestamp);
       return getSessionState(sessionId);
     });
+  }
+
+  function hasUsers() {
+    const row = db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number };
+    return row.count > 0;
+  }
+
+  function userCount() {
+    const row = db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number };
+    return row.count;
+  }
+
+  async function createInitialAdmin(input: CreateInitialAdminInput) {
+    const parsed = CreateInitialAdminSchema.parse(input);
+    const passwordHash = await hashPassword(parsed.password);
+    const timestamp = now();
+    const id = nanoid();
+
+    return withTransaction(db, () => {
+      if (hasUsers()) {
+        throw new Error("Initial administrator already exists.");
+      }
+
+      db.prepare(
+        `
+          INSERT INTO users (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)
+        `
+      ).run(id, parsed.username, parsed.displayName, passwordHash, timestamp, timestamp);
+
+      return getUser(id)!;
+    });
+  }
+
+  async function createUser(input: CreateUserInput) {
+    const parsed = CreateUserSchema.parse(input);
+    const passwordHash = await hashPassword(parsed.password);
+    const timestamp = now();
+    const id = nanoid();
+
+    db.prepare(
+      `
+        INSERT INTO users (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(id, parsed.username, parsed.displayName, passwordHash, parsed.role, parsed.isActive ? 1 : 0, timestamp, timestamp);
+
+    return getUser(id)!;
+  }
+
+  function listUsers() {
+    const rows = db.prepare("SELECT * FROM users ORDER BY created_at, rowid").all() as UserRow[];
+    return rows.map(toUser);
+  }
+
+  function getUser(userId: string) {
+    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    return row ? toUser(row) : null;
+  }
+
+  function getUserWithPasswordHashByUsername(username: string) {
+    const row = db.prepare("SELECT * FROM users WHERE username = ?").get(username.trim()) as UserRow | undefined;
+    return row ? toUserWithPasswordHash(row) : null;
+  }
+
+  async function verifyPasswordLogin(username: string, password: string) {
+    const parsed = CredentialsLoginSchema.parse({ username, password });
+    const user = getUserWithPasswordHashByUsername(parsed.username);
+    if (!user?.isActive || !user.passwordHash) return null;
+
+    const isValid = await verifyPassword(parsed.password, user.passwordHash);
+    if (!isValid) return null;
+
+    return UserSchema.parse({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    });
+  }
+
+  async function resetUserPassword(userId: string, password: string) {
+    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    if (!existing) throw new Error("User was not found.");
+
+    const parsed = ResetPasswordSchema.parse({ password });
+    const passwordHash = await hashPassword(parsed.password);
+    db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(passwordHash, now(), userId);
+
+    return getUser(userId)!;
+  }
+
+  function activeAdminCountExcluding(userId: string) {
+    const row = db
+      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = 1 AND id <> ?")
+      .get(userId) as { count: number };
+    return row.count;
+  }
+
+  async function setUserActive(userId: string, isActive: boolean) {
+    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    if (!existing) throw new Error("User was not found.");
+
+    if (
+      userCount() > 1 &&
+      existing.role === "admin" &&
+      Boolean(existing.is_active) &&
+      !isActive &&
+      activeAdminCountExcluding(userId) === 0
+    ) {
+      throw new Error("Cannot deactivate the final active administrator.");
+    }
+
+    db.prepare("UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?").run(isActive ? 1 : 0, now(), userId);
+    return getUser(userId)!;
+  }
+
+  async function setUserRole(userId: string, role: UserRole) {
+    const parsedRole = UserRoleSchema.parse(role);
+    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    if (!existing) throw new Error("User was not found.");
+
+    if (
+      existing.role === "admin" &&
+      Boolean(existing.is_active) &&
+      parsedRole !== "admin" &&
+      activeAdminCountExcluding(userId) === 0
+    ) {
+      throw new Error("Cannot demote the final active administrator.");
+    }
+
+    db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(parsedRole, now(), userId);
+    return getUser(userId)!;
+  }
+
+  function bindOidcIdentity(userId: string, input: OidcIdentityUpsert) {
+    const user = getUser(userId);
+    if (!user) throw new Error("User was not found.");
+
+    const parsed = OidcIdentityUpsertSchema.parse(input);
+    const existing = db
+      .prepare("SELECT id FROM user_oidc_identities WHERE issuer = ? AND subject = ?")
+      .get(parsed.issuer, parsed.subject);
+    if (existing) throw new Error("OIDC identity is already bound.");
+
+    const id = nanoid();
+    const timestamp = now();
+    db.prepare(
+      `
+        INSERT INTO user_oidc_identities (id, user_id, issuer, subject, email, name, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(id, userId, parsed.issuer, parsed.subject, parsed.email, parsed.name, timestamp, timestamp);
+
+    return toOidcIdentity(db.prepare("SELECT * FROM user_oidc_identities WHERE id = ?").get(id) as OidcIdentityRow);
+  }
+
+  function deleteOidcIdentity(identityId: string) {
+    db.prepare("DELETE FROM user_oidc_identities WHERE id = ?").run(identityId);
+  }
+
+  function findUserByOidcIdentity(issuer: string, subject: string) {
+    const row = db
+      .prepare(
+        `
+          SELECT users.*
+          FROM user_oidc_identities
+          JOIN users ON users.id = user_oidc_identities.user_id
+          WHERE user_oidc_identities.issuer = ? AND user_oidc_identities.subject = ? AND users.is_active = 1
+        `
+      )
+      .get(issuer.trim(), subject.trim()) as UserRow | undefined;
+
+    return row ? toUser(row) : null;
   }
 
   function getRootMemory() {
@@ -1269,6 +1519,19 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   return {
+    createInitialAdmin,
+    createUser,
+    listUsers,
+    getUser,
+    getUserWithPasswordHashByUsername,
+    verifyPasswordLogin,
+    resetUserPassword,
+    setUserActive,
+    setUserRole,
+    bindOidcIdentity,
+    deleteOidcIdentity,
+    findUserByOidcIdentity,
+    hasUsers,
     getRootMemory,
     saveRootMemory,
     listCreationRequestOptions,

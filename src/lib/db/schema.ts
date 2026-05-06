@@ -3,8 +3,41 @@ import { check, integer, primaryKey, sqliteTable, text, unique } from "drizzle-o
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 // The raw DDL in client.ts is the authoritative migration source; this Drizzle schema mirrors table shape and constraints for future migration work.
+export const users = sqliteTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    username: text("username").notNull().unique(),
+    displayName: text("display_name").notNull(),
+    passwordHash: text("password_hash"),
+    role: text("role").notNull(),
+    isActive: integer("is_active").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+  },
+  (table) => [check("users_role_check", sql`${table.role} IN ('admin', 'member')`)]
+);
+
+export const userOidcIdentities = sqliteTable(
+  "user_oidc_identities",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    issuer: text("issuer").notNull(),
+    subject: text("subject").notNull(),
+    email: text("email").notNull().default(""),
+    name: text("name").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+  },
+  (table) => [unique("user_oidc_identities_issuer_subject_unique").on(table.issuer, table.subject)]
+);
+
 export const rootMemory = sqliteTable("root_memory", {
   id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id),
   preferencesJson: text("preferences_json").notNull(),
   summary: text("summary").notNull(),
   learnedSummary: text("learned_summary").notNull(),
@@ -14,6 +47,7 @@ export const rootMemory = sqliteTable("root_memory", {
 
 export const skills = sqliteTable("skills", {
   id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id),
   title: text("title").notNull(),
   category: text("category").notNull(),
   description: text("description").notNull(),
@@ -28,6 +62,7 @@ export const skills = sqliteTable("skills", {
 
 export const creationRequestOptions = sqliteTable("creation_request_options", {
   id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id),
   label: text("label").notNull(),
   sortOrder: integer("sort_order").notNull(),
   isArchived: integer("is_archived").notNull(),
@@ -39,6 +74,7 @@ export const sessions = sqliteTable(
   "sessions",
   {
     id: text("id").primaryKey(),
+    userId: text("user_id").references(() => users.id),
     rootMemoryId: text("root_memory_id")
       .notNull()
       .references(() => rootMemory.id),

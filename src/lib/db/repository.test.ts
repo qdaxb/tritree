@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
+import { hashPassword } from "@/lib/auth/password";
 import { createTreeableRepository } from "./repository";
 import type { BranchOption, DirectorOutput, OptionGenerationMode } from "@/lib/domain";
 
@@ -138,6 +139,80 @@ function createHistoricalGeneratedChild(
 }
 
 describe("Treeable repository", () => {
+  it("creates the first local user as the initial administrator", async () => {
+    const repo = createTreeableRepository(testDbPath());
+
+    expect(repo.hasUsers()).toBe(false);
+
+    const admin = await repo.createInitialAdmin({
+      username: "awei",
+      displayName: "Awei",
+      password: "correct horse battery staple"
+    });
+
+    expect(repo.hasUsers()).toBe(true);
+    expect(admin).toEqual(
+      expect.objectContaining({
+        username: "awei",
+        displayName: "Awei",
+        role: "admin",
+        isActive: true
+      })
+    );
+    expect(admin).not.toHaveProperty("passwordHash");
+    await expect(repo.createInitialAdmin({ username: "second", displayName: "Second", password: "password-123" })).rejects.toThrow(
+      "Initial administrator already exists."
+    );
+  });
+
+  it("verifies local password login without exposing inactive users", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({
+      username: "awei",
+      displayName: "Awei",
+      password: "correct horse battery staple"
+    });
+
+    await expect(repo.verifyPasswordLogin("awei", "correct horse battery staple")).resolves.toEqual(
+      expect.objectContaining({ id: admin.id, username: "awei", role: "admin" })
+    );
+    await expect(repo.verifyPasswordLogin("awei", "wrong password")).resolves.toBeNull();
+    await repo.setUserActive(admin.id, false);
+    await expect(repo.verifyPasswordLogin("awei", "correct horse battery staple")).resolves.toBeNull();
+  });
+
+  it("manages users and protects the final active administrator", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
+    const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
+
+    expect(repo.listUsers().map((user) => user.username)).toEqual(["awei", "writer"]);
+    expect(repo.listUsers()[0]).not.toHaveProperty("passwordHash");
+    expect(await repo.setUserRole(member.id, "admin")).toEqual(expect.objectContaining({ role: "admin" }));
+    await expect(repo.setUserRole(admin.id, "member")).resolves.toEqual(expect.objectContaining({ role: "member" }));
+    await expect(repo.setUserActive(member.id, false)).rejects.toThrow("Cannot deactivate the final active administrator.");
+  });
+
+  it("binds OIDC identities to existing users", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
+
+    const identity = repo.bindOidcIdentity(admin.id, {
+      issuer: "https://issuer.example.com",
+      subject: "oidc-subject-1",
+      email: "awei@example.com",
+      name: "Awei OIDC"
+    });
+
+    expect(identity).toEqual(expect.objectContaining({ userId: admin.id, issuer: "https://issuer.example.com", subject: "oidc-subject-1" }));
+    expect(repo.findUserByOidcIdentity("https://issuer.example.com", "oidc-subject-1")).toEqual(
+      expect.objectContaining({ id: admin.id, username: "awei" })
+    );
+    expect(() =>
+      repo.bindOidcIdentity(admin.id, { issuer: "https://issuer.example.com", subject: "oidc-subject-1" })
+    ).toThrow("OIDC identity is already bound.");
+  });
+
   it("seeds system skills idempotently", () => {
     const dbPath = testDbPath();
     const first = createTreeableRepository(dbPath);
