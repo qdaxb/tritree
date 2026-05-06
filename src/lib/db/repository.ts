@@ -781,7 +781,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     return row.count;
   }
 
-  async function setUserActive(userId: string, isActive: boolean) {
+  function setUserActive(userId: string, isActive: boolean) {
     const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
     if (!existing) throw new Error("User was not found.");
 
@@ -798,7 +798,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     return getUser(userId)!;
   }
 
-  async function setUserRole(userId: string, role: UserRole) {
+  function setUserRole(userId: string, role: UserRole) {
     const parsedRole = UserRoleSchema.parse(role);
     const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
     if (!existing) throw new Error("User was not found.");

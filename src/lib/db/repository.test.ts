@@ -163,7 +163,7 @@ describe("Treeable repository", () => {
     await expect(repo.createInitialAdmin({ username: "second", displayName: "Second", password: "password-123" })).rejects.toThrow(
       "Initial administrator already exists."
     );
-    await expect(repo.setUserActive(admin.id, false)).rejects.toThrow("Cannot deactivate the final active administrator.");
+    expect(() => repo.setUserActive(admin.id, false)).toThrow("Cannot deactivate the final active administrator.");
   });
 
   it("verifies local password login without exposing inactive users", async () => {
@@ -187,7 +187,7 @@ describe("Treeable repository", () => {
     await expect(repo.verifyPasswordLogin("writer", "password-456")).resolves.toEqual(
       expect.objectContaining({ id: member.id, username: "writer", role: "member" })
     );
-    await repo.setUserActive(member.id, false);
+    repo.setUserActive(member.id, false);
     await expect(repo.verifyPasswordLogin("writer", "password-456")).resolves.toBeNull();
   });
 
@@ -198,9 +198,9 @@ describe("Treeable repository", () => {
 
     expect(repo.listUsers().map((user) => user.username)).toEqual(["awei", "writer"]);
     expect(repo.listUsers()[0]).not.toHaveProperty("passwordHash");
-    expect(await repo.setUserRole(member.id, "admin")).toEqual(expect.objectContaining({ role: "admin" }));
-    await expect(repo.setUserRole(admin.id, "member")).resolves.toEqual(expect.objectContaining({ role: "member" }));
-    await expect(repo.setUserActive(member.id, false)).rejects.toThrow("Cannot deactivate the final active administrator.");
+    expect(repo.setUserRole(member.id, "admin")).toEqual(expect.objectContaining({ role: "admin" }));
+    expect(repo.setUserRole(admin.id, "member")).toEqual(expect.objectContaining({ role: "member" }));
+    expect(() => repo.setUserActive(member.id, false)).toThrow("Cannot deactivate the final active administrator.");
   });
 
   it("binds OIDC identities to existing users", async () => {
