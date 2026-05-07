@@ -658,6 +658,28 @@ button:disabled {
   justify-content: space-between;
 }
 
+.root-setup__topline-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.root-setup__topline-actions .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.root-setup__topline-actions .secondary-button svg {
+  flex: 0 0 auto;
+}
+
 .root-setup__skills {
   display: grid;
   gap: 12px;

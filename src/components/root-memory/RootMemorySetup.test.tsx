@@ -77,6 +77,12 @@ describe("RootMemorySetup", () => {
     expect(screen.getByRole("button", { name: "用这个念头开始" })).toBeDisabled();
   });
 
+  it("links to draft management from the seed screen", () => {
+    renderRootMemorySetup();
+
+    expect(screen.getByRole("link", { name: "我的草稿" })).toHaveAttribute("href", "/drafts");
+  });
+
   it("submits the seed without requiring a first guide", async () => {
     const onSubmit = vi.fn();
     renderRootMemorySetup({ onSubmit });

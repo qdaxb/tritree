@@ -34,6 +34,12 @@ describe("auth config", () => {
     expect(getRepositoryMock).not.toHaveBeenCalled();
   });
 
+  it("uses an explicit auth secret and a stable development fallback", () => {
+    expect(buildAuthConfig({ env: { NEXTAUTH_SECRET: " local-secret " } }).secret).toBe("local-secret");
+    expect(buildAuthConfig({ env: { NODE_ENV: "development" } }).secret).toBe("tritree-development-auth-secret");
+    expect(buildAuthConfig({ env: { NODE_ENV: "production" } }).secret).toBeUndefined();
+  });
+
   it("returns a local auth user for valid credentials", async () => {
     const repository = createRepository();
     repository.verifyPasswordLogin.mockResolvedValue(localUser);

@@ -8,7 +8,7 @@ import { getRepository } from "@/lib/db/repository";
 
 import { getOidcConfig } from "./env";
 
-type AuthEnv = Parameters<typeof getOidcConfig>[0];
+type AuthEnv = NonNullable<Parameters<typeof getOidcConfig>[0]>;
 type Repository = Pick<ReturnType<typeof getRepository>, "verifyPasswordLogin" | "findUserByOidcIdentity">;
 
 type AuthUser = NextAuthUser & {
@@ -77,6 +77,12 @@ function localTokenFrom(source: LocalTokenSource): JWT {
   };
 }
 
+function authSecretFrom(env: AuthEnv) {
+  const explicitSecret = env.NEXTAUTH_SECRET?.trim();
+  if (explicitSecret) return explicitSecret;
+  return env.NODE_ENV === "development" ? "tritree-development-auth-secret" : undefined;
+}
+
 export function buildAuthConfig({
   env = process.env,
   repository
@@ -116,6 +122,7 @@ export function buildAuthConfig({
   }
 
   return {
+    secret: authSecretFrom(env),
     session: { strategy: "jwt" },
     providers,
     callbacks: {

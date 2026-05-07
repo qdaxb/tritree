@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, FileText, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { SkillPicker } from "@/components/skills/SkillPicker";
 import { DEFAULT_CREATION_REQUEST_OPTIONS, type CreationRequestOption, type RootPreferences, type Skill } from "@/lib/domain";
 
@@ -216,11 +217,17 @@ export function RootMemorySetup({
       <section className="root-setup__panel">
         <div className="root-setup__topline">
           <p className="eyebrow">创作 Seed</p>
-          {onBack ? (
-            <button className="secondary-button" disabled={isSaving} onClick={onBack} type="button">
-              返回当前作品
-            </button>
-          ) : null}
+          <div className="root-setup__topline-actions">
+            <Link className="secondary-button root-setup__drafts-link" href="/drafts">
+              <FileText aria-hidden="true" size={16} strokeWidth={2.25} />
+              <span>我的草稿</span>
+            </Link>
+            {onBack ? (
+              <button className="secondary-button" disabled={isSaving} onClick={onBack} type="button">
+                返回当前作品
+              </button>
+            ) : null}
+          </div>
         </div>
         <h1>先写下一个念头。</h1>
         <p className="root-setup__copy">
