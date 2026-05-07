@@ -1214,6 +1214,7 @@ button:disabled {
 
 .account-controls__admin-link span,
 .account-controls button span,
+.workspace-actions .secondary-button span,
 .workspace-actions button span {
   display: inline;
   max-width: none;
@@ -1224,6 +1225,7 @@ button:disabled {
 
 .account-controls__admin-link svg,
 .account-controls button svg,
+.workspace-actions .secondary-button svg,
 .workspace-actions button svg {
   flex: 0 0 auto;
 }
@@ -1243,15 +1245,20 @@ button:disabled {
 .workspace-actions {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 
 .workspace-actions .start-button,
 .workspace-actions .secondary-button {
+  min-width: max-content;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  line-height: 1;
+  text-decoration: none;
   white-space: nowrap;
 }
 

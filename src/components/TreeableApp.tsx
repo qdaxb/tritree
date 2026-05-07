@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { signOut } from "next-auth/react";
-import { LogOut, Plus, RotateCcw, UsersRound } from "lucide-react";
+import { FileText, LogOut, Plus, RotateCcw, UsersRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   SessionStateSchema,
@@ -47,6 +47,11 @@ type CurrentUserView = {
   displayName: string;
   role: UserRole;
   isAdmin: boolean;
+};
+type TreeableAppProps = {
+  currentUser?: CurrentUserView;
+  initialSessionId?: string;
+  startNewDraft?: boolean;
 };
 
 function defaultCreationRequestOptions(): CreationRequestOption[] {
@@ -369,7 +374,13 @@ function incomingOptionLabelForNode(node: TreeNode, nodesById: Map<string, TreeN
   return null;
 }
 
-export function TreeableApp({ currentUser }: { currentUser?: CurrentUserView } = {}) {
+const emptyRootSetupDefaults: RootSetupDefaults = {
+  creationRequest: "",
+  enabledSkillIds: [],
+  seed: ""
+};
+
+export function TreeableApp({ currentUser, initialSessionId, startNewDraft = false }: TreeableAppProps = {}) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [rootMemory, setRootMemory] = useState<RootMemory | null>(null);
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
@@ -399,10 +410,13 @@ export function TreeableApp({ currentUser }: { currentUser?: CurrentUserView } =
   const activeMobilePanelRef = useRef<MobilePanel>("tree");
   const isMobileLayoutRef = useRef(false);
   const mobileGenerationPanelOverrideRef = useRef(false);
+  const loadRequestIdRef = useRef(0);
 
   useEffect(() => {
-    void loadRoot();
-  }, []);
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
+    void loadRoot(requestId);
+  }, [initialSessionId, startNewDraft]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
@@ -489,7 +503,14 @@ export function TreeableApp({ currentUser }: { currentUser?: CurrentUserView } =
     clearMobilePanelUnread("draft");
   }
 
-  async function loadRoot() {
+  function isCurrentLoadRequest(requestId: number) {
+    return loadRequestIdRef.current === requestId;
+  }
+
+  async function loadRoot(requestId: number) {
+    setLoadState("loading");
+    setMessage("");
+    setRootSetupDefaults(null);
     try {
       const skillsResponse = await fetch("/api/skills");
       const skillsData = (await skillsResponse.json()) as {
@@ -497,32 +518,64 @@ export function TreeableApp({ currentUser }: { currentUser?: CurrentUserView } =
         error?: string;
         skills?: Skill[];
       };
+      if (!isCurrentLoadRequest(requestId)) return;
       if (!skillsResponse.ok || !skillsData.skills) throw new Error(skillsData.error ?? "技能加载失败。");
       setSkills(skillsData.skills);
       setCreationRequestOptions(skillsData.creationRequestOptions ?? defaultCreationRequestOptions());
 
       const response = await fetch("/api/root-memory");
+      if (!isCurrentLoadRequest(requestId)) return;
       if (!response.ok) throw new Error("Seed 加载失败。");
       const data = (await response.json()) as { rootMemory: RootMemory | null };
+      if (!isCurrentLoadRequest(requestId)) return;
+      setRootMemory(data.rootMemory);
+      if (startNewDraft) {
+        setSessionState(null);
+        setRootSetupDefaults(emptyRootSetupDefaults);
+        setLoadState("root");
+        return;
+      }
+
+      if (initialSessionId) {
+        try {
+          const sessionResponse = await fetch(`/api/sessions/${encodeURIComponent(initialSessionId)}`);
+          const sessionData = (await sessionResponse.json()) as { state?: SessionState | null; error?: string };
+          if (!isCurrentLoadRequest(requestId)) return;
+          if (!sessionResponse.ok || !sessionData.state) throw new Error(sessionData.error ?? "草稿不存在或已归档。");
+          const requestedState = SessionStateSchema.parse(sessionData.state);
+
+          setRootMemory(requestedState.rootMemory);
+          setSessionState(requestedState);
+          setLoadState("ready");
+          return;
+        } catch {
+          if (!isCurrentLoadRequest(requestId)) return;
+          setSessionState(null);
+          setRootSetupDefaults(emptyRootSetupDefaults);
+          setMessage("草稿不存在或已归档。");
+          setLoadState("root");
+          return;
+        }
+      }
+
       if (!data.rootMemory?.preferences.seed.trim()) {
-        setRootMemory(data.rootMemory);
         setLoadState("root");
         return;
       }
 
       const sessionResponse = await fetch("/api/sessions");
       const sessionData = (await sessionResponse.json()) as { state?: SessionState | null; error?: string };
+      if (!isCurrentLoadRequest(requestId)) return;
       if (!sessionResponse.ok) throw new Error(sessionData.error ?? "创作树加载失败。");
       if (!sessionData.state) {
-        setRootMemory(data.rootMemory);
         setLoadState("root");
         return;
       }
 
-      setRootMemory(data.rootMemory);
       setSessionState(sessionData.state);
       setLoadState("ready");
     } catch (error) {
+      if (!isCurrentLoadRequest(requestId)) return;
       setMessage(error instanceof Error ? error.message : "无法加载 Seed。");
       setLoadState("error");
     }
@@ -1407,6 +1460,12 @@ export function TreeableApp({ currentUser }: { currentUser?: CurrentUserView } =
             </div>
           ) : null}
           <div className="workspace-actions" role="group" aria-label="作品操作">
+            {currentUser ? (
+              <Link className="secondary-button" href="/drafts">
+                <FileText aria-hidden="true" size={16} strokeWidth={2.25} />
+                <span>我的草稿</span>
+              </Link>
+            ) : null}
             <button className="start-button" disabled={isBusy} onClick={startNewSeed} type="button">
               <Plus aria-hidden="true" size={17} strokeWidth={2.4} />
               <span>新念头</span>

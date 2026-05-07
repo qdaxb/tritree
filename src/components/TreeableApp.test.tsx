@@ -419,6 +419,148 @@ describe("TreeableApp", () => {
     expect(screen.queryByLabelText("历史路径地图")).not.toBeInTheDocument();
   });
 
+  it("opens the requested draft when an initial session id is provided", async () => {
+    const requestedState = {
+      ...activeState,
+      session: { ...activeState.session, id: "session deep/link", title: "Deep Link" }
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: requestedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp initialSessionId="session deep/link" />);
+
+    expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions/session%20deep%2Flink");
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/sessions");
+  });
+
+  it("opens the requested draft even when the current root memory has no seed", async () => {
+    const requestedRootMemory = {
+      ...rootMemory,
+      preferences: {
+        ...rootMemory.preferences,
+        seed: "深链里的旧念头"
+      },
+      summary: "Seed：深链里的旧念头"
+    };
+    const requestedState = {
+      ...activeState,
+      rootMemory: requestedRootMemory,
+      session: { ...activeState.session, id: "session-1", title: "Deep Link" }
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory: null }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: requestedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp initialSessionId="session-1" />);
+
+    expect(await screen.findByText("Seed：深链里的旧念头")).toBeInTheDocument();
+    expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions/session-1");
+  });
+
+  it("starts a blank draft setup when requested without loading an existing session", async () => {
+    const rootMemoryWithRequest = {
+      ...rootMemory,
+      preferences: {
+        ...rootMemory.preferences,
+        creationRequest: "复用旧要求"
+      }
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory: rootMemoryWithRequest }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp startNewDraft />);
+
+    expect(await screen.findByRole("textbox", { name: "创作 seed" })).toHaveValue("");
+    expect(screen.getByText("未启用技能")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "展开自定义创作要求" }));
+    expect(screen.getByRole("textbox", { name: "自定义创作要求" })).toHaveValue("");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/sessions");
+  });
+
+  it("falls back to blank seed setup when the requested draft cannot be opened", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "not found" }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp initialSessionId="archived-session" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("草稿不存在或已归档。");
+    expect(screen.getByRole("textbox", { name: "创作 seed" })).toHaveValue("");
+    expect(screen.getByText("未启用技能")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions/archived-session");
+  });
+
+  it("clears a failed deep-link message when starting a new blank draft", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "not found" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<TreeableApp initialSessionId="missing-session" />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("草稿不存在或已归档。");
+    rerender(<TreeableApp startNewDraft />);
+
+    expect(await screen.findByRole("textbox", { name: "创作 seed" })).toHaveValue("");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it("ignores stale latest-session loads after switching to a blank draft setup", async () => {
+    let resolveLatestSession: (response: { ok: boolean; json: () => Promise<{ state: typeof finishedState }> }) => void =
+      () => {};
+    const delayedLatestSession = new Promise<{ ok: boolean; json: () => Promise<{ state: typeof finishedState }> }>(
+      (resolve) => {
+        resolveLatestSession = resolve;
+      }
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockReturnValueOnce(delayedLatestSession)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<TreeableApp />);
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions");
+    });
+    rerender(<TreeableApp startNewDraft />);
+
+    expect(await screen.findByRole("textbox", { name: "创作 seed" })).toHaveValue("");
+    await act(async () => {
+      resolveLatestSession({ ok: true, json: async () => ({ state: finishedState }) });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("textbox", { name: "创作 seed" })).toHaveValue("");
+    expect(screen.queryByTestId("tree-canvas")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
   it("renders mobile panel controls with tree active by default", async () => {
     installMobileViewport();
     const fetchMock = vi
@@ -523,6 +665,31 @@ describe("TreeableApp", () => {
       expect(within(workspaceActions).getByRole("button", { name: "新念头" })).toBeInTheDocument();
       expect(within(workspaceActions).getByRole("button", { name: "重新开始" })).toBeInTheDocument();
       expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
+    });
+
+    it("shows a draft library link for logged-in users", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TreeableApp
+          currentUser={{
+            id: "user-2",
+            username: "xiaolin",
+            displayName: "Xiaolin",
+            role: "member",
+            isAdmin: false
+          }}
+        />
+      );
+
+      const workspaceActions = await screen.findByRole("group", { name: "作品操作" });
+      expect(within(workspaceActions).getByRole("link", { name: "我的草稿" })).toHaveAttribute("href", "/drafts");
+      expect(within(workspaceActions).getByRole("link", { name: "我的草稿" })).toHaveClass("secondary-button");
     });
 
     it("signs out to the login page", async () => {
