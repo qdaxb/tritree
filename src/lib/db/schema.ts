@@ -82,6 +82,7 @@ export const sessions = sqliteTable(
     status: text("status").notNull(),
     currentNodeId: text("current_node_id"),
     isArchived: integer("is_archived").notNull().default(0),
+    toolMemory: text("tool_memory").notNull().default(""),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
   },

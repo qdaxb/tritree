@@ -97,6 +97,8 @@ describe("agent instructions", () => {
     expect(draftInstructions).toContain("未列出时不要假设可以查询外部信息");
     expect(draftInstructions).toContain("本任务产出的用户可见字段包括：roundIntent、draft.title、draft.body、draft.hashtags、draft.imagePrompt 和 memoryObservation");
     expect(draftInstructions).toContain("如果 Skill 要求固定文本、格式、语气或其他可观察结果，最终返回字段里必须能直接看见对应结果");
+    expect(draftInstructions).toContain("这里的输出要求指结构化结果或最终提交工具参数里的字段，不是额外自然语言消息");
+    expect(draftInstructions).toContain("最终结构化结果必须覆盖：本轮意图、标题、正文、话题、配图提示和偏好观察");
     expect(draftInstructions).toContain("已启用 Skills 明确要求的非中文文本除外");
     expect(draftInstructions).toContain("确认每个已启用 Skill 的要求已落实");
     expect(draftInstructions.indexOf("# 已启用 Skills")).toBeGreaterThan(draftInstructions.indexOf("# 作者任务"));
@@ -111,6 +113,7 @@ describe("agent instructions", () => {
     expect(draftInstructions).not.toContain("三选一");
     expect(draftInstructions).not.toContain("one-of-three");
     expect(draftInstructions).not.toContain("AI 调用");
+    expect(draftInstructions).not.toContain("返回内容需要包含");
     expect(draftInstructions).not.toContain("Seed：写一段天气文字");
     expect(draftInstructions).not.toContain("用户喜欢具体、自然的表达。");
 
@@ -133,6 +136,8 @@ describe("agent instructions", () => {
     expect(optionsInstructions).toContain("未列出时不要假设可以查询外部信息");
     expect(optionsInstructions).toContain("本任务产出的用户可见字段包括：roundIntent、options[].label、options[].description、options[].impact 和 memoryObservation");
     expect(optionsInstructions).toContain("如果 Skill 要求固定文本、格式、语气或其他可观察结果，最终返回字段里必须能直接看见对应结果");
+    expect(optionsInstructions).toContain("这里的输出要求指结构化结果或最终提交工具参数里的字段，不是额外自然语言消息");
+    expect(optionsInstructions).toContain("最终结构化结果还必须覆盖一句本轮编辑判断和一句偏好观察");
     expect(optionsInstructions).toContain("已启用 Skills 明确要求的非中文文本除外");
     expect(optionsInstructions).toContain("确认每个已启用 Skill 的要求已落实");
     expect(optionsInstructions.indexOf("# 已启用 Skills")).toBeGreaterThan(optionsInstructions.indexOf("# 责任编辑任务"));
@@ -149,6 +154,7 @@ describe("agent instructions", () => {
     expect(optionsInstructions).not.toContain("三选一");
     expect(optionsInstructions).not.toContain("one-of-three");
     expect(optionsInstructions).not.toContain("AI 调用");
+    expect(optionsInstructions).not.toContain("返回内容还需要包含");
     expect(optionsInstructions).not.toContain("Seed：写一段天气文字");
     expect(optionsInstructions).not.toContain("用户喜欢具体、自然的表达。");
   });

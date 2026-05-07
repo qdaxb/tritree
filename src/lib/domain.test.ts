@@ -268,9 +268,21 @@ describe("SkillSchema", () => {
         title: "长提示词",
         category: "约束",
         description: "过长输入。",
-        prompt: "太长".repeat(5000)
+        prompt: "太长".repeat(60000)
       })
     ).toThrow();
+  });
+
+  it("accepts long generic SKILL.md prompts", () => {
+    const parsed = SkillUpsertSchema.parse({
+      title: "xhs-publish",
+      category: "平台",
+      description: "导入的小红书发布技能。",
+      prompt: "发布前确认。\n".repeat(3000),
+      appliesTo: "both"
+    });
+
+    expect(parsed.prompt.length).toBeGreaterThan(20000);
   });
 
   it("accepts skill applicability and defaults custom skills to shared constraints", () => {
@@ -500,5 +512,6 @@ describe("SessionStateSchema", () => {
     });
 
     expect(parsed.session.status).toBe("active");
+    expect(parsed.toolMemory).toBe("");
   });
 });

@@ -1367,6 +1367,40 @@ button:disabled {
   justify-content: flex-start;
 }
 
+.skill-importer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 8px;
+}
+
+.skill-importer label {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.skill-importer input {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.skill-importer .skill-editor__error {
+  grid-column: 1 / -1;
+}
+
 .skill-editor {
   display: grid;
   gap: 12px;
@@ -1400,6 +1434,30 @@ button:disabled {
 .skill-editor textarea {
   line-height: 1.45;
   resize: vertical;
+}
+
+.skill-editor__effect {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 8px;
+}
+
+.skill-editor__effect legend {
+  padding: 0 4px;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.skill-editor__effect .skill-editor__check {
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 8px;
 }
 
 .skill-editor__check {

@@ -4,12 +4,13 @@ export const OptionGenerationModeSchema = z.enum(["divergent", "balanced", "focu
 
 export const SkillCategorySchema = z.enum(["方向", "约束", "风格", "平台", "检查"]);
 export const SkillAppliesToSchema = z.enum(["writer", "editor", "both"]);
+export const MAX_SKILL_PROMPT_LENGTH = 100000;
 
 export const SkillUpsertSchema = z.object({
   title: z.string().trim().min(1).max(40),
   category: SkillCategorySchema,
   description: z.string().trim().max(240),
-  prompt: z.string().trim().min(1).max(4000),
+  prompt: z.string().trim().min(1).max(MAX_SKILL_PROMPT_LENGTH),
   appliesTo: SkillAppliesToSchema.default("both"),
   defaultEnabled: z.boolean().default(false),
   isArchived: z.boolean().default(false)
@@ -379,6 +380,7 @@ export const SessionStateSchema = z.object({
   nodeDrafts: z.array(NodeDraftSchema).default([]),
   selectedPath: z.array(TreeNodeSchema),
   treeNodes: z.array(TreeNodeSchema).optional(),
+  toolMemory: z.string().default(""),
   enabledSkillIds: z.array(z.string().min(1)).default([]),
   enabledSkills: z.array(SkillSchema).default([]),
   foldedBranches: z.array(FoldedBranchSchema),

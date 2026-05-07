@@ -14,21 +14,120 @@ export function badRequestResponse(error: unknown) {
 }
 
 export function publicServerErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message.includes("KIMI_API_KEY")) {
-    return "缺少 Kimi API Key。";
-  }
+  const details = publicErrorDetails(error);
 
-  if (isErrorLike(error) && (error.status === 401 || error.code === "authentication_error")) {
-    return "Kimi API Key 无效或无权限。";
-  }
-
-  if (isErrorLike(error) && (error.code === "insufficient_quota" || error.status === 429)) {
-    return "AI 项目额度不足或账单不可用。";
-  }
-
-  return fallback;
+  if (!details) return fallback;
+  return `${trimSentenceEnd(fallback)}：${formatPublicErrorDetails(details)}`;
 }
 
-function isErrorLike(error: unknown): error is { code?: unknown; status?: unknown } {
-  return typeof error === "object" && error !== null;
+type PublicErrorDetails = {
+  exitCode?: number;
+  identifier?: string;
+  message?: string;
+  retryAfterSeconds?: number;
+  status?: number;
+};
+
+function publicErrorDetails(error: unknown): PublicErrorDetails | null {
+  const errorRecord = asRecord(error);
+  const dataRecord = asRecord(errorRecord?.data);
+  const dataErrorRecord = asRecord(dataRecord?.error);
+  const responseBodyRecord = parseJsonRecord(stringField(errorRecord, "responseBody"));
+  const responseBodyErrorRecord = asRecord(responseBodyRecord?.error);
+  const directErrorRecord = asRecord(errorRecord?.error);
+  const detailsRecord = asRecord(errorRecord?.details);
+  const headers = asRecord(errorRecord?.responseHeaders);
+  const status = numberField(errorRecord, "status") ?? numberField(errorRecord, "statusCode");
+  const exitCode = numberField(errorRecord, "exitCode");
+  const id = stringField(errorRecord, "id") ?? stringField(errorRecord, "code");
+  const domain = stringField(errorRecord, "domain");
+  const category = stringField(errorRecord, "category");
+  const message =
+    stringField(dataErrorRecord, "message") ??
+    stringField(responseBodyErrorRecord, "message") ??
+    stringField(directErrorRecord, "message") ??
+    stringField(errorRecord, "stderr") ??
+    stringField(errorRecord, "stdout") ??
+    (error instanceof Error ? error.message : stringField(errorRecord, "message"));
+
+  const hasExternalBoundaryShape =
+    status !== undefined ||
+    exitCode !== undefined ||
+    dataErrorRecord !== null ||
+    responseBodyErrorRecord !== null ||
+    directErrorRecord !== null ||
+    Boolean(stringField(errorRecord, "url"));
+  const hasStructuredBoundaryShape = Boolean(id && (domain || category || detailsRecord));
+  const hasSafeConfigurationShape = error instanceof Error && /(?:not configured|missing)/i.test(error.message);
+
+  if (!hasExternalBoundaryShape && !hasStructuredBoundaryShape && !hasSafeConfigurationShape) return null;
+
+  const sanitizedMessage = sanitizePublicMessage(message);
+
+  return {
+    exitCode,
+    identifier: hasStructuredBoundaryShape ? [domain, id].filter(Boolean).join("/") : undefined,
+    message: sanitizedMessage,
+    retryAfterSeconds: numberFromUnknown(headers?.["retry-after"] ?? headers?.["x-retry-after"]),
+    status
+  };
+}
+
+function formatPublicErrorDetails(details: PublicErrorDetails) {
+  const headline = details.status !== undefined
+    ? `上游服务返回 ${details.status}`
+    : details.exitCode !== undefined
+      ? `命令退出 ${details.exitCode}`
+      : details.identifier ?? "";
+  const retryHint = details.retryAfterSeconds !== undefined ? `可在 ${details.retryAfterSeconds} 秒后重试` : "";
+  const prefix = [headline, retryHint].filter(Boolean).join("，");
+
+  if (prefix && details.message) return `${prefix}：${details.message}`;
+  if (prefix) return `${prefix}。`;
+  return details.message ?? "发生未知错误。";
+}
+
+function trimSentenceEnd(value: string) {
+  return value.replace(/[。.!?]+$/u, "");
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function stringField(record: Record<string, unknown> | null | undefined, field: string) {
+  const value = record?.[field];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function numberField(record: Record<string, unknown> | null | undefined, field: string) {
+  return numberFromUnknown(record?.[field]);
+}
+
+function numberFromUnknown(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function parseJsonRecord(value: string | undefined) {
+  if (!value) return null;
+  try {
+    return asRecord(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function sanitizePublicMessage(value: string | undefined) {
+  if (!value) return undefined;
+  const collapsed = value.replace(/\s+/g, " ").trim();
+  const redacted = collapsed
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/\b((?:api[_-]?key|token|password|secret)\s*[:=]\s*)["']?[^"',\s}]+/gi, "$1[redacted]")
+    .replace(/([?&](?:api[_-]?key|token|authorization|password|secret|access_token)=)[^&\s]+/gi, "$1[redacted]");
+  return redacted.length > 800 ? `${redacted.slice(0, 797)}...` : redacted;
 }

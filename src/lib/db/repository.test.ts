@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -791,7 +791,7 @@ describe("Treeable repository", () => {
     expect(repo.resolveSkillsByIds([custom.id], undefined as unknown as string)).toEqual([]);
   });
 
-  it("does not resolve legacy null-user non-system skill rows", async () => {
+  it("resolves null-user non-system skills as shared single-machine skills", async () => {
     const dbPath = testDbPath();
     const repo = createTreeableRepository(dbPath);
     const user = await createTestUser(repo, "writer");
@@ -806,7 +806,7 @@ describe("Treeable repository", () => {
       .run();
     sqlite.close();
 
-    expect(repo.resolveSkillsByIds(["legacy-user-skill"], user.id)).toEqual([]);
+    expect(repo.resolveSkillsByIds(["legacy-user-skill"], user.id).map((skill) => skill.id)).toEqual(["legacy-user-skill"]);
   });
 
   it("copies and isolates creation request options per user", async () => {
@@ -889,6 +889,203 @@ describe("Treeable repository", () => {
 
     expect(custom.appliesTo).toBe("writer");
     expect(repo.listSkills(user.id).find((skill) => skill.id === custom.id)?.appliesTo).toBe("writer");
+  });
+
+  it("imports installed executable skills by skill name and updates repeated imports", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
+
+    const [created] = repo.importSkills([
+      {
+        id: "xiaohongshu-skills",
+        title: "xiaohongshu-skills",
+        category: "平台",
+        description: "小红书自动化技能集合。",
+        prompt: "发布前必须让用户确认最终标题、正文和图片。",
+        appliesTo: "both",
+        defaultEnabled: false,
+        isArchived: false
+      }
+    ]);
+
+    expect(created).toMatchObject({
+      id: "xiaohongshu-skills",
+      title: "xiaohongshu-skills",
+      isSystem: false,
+      isArchived: false
+    });
+
+    const [updated] = repo.importSkills([
+      {
+        id: "xiaohongshu-skills",
+        title: "xiaohongshu-skills",
+        category: "平台",
+        description: "更新后的小红书技能集合。",
+        prompt: "新的发布要求。",
+        appliesTo: "writer",
+        defaultEnabled: true,
+        isArchived: false
+      }
+    ]);
+
+    expect(updated).toMatchObject({
+      id: "xiaohongshu-skills",
+      description: "更新后的小红书技能集合。",
+      prompt: "新的发布要求。",
+      appliesTo: "writer",
+      defaultEnabled: true,
+      isArchived: false
+    });
+    expect(repo.listSkills(user.id).filter((skill) => skill.id === "xiaohongshu-skills")).toHaveLength(1);
+  });
+
+  it("discovers installed skills directly from the skill folder", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "tritree-skill-folder-"));
+    const installRoot = path.join(rootDir, ".tritree", "skills");
+    const skillDir = path.join(installRoot, "local-travel");
+    mkdirSync(path.join(skillDir, "skills", "research"), { recursive: true });
+    writeFileSync(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: local-travel\ndescription: 本地旅游写作 Skill。\n---\n\n# Local Travel\n\n根据目的地整理攻略。"
+    );
+    writeFileSync(
+      path.join(skillDir, "skills", "research", "SKILL.md"),
+      "---\nname: research\ndescription: 查询目的地参考资料。\n---\n\n# Research\n\n需要先看真实参考。"
+    );
+    const repo = createTreeableRepository(testDbPath(), { skillInstallRoot: installRoot });
+    const user = await createTestUser(repo, "writer");
+
+    const discovered = repo.listSkills(user.id).find((skill) => skill.id === "local-travel");
+    expect(discovered).toMatchObject({
+      description: "本地旅游写作 Skill。",
+      isSystem: false,
+      title: "local-travel"
+    });
+    expect(discovered?.prompt).toContain("# 可渐进加载的 Skill 文档");
+    expect(discovered?.prompt).toContain("skills/research/SKILL.md");
+    expect(discovered?.prompt).not.toContain("此 Skill 已安装在");
+    expect(discovered?.prompt).not.toContain(installRoot);
+    expect(discovered?.prompt).not.toContain("run_skill_command");
+    expect(discovered?.prompt).not.toContain("需要先看真实参考。");
+    expect(repo.resolveSkillsByIds(["local-travel"], user.id).map((skill) => skill.id)).toEqual(["local-travel"]);
+  });
+
+  it("cleans old imported skill runtime paths from stored prompts", async () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    const user = await createTestUser(repo, "writer");
+    repo.importSkills([
+      {
+        id: "legacy-installed",
+        title: "legacy-installed",
+        category: "平台",
+        description: "旧导入 Skill。",
+        prompt: [
+          "此 Skill 已安装在：/tmp/repo/.tritree/skills/legacy-installed",
+          "来源：https://github.com/example/legacy-installed",
+          "Tritree 是当前 agent runtime。生成选项或草稿时，请按以下 SKILL.md 指令判断是否需要调用可用工具。",
+          "",
+          "# Root Skill",
+          "# Legacy",
+          "",
+          "保留真实指令。"
+        ].join("\n"),
+        appliesTo: "both",
+        defaultEnabled: false,
+        isArchived: false
+      }
+    ]);
+
+    const reopened = createTreeableRepository(dbPath);
+    const skill = reopened.listSkills(user.id).find((item) => item.id === "legacy-installed");
+
+    expect(skill?.prompt).toBe(["# Root Skill", "# Legacy", "", "保留真实指令。"].join("\n"));
+  });
+
+  it("can enable a skill that was added directly to the skill folder", async () => {
+    const rootDir = mkdtempSync(path.join(tmpdir(), "tritree-skill-folder-enable-"));
+    const installRoot = path.join(rootDir, ".tritree", "skills");
+    const skillDir = path.join(installRoot, "local-travel");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: local-travel\ndescription: 本地旅游写作 Skill。\n---\n\n# Local Travel\n\n根据目的地整理攻略。"
+    );
+    const repo = createTreeableRepository(testDbPath(), { skillInstallRoot: installRoot });
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
+      seed: "写一篇青岛旅行攻略",
+      domains: ["旅行"],
+      tones: ["自然"],
+      styles: ["攻略"],
+      personas: ["游客"]
+    });
+
+    const state = createSessionDraftWithOptions(repo, {
+      userId: user.id,
+      rootMemoryId: root.id,
+      enabledSkillIds: ["local-travel"],
+      output: {
+        roundIntent: "Start",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "deepen" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "reframe" }
+        ],
+        draft: { title: "Draft", body: "Body", hashtags: [], imagePrompt: "" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+
+    expect(state.enabledSkillIds).toEqual(["local-travel"]);
+    expect(state.enabledSkills?.[0]).toMatchObject({
+      id: "local-travel",
+      description: "本地旅游写作 Skill。"
+    });
+  });
+
+  it("persists completed tool query memory on generated session outputs", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
+      seed: "写一篇青岛旅行攻略",
+      domains: ["旅行"],
+      tones: ["自然"],
+      styles: ["攻略"],
+      personas: ["游客"]
+    });
+    const draftState = repo.createSessionDraft({
+      userId: user.id,
+      rootMemoryId: root.id,
+      draft: { title: "青岛攻略", body: "先起草。", hashtags: [], imagePrompt: "" },
+      roundIntent: "种子念头"
+    });
+    const toolObservation = [
+      "# 工具查询记忆",
+      "后续轮次优先复用这些结果；不要重复相同查询。",
+      "[工具结果:完成] run_skill_command: {\"feeds\":[{\"displayTitle\":\"青岛三天两晚攻略\"}]}"
+    ].join("\n");
+
+    const state = repo.updateNodeOptions({
+      userId: user.id,
+      sessionId: draftState.session.id,
+      nodeId: draftState.currentNode!.id,
+      output: {
+        roundIntent: "选择差异化角度",
+        options: [
+          { id: "a", label: "本地人视角", description: "避开游客打卡路线。", impact: "形成差异化。", kind: "reframe" },
+          { id: "b", label: "雨天路线", description: "按天气组织。", impact: "更实用。", kind: "explore" },
+          { id: "c", label: "预算路线", description: "按花费拆分。", impact: "更易执行。", kind: "deepen" }
+        ],
+        memoryObservation: toolObservation
+      }
+    });
+
+    expect((state as any).toolMemory).toContain("青岛三天两晚攻略");
+    expect((state as any).toolMemory).toContain("不要重复相同查询");
+    expect((repo.getSessionState(user.id, draftState.session.id) as any).toolMemory).toContain("青岛三天两晚攻略");
   });
 
   it("defaults legacy skill rows to shared applicability during migration", async () => {

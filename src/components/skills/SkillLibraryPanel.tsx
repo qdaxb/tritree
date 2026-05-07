@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Skill, SkillCategory, SkillUpsert } from "@/lib/domain";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MAX_SKILL_PROMPT_LENGTH, type Skill, type SkillCategory, type SkillUpsert } from "@/lib/domain";
 
 const categories: SkillCategory[] = ["方向", "约束", "风格", "平台", "检查"];
 
@@ -26,6 +26,7 @@ export function SkillLibraryPanel({
   onArchive,
   onClose,
   onCreate,
+  onImport,
   onUpdate,
   skills
 }: {
@@ -34,13 +35,24 @@ export function SkillLibraryPanel({
   onArchive: (skillId: string) => void | Promise<void>;
   onClose: () => void;
   onCreate: (input: SkillUpsert) => boolean | void | Promise<boolean | void>;
+  onImport?: (sourceUrl: string) => boolean | void | Promise<boolean | void>;
   onUpdate: (skillId: string, input: SkillUpsert) => boolean | void | Promise<boolean | void>;
   skills: Skill[];
 }) {
   const [editing, setEditing] = useState<EditingState>(null);
   const [form, setForm] = useState<SkillUpsert>(emptyForm);
   const [formError, setFormError] = useState("");
+  const [importUrl, setImportUrl] = useState("");
+  const [importError, setImportError] = useState("");
+  const editorRef = useRef<HTMLElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
   const groupedSkills = useMemo(() => groupSkills(skills), [skills]);
+
+  useEffect(() => {
+    if (!editing) return;
+    editorRef.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    titleInputRef.current?.focus({ preventScroll: true });
+  }, [editing]);
 
   function startCreate() {
     setEditing({ mode: "create", skillId: null });
@@ -85,6 +97,28 @@ export function SkillLibraryPanel({
     setForm(emptyForm);
   }
 
+  async function submitImport() {
+    const sourceUrl = importUrl.trim();
+    if (!sourceUrl) {
+      setImportError("请填写 GitHub 仓库 URL。");
+      return;
+    }
+
+    setImportError("");
+    const result = await onImport?.(sourceUrl);
+    if (result === false) return;
+    setImportUrl("");
+  }
+
+  function toggleAppliesTo(target: "writer" | "editor", checked: boolean) {
+    setForm((current) => {
+      const writer = target === "writer" ? checked : skillAppliesToTarget(current.appliesTo, "writer");
+      const editor = target === "editor" ? checked : skillAppliesToTarget(current.appliesTo, "editor");
+      if (!writer && !editor) return current;
+      return { ...current, appliesTo: appliesToFromTargets({ editor, writer }) };
+    });
+  }
+
   return (
     <aside aria-label="技能库" className="skill-library-panel">
       <header className="skill-library-panel__header">
@@ -109,8 +143,31 @@ export function SkillLibraryPanel({
         </button>
       </div>
 
+      {onImport ? (
+        <section aria-label="导入 Skill 仓库" className="skill-importer">
+          <label>
+            <span>Skill GitHub URL</span>
+            <input
+              aria-label="Skill GitHub URL"
+              disabled={isSaving}
+              onChange={(event) => setImportUrl(event.target.value)}
+              placeholder="https://github.com/owner/skill-name"
+              value={importUrl}
+            />
+          </label>
+          {importError ? (
+            <p className="skill-editor__error" role="alert">
+              {importError}
+            </p>
+          ) : null}
+          <button className="secondary-button" disabled={isSaving} onClick={() => void submitImport()} type="button">
+            导入
+          </button>
+        </section>
+      ) : null}
+
       {editing ? (
-        <section aria-label={editing.mode === "edit" ? "编辑技能" : "新建技能"} className="skill-editor">
+        <section aria-label={editing.mode === "edit" ? "编辑技能" : "新建技能"} className="skill-editor" ref={editorRef}>
           <label>
             <span>技能名称</span>
             <input
@@ -118,6 +175,7 @@ export function SkillLibraryPanel({
               disabled={isSaving}
               maxLength={40}
               onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+              ref={titleInputRef}
               value={form.title}
             />
           </label>
@@ -136,21 +194,27 @@ export function SkillLibraryPanel({
               ))}
             </select>
           </label>
-          <label>
-            <span>作用方式</span>
-            <select
-              aria-label="作用方式"
-              disabled={isSaving}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, appliesTo: event.target.value as SkillUpsert["appliesTo"] }))
-              }
-              value={form.appliesTo}
-            >
-              <option value="writer">写作方式（影响草稿）</option>
-              <option value="editor">审稿重点（影响建议）</option>
-              <option value="both">发布约束（影响全程）</option>
-            </select>
-          </label>
+          <fieldset aria-label="作用方式" className="skill-editor__effect">
+            <legend>作用方式</legend>
+            <label className="skill-editor__check">
+              <input
+                checked={skillAppliesToTarget(form.appliesTo, "writer")}
+                disabled={isSaving}
+                onChange={(event) => toggleAppliesTo("writer", event.target.checked)}
+                type="checkbox"
+              />
+              <span>影响草稿</span>
+            </label>
+            <label className="skill-editor__check">
+              <input
+                checked={skillAppliesToTarget(form.appliesTo, "editor")}
+                disabled={isSaving}
+                onChange={(event) => toggleAppliesTo("editor", event.target.checked)}
+                type="checkbox"
+              />
+              <span>影响建议</span>
+            </label>
+          </fieldset>
           <label>
             <span>说明（选填）</span>
             <textarea
@@ -167,7 +231,7 @@ export function SkillLibraryPanel({
             <textarea
               aria-label="提示词"
               disabled={isSaving}
-              maxLength={4000}
+              maxLength={MAX_SKILL_PROMPT_LENGTH}
               onChange={(event) => setForm((current) => ({ ...current, prompt: event.target.value }))}
               rows={5}
               value={form.prompt}
@@ -236,17 +300,32 @@ export function SkillLibraryPanel({
 function effectLabelFor(appliesTo: Skill["appliesTo"]) {
   if (appliesTo === "writer") return "影响：草稿";
   if (appliesTo === "editor") return "影响：建议";
-  return "影响：全程";
+  return "影响：草稿、建议";
 }
 
 function groupSkills(skills: Skill[]) {
   const groups = [
-    ["写作方式", "writer"],
-    ["审稿重点", "editor"],
-    ["发布约束", "both"]
+    ["影响草稿", "writer"],
+    ["影响建议", "editor"],
+    ["影响草稿和建议", "both"]
   ] as const;
 
   return groups
     .map(([label, appliesTo]) => [label, skills.filter((skill) => skill.appliesTo === appliesTo)] as const)
     .filter(([, groupSkills]) => groupSkills.length > 0);
+}
+
+function skillAppliesToTarget(appliesTo: SkillUpsert["appliesTo"], target: "writer" | "editor") {
+  return appliesTo === "both" || appliesTo === target;
+}
+
+function appliesToFromTargets({
+  editor,
+  writer
+}: {
+  editor: boolean;
+  writer: boolean;
+}): SkillUpsert["appliesTo"] {
+  if (writer && editor) return "both";
+  return writer ? "writer" : "editor";
 }

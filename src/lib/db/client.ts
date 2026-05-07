@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const CURRENT_SCHEMA_VERSION = 7;
+const CURRENT_SCHEMA_VERSION = 8;
 const TREEABLE_TABLES = [
   "publish_packages",
   "branch_history",
@@ -26,7 +26,7 @@ class UnsupportedDatabaseVersionError extends Error {
 }
 
 export function defaultDbPath() {
-  return process.env.TREEABLE_DB_PATH ?? path.join(process.cwd(), ".treeable", "treeable.sqlite");
+  return process.env.TRITREE_DB_PATH ?? process.env.TREEABLE_DB_PATH ?? path.join(process.cwd(), ".tritree", "tritree.sqlite");
 }
 
 export function createDatabase(dbPath = defaultDbPath()) {
@@ -123,6 +123,7 @@ function createSchema(sqlite: DatabaseSync) {
       status TEXT NOT NULL CHECK (status IN ('active', 'finished')),
       current_node_id TEXT,
       is_archived INTEGER NOT NULL DEFAULT 0,
+      tool_memory TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -183,6 +184,7 @@ function createSchema(sqlite: DatabaseSync) {
   addColumnIfMissing(sqlite, "root_memory", "user_id", "TEXT REFERENCES users(id)");
   addColumnIfMissing(sqlite, "sessions", "user_id", "TEXT REFERENCES users(id)");
   addColumnIfMissing(sqlite, "sessions", "is_archived", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(sqlite, "sessions", "tool_memory", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "skills", "user_id", "TEXT REFERENCES users(id)");
   addColumnIfMissing(sqlite, "creation_request_options", "user_id", "TEXT REFERENCES users(id)");
   sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS root_memory_user_id_unique ON root_memory(user_id) WHERE user_id IS NOT NULL;");
