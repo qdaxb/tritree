@@ -385,6 +385,19 @@ export const SessionStateSchema = z.object({
   publishPackage: PublishPackageSchema.nullable()
 });
 
+export const DraftSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: SessionStatusSchema,
+  currentNodeId: z.string().nullable(),
+  currentRoundIndex: z.number().int().nonnegative().nullable(),
+  bodyExcerpt: z.string(),
+  bodyLength: z.number().int().nonnegative(),
+  isArchived: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
 export type RootPreferences = z.input<typeof RootPreferencesSchema>;
 export type CreationRequestOption = z.infer<typeof CreationRequestOptionSchema>;
 export type CreationRequestOptionUpsert = z.input<typeof CreationRequestOptionUpsertSchema>;
@@ -408,6 +421,7 @@ export type FoldedBranch = z.infer<typeof FoldedBranchSchema>;
 export type SessionState = z.input<typeof SessionStateSchema> & {
   nodeDrafts: NodeDraft[];
 };
+export type DraftSummary = z.infer<typeof DraftSummarySchema>;
 
 export function skillAppliesToTarget(skill: Pick<Skill, "appliesTo">, target: SkillTarget) {
   return skill.appliesTo === "both" || skill.appliesTo === target;

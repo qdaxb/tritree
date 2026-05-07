@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const CURRENT_SCHEMA_VERSION = 6;
+const CURRENT_SCHEMA_VERSION = 7;
 const TREEABLE_TABLES = [
   "publish_packages",
   "branch_history",
@@ -122,6 +122,7 @@ function createSchema(sqlite: DatabaseSync) {
       title TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('active', 'finished')),
       current_node_id TEXT,
+      is_archived INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -181,10 +182,12 @@ function createSchema(sqlite: DatabaseSync) {
   addColumnIfMissing(sqlite, "skills", "applies_to", "TEXT NOT NULL DEFAULT 'both'");
   addColumnIfMissing(sqlite, "root_memory", "user_id", "TEXT REFERENCES users(id)");
   addColumnIfMissing(sqlite, "sessions", "user_id", "TEXT REFERENCES users(id)");
+  addColumnIfMissing(sqlite, "sessions", "is_archived", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "skills", "user_id", "TEXT REFERENCES users(id)");
   addColumnIfMissing(sqlite, "creation_request_options", "user_id", "TEXT REFERENCES users(id)");
   sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS root_memory_user_id_unique ON root_memory(user_id) WHERE user_id IS NOT NULL;");
   sqlite.exec("CREATE INDEX IF NOT EXISTS sessions_user_updated_idx ON sessions(user_id, updated_at, created_at);");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS sessions_user_archived_updated_idx ON sessions(user_id, is_archived, updated_at, created_at);");
   sqlite.exec("CREATE INDEX IF NOT EXISTS skills_user_archived_idx ON skills(user_id, is_archived);");
   sqlite.exec("CREATE INDEX IF NOT EXISTS creation_request_options_user_sort_idx ON creation_request_options(user_id, sort_order);");
 }

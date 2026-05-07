@@ -336,6 +336,146 @@ describe("Treeable repository", () => {
     expect(repo.getSessionState(first.id, secondState.session.id)).toBeNull();
   });
 
+  it("lists, renames, and archives draft sessions by user", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
+    const otherUser = await createTestUser(repo, "other-writer");
+    const root = repo.saveRootMemory(user.id, {
+      domains: ["AI"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+    const otherRoot = repo.saveRootMemory(otherUser.id, {
+      domains: ["Work"],
+      tones: ["sincere"],
+      styles: ["story-driven"],
+      personas: ["observer"]
+    });
+
+    const older = createSessionDraftWithOptions(repo, {
+      userId: user.id,
+      rootMemoryId: root.id,
+      output: {
+        roundIntent: "Older",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "explore" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "explore" }
+        ],
+        draft: { title: "Older draft", body: "Older body for the summary list.", hashtags: [], imagePrompt: "" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    const latest = createSessionDraftWithOptions(repo, {
+      userId: user.id,
+      rootMemoryId: root.id,
+      output: {
+        roundIntent: "Latest",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "explore" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "explore" }
+        ],
+        draft: { title: "Latest draft", body: "Latest body for the summary list.", hashtags: [], imagePrompt: "" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    createSessionDraftWithOptions(repo, {
+      userId: otherUser.id,
+      rootMemoryId: otherRoot.id,
+      output: {
+        roundIntent: "Other",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "explore" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "explore" }
+        ],
+        draft: { title: "Other user draft", body: "Other body.", hashtags: [], imagePrompt: "" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+
+    expect(repo.renameSession(otherUser.id, older.session.id, "Not mine")).toBeNull();
+
+    const renamed = repo.renameSession(user.id, older.session.id, "Renamed draft");
+    expect(renamed).toEqual(
+      expect.objectContaining({
+        id: older.session.id,
+        title: "Renamed draft",
+        bodyExcerpt: "Older body for the summary list.",
+        bodyLength: "Older body for the summary list.".length,
+        currentRoundIndex: 1,
+        isArchived: false
+      })
+    );
+
+    expect(repo.archiveSession(otherUser.id, latest.session.id)).toBeNull();
+    const archived = repo.archiveSession(user.id, latest.session.id);
+    expect(archived).toEqual(expect.objectContaining({ id: latest.session.id, isArchived: true }));
+
+    expect(repo.listSessionSummaries(user.id, { archived: false }).map((draft) => draft.id)).toEqual([older.session.id]);
+    expect(repo.listSessionSummaries(user.id, { archived: true }).map((draft) => draft.id)).toEqual([latest.session.id]);
+    expect(repo.getLatestSessionState(user.id)?.session.id).toBe(older.session.id);
+    expect(repo.getSessionState(user.id, latest.session.id)).toBeNull();
+  });
+
+  it("adds the archived flag to legacy sessions during migration", async () => {
+    const dbPath = testDbPath();
+    const sqlite = new DatabaseSync(dbPath);
+    sqlite.exec(`
+      PRAGMA user_version = 0;
+
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        password_hash TEXT,
+        role TEXT NOT NULL,
+        is_active INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE root_memory (
+        id TEXT PRIMARY KEY,
+        user_id TEXT REFERENCES users(id),
+        preferences_json TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        learned_summary TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT REFERENCES users(id),
+        root_memory_id TEXT NOT NULL REFERENCES root_memory(id),
+        title TEXT NOT NULL,
+        status TEXT NOT NULL,
+        current_node_id TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    sqlite.close();
+
+    createTreeableRepository(dbPath);
+    const migrated = new DatabaseSync(dbPath);
+    const columns = migrated.prepare("PRAGMA table_info(sessions);").all() as Array<{ name: string; dflt_value: string | null }>;
+    migrated.close();
+
+    expect(columns).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "is_archived", dflt_value: "0" })])
+    );
+  });
+
   it("isolates custom skills while keeping system skills global", async () => {
     const repo = createTreeableRepository(testDbPath());
     const first = await createTestUser(repo, "first");

@@ -28,6 +28,7 @@ import {
   type DirectorOptionsOutput,
   type DirectorOutput,
   type Draft,
+  type DraftSummary,
   type OptionGenerationMode,
   type RootMemory,
   type RootPreferences,
@@ -42,6 +43,7 @@ import {
   CreationRequestOptionUpsertSchema,
   DEFAULT_CREATION_REQUEST_OPTIONS,
   DEFAULT_SYSTEM_SKILLS,
+  DraftSummarySchema,
   DraftSchema,
   RootPreferencesSchema,
   SessionStateSchema,
@@ -92,8 +94,14 @@ type SessionRow = {
   title: string;
   status: string;
   current_node_id: string | null;
+  is_archived: number;
   created_at: string;
   updated_at: string;
+};
+
+type DraftSummaryRow = SessionRow & {
+  current_round_index: number | null;
+  latest_body: string | null;
 };
 
 type TreeNodeRow = {
@@ -1593,8 +1601,115 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     return latestDraftByNode;
   }
 
+  function toDraftSummary(row: DraftSummaryRow): DraftSummary {
+    const body = row.latest_body ?? "";
+    return DraftSummarySchema.parse({
+      id: row.id,
+      title: row.title,
+      status: SessionStatusSchema.parse(row.status === "finished" ? "active" : row.status),
+      currentNodeId: row.current_node_id,
+      currentRoundIndex: row.current_round_index,
+      bodyExcerpt: Array.from(body).slice(0, 120).join(""),
+      bodyLength: Array.from(body).length,
+      isArchived: Boolean(row.is_archived),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    });
+  }
+
+  function getSessionSummary(userId: string, sessionId: string) {
+    const row = db
+      .prepare(
+        `
+          SELECT
+            sessions.*,
+            current_node.round_index AS current_round_index,
+            COALESCE(current_draft.body, latest_draft.body, '') AS latest_body
+          FROM sessions
+          LEFT JOIN tree_nodes AS current_node
+            ON current_node.id = sessions.current_node_id
+          LEFT JOIN draft_versions AS current_draft
+            ON current_draft.id = (
+              SELECT id
+              FROM draft_versions
+              WHERE session_id = sessions.id
+                AND node_id = sessions.current_node_id
+              ORDER BY round_index DESC, created_at DESC, rowid DESC
+              LIMIT 1
+            )
+          LEFT JOIN draft_versions AS latest_draft
+            ON latest_draft.id = (
+              SELECT id
+              FROM draft_versions
+              WHERE session_id = sessions.id
+              ORDER BY round_index DESC, created_at DESC, rowid DESC
+              LIMIT 1
+            )
+          WHERE sessions.id = ?
+            AND sessions.user_id = ?
+        `
+      )
+      .get(sessionId, userId) as DraftSummaryRow | undefined;
+
+    return row ? toDraftSummary(row) : null;
+  }
+
+  function listSessionSummaries(userId: string, { archived = false }: { archived?: boolean } = {}) {
+    const rows = db
+      .prepare(
+        `
+          SELECT
+            sessions.*,
+            current_node.round_index AS current_round_index,
+            COALESCE(current_draft.body, latest_draft.body, '') AS latest_body
+          FROM sessions
+          LEFT JOIN tree_nodes AS current_node
+            ON current_node.id = sessions.current_node_id
+          LEFT JOIN draft_versions AS current_draft
+            ON current_draft.id = (
+              SELECT id
+              FROM draft_versions
+              WHERE session_id = sessions.id
+                AND node_id = sessions.current_node_id
+              ORDER BY round_index DESC, created_at DESC, rowid DESC
+              LIMIT 1
+            )
+          LEFT JOIN draft_versions AS latest_draft
+            ON latest_draft.id = (
+              SELECT id
+              FROM draft_versions
+              WHERE session_id = sessions.id
+              ORDER BY round_index DESC, created_at DESC, rowid DESC
+              LIMIT 1
+            )
+          WHERE sessions.user_id = ?
+            AND sessions.is_archived = ?
+          ORDER BY sessions.updated_at DESC, sessions.created_at DESC, sessions.rowid DESC
+        `
+      )
+      .all(userId, archived ? 1 : 0) as DraftSummaryRow[];
+
+    return rows.map(toDraftSummary);
+  }
+
+  function renameSession(userId: string, sessionId: string, title: string) {
+    const timestamp = now();
+    const result = db
+      .prepare("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?")
+      .run(title, timestamp, sessionId, userId) as { changes: number };
+    return result.changes > 0 ? getSessionSummary(userId, sessionId) : null;
+  }
+
+  function archiveSession(userId: string, sessionId: string) {
+    const timestamp = now();
+    const result = db
+      .prepare("UPDATE sessions SET is_archived = 1, updated_at = ? WHERE id = ? AND user_id = ?")
+      .run(timestamp, sessionId, userId) as { changes: number };
+    return result.changes > 0 ? getSessionSummary(userId, sessionId) : null;
+  }
+
   function getSessionState(userId: string, sessionId: string): SessionState | null {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ? AND is_archived = 0").get(sessionId, userId) as
       | SessionRow
       | undefined;
     if (!session) return null;
@@ -1651,7 +1766,9 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
 
   function getLatestSessionState(userId: string): SessionState | null {
     const row = db
-      .prepare("SELECT id FROM sessions WHERE user_id = ? ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1")
+      .prepare(
+        "SELECT id FROM sessions WHERE user_id = ? AND is_archived = 0 ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1"
+      )
       .get(userId) as { id: string } | undefined;
 
     return row ? getSessionState(userId, row.id) : null;
@@ -1697,6 +1814,9 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     updateCurrentNodeDraftAndOptions,
     updateNodeDraft,
     updateNodeOptions,
+    listSessionSummaries,
+    renameSession,
+    archiveSession,
     getSessionState,
     getLatestSessionState
   };
