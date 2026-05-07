@@ -54,7 +54,6 @@ const OPTION_GROUPS = { a: 0, b: 4, c: 8, custom: 2 };
 const OPTION_RANK = { a: 0, b: 1, c: 2, custom: 3 };
 const SIDE_BRANCH_Y_SPREAD = 72;
 const DENSE_ROUTE_MIN_HISTORY_COUNT = 3;
-const DENSE_ROUTE_HISTORY_Y_SPAN = 48;
 const DENSE_ROUTE_OPTION_Y_SPREAD = 132;
 const DENSE_ROUTE_EXTRA_Y_PAD = 320;
 const DENSE_ROUTE_EXTRA_Y_PER_NODE = 24;
@@ -63,8 +62,12 @@ const TREE_LABEL_COLLISION_X_GAP = 220;
 const HISTORY_NODE_MIN_STEP = 118;
 const HISTORY_TO_OPTION_GAP = 178;
 const CANVAS_RIGHT_PAD = 82;
+const INACTIVE_ROUTE_NODE_STEP = 118;
+const INACTIVE_ROUTE_DESCENDANT_X_STEP = 72;
+const INACTIVE_ROUTE_VERTICAL_STEP = SIDE_BRANCH_Y_SPREAD + 24;
 
 type Point2 = [number, number];
+type RouteSide = -1 | 1;
 type PendingBranch = { nodeId: string; optionId: BranchOption["id"] };
 type ComparisonNodeIds = { fromNodeId: string | null; toNodeId: string | null };
 type NodeGenerationStage = { nodeId: string; stage: "draft" | "options" };
@@ -91,6 +94,7 @@ export type ForceTreeNode = {
   isDraftFocused?: boolean;
   generationStage?: NodeGenerationStage["stage"];
   isInactiveRoute?: boolean;
+  inactiveRouteSide?: RouteSide;
   isSeedRoot?: boolean;
   kind: ForceTreeNodeKind;
   label: string;
@@ -117,7 +121,7 @@ type ForceTreeGraph = {
   nodes: ForceTreeNode[];
 };
 
-export function getOptionBranchLayout(canvasWidth: number, historyNodeCount = 0): OptionBranchLayout {
+export function getOptionBranchLayout(canvasWidth: number, historyNodeCount = 0, inactiveRouteDepth = 0): OptionBranchLayout {
   const viewportWidth = Math.max(MIN_CANVAS_WIDTH, Math.round(canvasWidth || 760));
   const progress = Math.min(Math.max((viewportWidth - 480) / 280, 0), 1);
   const cardWidth = Math.round(132 + (176 - 132) * progress);
@@ -127,14 +131,20 @@ export function getOptionBranchLayout(canvasWidth: number, historyNodeCount = 0)
       ? Math.max(0, historyNodeCount - DENSE_ROUTE_MIN_HISTORY_COUNT) * DENSE_ROUTE_EXTRA_Y_PER_NODE +
         DENSE_ROUTE_EXTRA_Y_PAD
       : 0;
-  const height = CANVAS_HEIGHT + denseRouteExtraHeight;
+  const inactiveRouteHalfHeight =
+    inactiveRouteDepth > 0
+      ? SIDE_BRANCH_Y_SPREAD * 4 + Math.max(0, inactiveRouteDepth - 1) * INACTIVE_ROUTE_VERTICAL_STEP + TREE_LABEL_MIN_Y_GAP * 4
+      : 0;
+  const inactiveRouteHeight = inactiveRouteHalfHeight > 0 ? inactiveRouteHalfHeight * 2 : 0;
+  const height = Math.max(CANVAS_HEIGHT + denseRouteExtraHeight, inactiveRouteHeight);
   const centerY = height / 2;
   const center: Point2 = [Math.max(72, Math.min(138, viewportWidth * 0.16)), centerY];
   const defaultOptionX = Math.max(center[0] + 180, Math.min(viewportWidth - CANVAS_RIGHT_PAD, viewportWidth * 0.78));
   const longRouteOptionX =
     center[0] + Math.max(180, historyNodeCount * HISTORY_NODE_MIN_STEP + HISTORY_TO_OPTION_GAP);
   const optionX = Math.max(defaultOptionX, longRouteOptionX);
-  const width = Math.max(viewportWidth, Math.ceil(optionX + CANVAS_RIGHT_PAD));
+  const inactiveRouteExtraWidth = Math.max(0, inactiveRouteDepth - 1) * INACTIVE_ROUTE_DESCENDANT_X_STEP;
+  const width = Math.max(viewportWidth, Math.ceil(optionX + CANVAS_RIGHT_PAD + inactiveRouteExtraWidth));
   const optionSpread = Math.min(82, Math.max(62, viewportWidth * 0.07));
 
   return {
@@ -328,6 +338,33 @@ function compareTreeNodes(a: TreeNode, b: TreeNode) {
   return a.roundIndex - b.roundIndex;
 }
 
+function estimateInactiveRouteDepth(
+  selectedPath: TreeNode[],
+  treeNodes: TreeNode[] | undefined,
+  currentNode: TreeNode | null
+) {
+  const providedTreeNodes = treeNodes ?? selectedPath;
+  const allTreeNodes = [
+    ...providedTreeNodes,
+    ...(currentNode && !providedTreeNodes.some((node) => node.id === currentNode.id) ? [currentNode] : [])
+  ].filter(shouldRenderTreeNode);
+  const activeNodeIds = new Set(selectedPath.map((node) => node.id));
+  const treeNodeById = new Map(allTreeNodes.map((node) => [node.id, node]));
+
+  return allTreeNodes.reduce((maxDepth, node) => {
+    if (activeNodeIds.has(node.id) || !node.parentId) return maxDepth;
+
+    let depth = 1;
+    let parent = treeNodeById.get(node.parentId);
+    while (parent && !activeNodeIds.has(parent.id)) {
+      depth += 1;
+      parent = parent.parentId ? treeNodeById.get(parent.parentId) : undefined;
+    }
+
+    return Math.max(maxDepth, depth);
+  }, 0);
+}
+
 export function createForceTreeGraph({
   changedDraftNodeIds = [],
   comparisonNodeIds = null,
@@ -374,6 +411,10 @@ export function createForceTreeGraph({
   const activeNodeIds = new Set(effectiveSelectedPath.map((node) => node.id));
   const renderedActivePath = effectiveSelectedPath.filter(shouldRenderTreeNode);
   const activeRenderIndexByNodeId = new Map(renderedActivePath.map((node, index) => [node.id, index]));
+  const orderedTreeNodesForLayout = [
+    ...allTreeNodes.filter((node) => activeNodeIds.has(node.id)),
+    ...allTreeNodes.filter((node) => !activeNodeIds.has(node.id))
+  ];
   const historyCount = renderedActivePath.length;
   const focusedPathIndex = focusedNodeId ? renderedActivePath.findIndex((node) => node.id === focusedNodeId) : -1;
   const historyStep =
@@ -391,12 +432,12 @@ export function createForceTreeGraph({
   });
   const optionYSpread = historyCount >= DENSE_ROUTE_MIN_HISTORY_COUNT ? DENSE_ROUTE_OPTION_Y_SPREAD : optionVerticalSpread(layout);
   function finishGraph(): ForceTreeGraph {
-    separateNearbyTreeLabels(nodes);
+    separateNearbyTreeLabels(nodes, layout.center[1]);
     markGraphNodeStates(nodes, focusedNodeId, comparisonNodeIds, changedDraftNodeIds, generationStage);
     return { links, nodes };
   }
 
-  allTreeNodes.forEach((node, nodeIndex) => {
+  orderedTreeNodesForLayout.forEach((node, nodeIndex) => {
     if (!shouldRenderTreeNode(node)) return;
 
     const sourceGraphId = sourceGraphIdForTreeNode(node, graphNodeIdByTreeNodeId);
@@ -410,16 +451,20 @@ export function createForceTreeGraph({
     const incomingOption = displayOptionForTreeNode(node, treeNodeById);
     const isSeedRoot = isSeedRootTreeNode(node);
     const focusDepth = activeIndex === undefined ? undefined : historyCount - activeIndex;
+    const inactiveRouteSide =
+      activeIndex === undefined && source
+        ? inactiveRouteSideForNode(node, source, treeNodeById, nodeIndex, layout.center[1])
+        : undefined;
     const targetX =
       activeIndex === undefined
         ? source
-          ? Math.min(optionColumnX - 132, source.targetX + Math.max(70, historyStep || 74))
+          ? inactiveRouteTargetX(node, source, historyStep, layout)
           : layout.center[0]
         : layout.center[0] + Math.max(74, historyStep) * activeIndex;
     const targetY =
       activeIndex === undefined
         ? source
-          ? source.targetY + inactiveNodeOffset(node, treeNodeById, nodeIndex)
+          ? inactiveRouteTargetY(node, source, treeNodeById, nodeIndex, inactiveRouteSide)
           : layout.center[1]
         : activeTargetYByNodeId.get(node.id) ?? layout.center[1];
     nodes.push({
@@ -429,6 +474,7 @@ export function createForceTreeGraph({
       group: incomingOption ? optionGroup(incomingOption.id) : 3 + (nodeIndex % 4),
       id: historyId,
       isInactiveRoute: !isActive,
+      inactiveRouteSide,
       isSeedRoot,
       kind: "history",
       label: compactBranchLabel(isSeedRoot ? SEED_ROOT_LABEL : incomingOption?.label ?? node.roundIntent),
@@ -470,6 +516,9 @@ export function createForceTreeGraph({
       if (hasExistingBranch) return;
 
       const foldedOffset = foldedOptionOffset(option.id, selectedOptionId ?? null, foldedIndex);
+      const inactiveRouteSide = source.isInactiveRoute
+        ? source.inactiveRouteSide ?? inactiveRouteSideFromY(source.targetY, layout.center[1], source.group)
+        : routeSideFromOffset(foldedOffset);
       const foldedId = `folded-${node.id}-${option.id}`;
       const foldedAnchorY = selectedBranchYByNodeId.get(node.id) ?? source.targetY;
       nodes.push({
@@ -479,13 +528,14 @@ export function createForceTreeGraph({
         group: optionGroup(option.id),
         id: foldedId,
         isInactiveRoute: true,
+        inactiveRouteSide,
         kind: "folded",
         label: compactBranchLabel(option.label),
         nodeId: node.id,
         option,
         radius: 4.8,
-        targetX: source.targetX + Math.max(70, Math.min(104, historyStep || 86)),
-        targetY: separateFromVerticalAnchors(foldedAnchorY + foldedOffset, source.targetY, foldedAnchorY)
+        targetX: foldedOptionTargetX(source, historyStep, layout, foldedIndex),
+        targetY: foldedOptionTargetY(source, foldedAnchorY, foldedOffset, foldedIndex, inactiveRouteSide)
       });
       links.push({
         distance: 58,
@@ -613,7 +663,14 @@ export function TreeCanvas({
   const [isDraggingTree, setIsDraggingTree] = useState(false);
   const [visibleOptionCount, setVisibleOptionCount] = useState(0);
   const renderedHistoryCount = useMemo(() => selectedPath.filter(shouldRenderTreeNode).length, [selectedPath]);
-  const branchLayout = useMemo(() => getOptionBranchLayout(canvasWidth, renderedHistoryCount), [canvasWidth, renderedHistoryCount]);
+  const inactiveRouteDepth = useMemo(
+    () => estimateInactiveRouteDepth(selectedPath, treeNodes, currentNode),
+    [currentNode, selectedPath, treeNodes]
+  );
+  const branchLayout = useMemo(
+    () => getOptionBranchLayout(canvasWidth, renderedHistoryCount, inactiveRouteDepth),
+    [canvasWidth, inactiveRouteDepth, renderedHistoryCount]
+  );
   const isTreeScrollable = branchLayout.width > canvasWidth + 1;
   const nodeId = currentNode?.id ?? null;
   const isBranchGenerating = Boolean(pendingBranch);
@@ -1647,6 +1704,98 @@ function inactiveNodeOffset(node: TreeNode, treeNodeById: Map<string, TreeNode>,
   return fallbackIndex % 2 === 0 ? -SIDE_BRANCH_Y_SPREAD : SIDE_BRANCH_Y_SPREAD;
 }
 
+function inactiveRouteHorizontalStep(historyStep: number) {
+  return Math.max(70, Math.min(INACTIVE_ROUTE_NODE_STEP, historyStep || INACTIVE_ROUTE_NODE_STEP));
+}
+
+function inactiveRouteTargetX(
+  node: TreeNode,
+  source: ForceTreeNode,
+  historyStep: number,
+  layout: OptionBranchLayout
+) {
+  const rightBoundary = inactiveRouteRightBoundary(layout);
+  if (source.isInactiveRoute) {
+    const laneOffset = (optionRank(node.parentOptionId ?? "b") - OPTION_RANK.b) * 18;
+    return Math.min(rightBoundary, source.targetX + INACTIVE_ROUTE_DESCENDANT_X_STEP + laneOffset);
+  }
+
+  const laneOffset = inactiveRouteHorizontalStep(historyStep) + optionRank(node.parentOptionId ?? "b") * 18;
+  return Math.min(rightBoundary, source.targetX + laneOffset);
+}
+
+function inactiveRouteTargetY(
+  node: TreeNode,
+  source: ForceTreeNode,
+  treeNodeById: Map<string, TreeNode>,
+  fallbackIndex: number,
+  inactiveRouteSide: RouteSide | undefined
+) {
+  if (source.isInactiveRoute) {
+    return source.targetY + (inactiveRouteSide ?? 1) * INACTIVE_ROUTE_VERTICAL_STEP;
+  }
+
+  return source.targetY + inactiveNodeOffset(node, treeNodeById, fallbackIndex);
+}
+
+function foldedOptionTargetX(
+  source: ForceTreeNode,
+  historyStep: number,
+  layout: OptionBranchLayout,
+  foldedIndex: number
+) {
+  if (source.isInactiveRoute) {
+    return Math.min(
+      inactiveRouteRightBoundary(layout),
+      source.targetX + INACTIVE_ROUTE_DESCENDANT_X_STEP * 0.72 + foldedIndex * 34
+    );
+  }
+
+  return source.targetX + Math.max(70, Math.min(104, historyStep || 86)) + foldedIndex * 24;
+}
+
+function inactiveRouteRightBoundary(layout: OptionBranchLayout) {
+  return Math.max(layout.positions.b[0] - 132, layout.width - CANVAS_RIGHT_PAD);
+}
+
+function foldedOptionTargetY(
+  source: ForceTreeNode,
+  foldedAnchorY: number,
+  foldedOffset: number,
+  foldedIndex: number,
+  inactiveRouteSide: RouteSide
+) {
+  if (source.isInactiveRoute) {
+    return source.targetY + inactiveRouteSide * SIDE_BRANCH_Y_SPREAD * (foldedIndex + 1);
+  }
+
+  return separateFromVerticalAnchors(foldedAnchorY + foldedOffset, source.targetY, foldedAnchorY);
+}
+
+function inactiveRouteSideForNode(
+  node: TreeNode,
+  source: ForceTreeNode,
+  treeNodeById: Map<string, TreeNode>,
+  fallbackIndex: number,
+  centerY: number
+): RouteSide {
+  if (source.isInactiveRoute) {
+    return source.inactiveRouteSide ?? inactiveRouteSideFromY(source.targetY, centerY, source.group);
+  }
+
+  return routeSideFromOffset(inactiveNodeOffset(node, treeNodeById, fallbackIndex));
+}
+
+function inactiveRouteSideFromY(targetY: number, centerY: number, group: number): RouteSide {
+  if (targetY < centerY) return -1;
+  if (targetY > centerY) return 1;
+  return group <= OPTION_GROUPS.b ? -1 : 1;
+}
+
+function routeSideFromOffset(offset: number): RouteSide {
+  return offset < 0 ? -1 : 1;
+}
+
 function foldedOptionOffset(
   optionId: BranchOption["id"],
   selectedOptionId: BranchOption["id"] | null,
@@ -1666,11 +1815,8 @@ function optionVerticalSpread(layout: OptionBranchLayout) {
   return Math.max(1, Math.abs(layout.positions.b[1] - layout.positions.a[1]));
 }
 
-function activeRouteTargetY(index: number, historyCount: number, centerY: number) {
-  if (historyCount < DENSE_ROUTE_MIN_HISTORY_COUNT || historyCount <= 1) return centerY;
-
-  const wave = Math.sin(index * Math.PI * 0.86);
-  return centerY + wave * (DENSE_ROUTE_HISTORY_Y_SPAN / 2);
+function activeRouteTargetY(_index: number, _historyCount: number, centerY: number) {
+  return centerY;
 }
 
 function optionPositionFromSource(
@@ -1696,7 +1842,7 @@ function separateFromVerticalAnchors(targetY: number, ...anchors: number[]) {
   }, targetY);
 }
 
-function separateNearbyTreeLabels(nodes: ForceTreeNode[]) {
+function separateNearbyTreeLabels(nodes: ForceTreeNode[], centerY: number) {
   const placedNodes: ForceTreeNode[] = [];
   const labelledNodes = nodes
     .sort(
@@ -1711,8 +1857,8 @@ function separateNearbyTreeLabels(nodes: ForceTreeNode[]) {
     const blockingNodes = placedNodes.filter(
       (placedNode) => Math.abs(placedNode.targetX - node.targetX) < TREE_LABEL_COLLISION_X_GAP
     );
-    if (!isActiveRouteHistoryNode(node)) {
-      node.targetY = nearestOpenLabelY(node.targetY, blockingNodes);
+    if (node.kind !== "history") {
+      node.targetY = nearestOpenLabelY(node.targetY, blockingNodes, node.inactiveRouteSide, centerY);
     }
     placedNodes.push(node);
   });
@@ -1729,15 +1875,27 @@ function isActiveRouteHistoryNode(node: ForceTreeNode) {
   return node.kind === "history" && node.isInactiveRoute !== true;
 }
 
-function nearestOpenLabelY(targetY: number, blockingNodes: ForceTreeNode[]) {
+function nearestOpenLabelY(
+  targetY: number,
+  blockingNodes: ForceTreeNode[],
+  inactiveRouteSide: RouteSide | undefined,
+  centerY: number
+) {
   if (blockingNodes.length === 0) return targetY;
 
   const candidates = [
     targetY,
-    ...blockingNodes.flatMap((node) => [node.targetY - TREE_LABEL_MIN_Y_GAP, node.targetY + TREE_LABEL_MIN_Y_GAP])
+    ...blockingNodes.flatMap((node) =>
+      [1, 2, 3].flatMap((step) => [
+        node.targetY - TREE_LABEL_MIN_Y_GAP * step,
+        node.targetY + TREE_LABEL_MIN_Y_GAP * step
+      ])
+    )
   ];
-  const availableCandidates = candidates.filter((candidateY) =>
-    blockingNodes.every((node) => Math.abs(candidateY - node.targetY) >= TREE_LABEL_MIN_Y_GAP)
+  const availableCandidates = candidates.filter(
+    (candidateY) =>
+      candidateStaysOnRouteSide(candidateY, inactiveRouteSide, centerY) &&
+      blockingNodes.every((node) => Math.abs(candidateY - node.targetY) >= TREE_LABEL_MIN_Y_GAP)
   );
 
   return (
@@ -1748,6 +1906,14 @@ function nearestOpenLabelY(targetY: number, blockingNodes: ForceTreeNode[]) {
         a - b
     )[0] ?? targetY
   );
+}
+
+function candidateStaysOnRouteSide(candidateY: number, inactiveRouteSide: RouteSide | undefined, centerY: number) {
+  if (!inactiveRouteSide) return true;
+
+  return inactiveRouteSide < 0
+    ? candidateY <= centerY - TREE_LABEL_MIN_Y_GAP
+    : candidateY >= centerY + TREE_LABEL_MIN_Y_GAP;
 }
 
 function nodeByIdFromNodes(nodes: ForceTreeNode[], nodeId: string) {

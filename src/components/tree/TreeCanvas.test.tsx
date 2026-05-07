@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { TreeNode } from "@/lib/domain";
+import type { BranchOption, TreeNode } from "@/lib/domain";
 import {
   BranchOptionButton,
   BranchOptionTray,
@@ -1608,6 +1608,130 @@ describe("TreeCanvas", () => {
     expect(Math.abs(inactive!.targetY - source!.targetY)).toBeGreaterThanOrEqual(64);
   });
 
+  it("keeps sibling inactive branch descendants growing diagonally on their fork side", () => {
+    const layout = getOptionBranchLayout(1200);
+    const branchSource: TreeNode = {
+      ...selectedNodeWithFolded,
+      id: "node-sibling-source",
+      selectedOptionId: "c",
+      options: [
+        { id: "a", label: "A 分支起点", description: "Explore", impact: "New angle", kind: "explore" },
+        { id: "b", label: "B 分支起点", description: "Deepen", impact: "More detail", kind: "deepen" },
+        { id: "c", label: "当前 C 分支", description: "Finish", impact: "Publish", kind: "finish" }
+      ],
+      foldedOptions: [
+        { id: "a", label: "A 分支起点", description: "Explore", impact: "New angle", kind: "explore" },
+        { id: "b", label: "B 分支起点", description: "Deepen", impact: "More detail", kind: "deepen" }
+      ]
+    };
+    const activeCurrentNode: TreeNode = {
+      ...currentNode,
+      id: "node-active-c",
+      parentId: branchSource.id,
+      parentOptionId: "c",
+      roundIndex: branchSource.roundIndex + 1
+    };
+    const buildInactiveRoute = (rootOptionId: "a" | "b", prefix: string): TreeNode[] => {
+      let parentId = branchSource.id;
+      let parentOptionId: BranchOption["id"] = rootOptionId;
+
+      return Array.from({ length: 7 }, (_value, index) => {
+        const node: TreeNode = {
+          ...currentNode,
+          id: `${prefix}-${index + 1}`,
+          parentId,
+          parentOptionId,
+          roundIndex: branchSource.roundIndex + index + 1,
+          selectedOptionId: index < 3 ? "b" : null,
+          foldedOptions: index < 3 ? currentNode.options.filter((option) => option.id !== "b") : []
+        };
+        parentId = node.id;
+        parentOptionId = "b";
+        return node;
+      });
+    };
+    const inactiveRouteA = buildInactiveRoute("a", "node-inactive-a");
+    const inactiveRouteB = buildInactiveRoute("b", "node-inactive-b");
+    const graph = createForceTreeGraph({
+      currentNode: activeCurrentNode,
+      layout,
+      selectedPath: [branchSource, activeCurrentNode],
+      treeNodes: [branchSource, ...inactiveRouteA, ...inactiveRouteB, activeCurrentNode],
+      visibleOptionCount: 3
+    });
+    const routeANodes = inactiveRouteA.map((node) => graph.nodes.find((graphNode) => graphNode.id === `history-${node.id}`)!);
+    const routeBNodes = inactiveRouteB.map((node) => graph.nodes.find((graphNode) => graphNode.id === `history-${node.id}`)!);
+    const routeAX = routeANodes.map((node) => node.targetX);
+    const routeBX = routeBNodes.map((node) => node.targetX);
+    const routeAY = routeANodes.map((node) => node.targetY);
+    const routeBY = routeBNodes.map((node) => node.targetY);
+    const inactiveFoldedNodes = graph.nodes.filter(
+      (graphNode) =>
+        graphNode.kind === "folded" &&
+        [...inactiveRouteA, ...inactiveRouteB].some((node) => node.id === graphNode.branchFromNodeId)
+    );
+
+    expect(routeAX.slice(1).every((targetX, index) => targetX > routeAX[index])).toBe(true);
+    expect(routeBX.slice(1).every((targetX, index) => targetX > routeBX[index])).toBe(true);
+    expect(routeAX[routeAX.length - 1] - routeAX[0]).toBeGreaterThanOrEqual(320);
+    expect(routeBX[routeBX.length - 1] - routeBX[0]).toBeGreaterThanOrEqual(320);
+    expect(routeAX[routeAX.length - 1] - routeAX[0]).toBeLessThanOrEqual(520);
+    expect(routeBX[routeBX.length - 1] - routeBX[0]).toBeLessThanOrEqual(520);
+    expect(routeAY.every((targetY) => targetY < layout.center[1])).toBe(true);
+    expect(routeBY.every((targetY) => targetY < layout.center[1])).toBe(true);
+    expect(routeAY.slice(1).every((targetY, index) => targetY < routeAY[index])).toBe(true);
+    expect(routeBY.slice(1).every((targetY, index) => targetY < routeBY[index])).toBe(true);
+    expect(inactiveFoldedNodes.every((node) => node.targetY < layout.center[1])).toBe(true);
+  });
+
+  it("expands the tree canvas for deep angled inactive routes", () => {
+    const branchSource: TreeNode = {
+      ...selectedNodeWithFolded,
+      id: "node-scroll-source",
+      selectedOptionId: "c"
+    };
+    const activeCurrentNode: TreeNode = {
+      ...currentNode,
+      id: "node-scroll-active",
+      parentId: branchSource.id,
+      parentOptionId: "c",
+      roundIndex: branchSource.roundIndex + 1
+    };
+    let parentId = branchSource.id;
+    let parentOptionId: BranchOption["id"] = "a";
+    const inactiveRoute = Array.from({ length: 8 }, (_value, index) => {
+      const node: TreeNode = {
+        ...currentNode,
+        id: `node-scroll-inactive-${index + 1}`,
+        parentId,
+        parentOptionId,
+        roundIndex: branchSource.roundIndex + index + 1,
+        selectedOptionId: index < 7 ? "b" : null
+      };
+      parentId = node.id;
+      parentOptionId = "b";
+      return node;
+    });
+    const baseLayout = getOptionBranchLayout(760, 2);
+
+    const { container } = render(
+      <TreeCanvas
+        currentNode={activeCurrentNode}
+        isBusy={false}
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[branchSource, activeCurrentNode]}
+        treeNodes={[branchSource, ...inactiveRoute, activeCurrentNode]}
+      />
+    );
+    const svg = container.querySelector(".mind-map-svg");
+    const deepLayout = getOptionBranchLayout(760, 2, inactiveRoute.length);
+
+    expect(deepLayout.width).toBeGreaterThanOrEqual(baseLayout.width);
+    expect(deepLayout.height).toBeGreaterThan(baseLayout.height);
+    expect(Number(svg?.getAttribute("height"))).toBeGreaterThan(baseLayout.height);
+  });
+
   it("keeps nearby tree labels separated vertically on dense multi-round routes", () => {
     const selectedPath = buildDenseSelectedPath(6);
     const graph = createForceTreeGraph({
@@ -1636,7 +1760,7 @@ describe("TreeCanvas", () => {
     expect(crampedPairs).toEqual([]);
   });
 
-  it("keeps the active route shallow while distributing branches above and below it", () => {
+  it("keeps the active route flat while distributing branches above and below it", () => {
     const selectedPath = buildDenseSelectedPath(6);
     const graph = createForceTreeGraph({
       currentNode: selectedPath[selectedPath.length - 1],
@@ -1649,18 +1773,14 @@ describe("TreeCanvas", () => {
       graph.nodes.find((graphNode) => graphNode.id === `history-${node.id}`)
     );
     const activeYValues = activeHistoryNodes.map((node) => node!.targetY);
-    const activeYDeltas = activeYValues.slice(1).map((targetY, index) => targetY - activeYValues[index]);
     const sideYValues = graph.nodes
       .filter((node) => node.kind === "folded" || node.kind === "option")
       .map((node) => node.targetY);
-    const minActiveY = Math.min(...activeYValues);
-    const maxActiveY = Math.max(...activeYValues);
+    const activeY = activeYValues[0];
 
-    expect(maxActiveY - minActiveY).toBeLessThanOrEqual(80);
-    expect(activeYDeltas.some((deltaY) => deltaY > 0)).toBe(true);
-    expect(activeYDeltas.some((deltaY) => deltaY < 0)).toBe(true);
-    expect(sideYValues.some((targetY) => targetY < minActiveY - 64)).toBe(true);
-    expect(sideYValues.some((targetY) => targetY > maxActiveY + 64)).toBe(true);
+    expect(new Set(activeYValues)).toEqual(new Set([activeY]));
+    expect(sideYValues.some((targetY) => targetY < activeY - 64)).toBe(true);
+    expect(sideYValues.some((targetY) => targetY > activeY + 64)).toBe(true);
   });
 
   it("keeps inactive routes grey without inventing extra lower choices after switching siblings", () => {
