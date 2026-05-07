@@ -25,6 +25,14 @@ function jsonResponse(body: unknown, ok = true) {
   };
 }
 
+function deferredResponse<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 describe("DraftManagementPanel", () => {
   let drafts: TestDraft[];
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -171,6 +179,40 @@ describe("DraftManagementPanel", () => {
     render(<DraftManagementPanel />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("服务暂时不可用。");
+    expect(screen.queryByText("还没有草稿。开始一个新念头后会出现在这里。")).not.toBeInTheDocument();
+  });
+
+  it("disables all draft mutation controls while an archive is pending", async () => {
+    const archiveResponse = deferredResponse<ReturnType<typeof jsonResponse>>();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/sessions?view=active" && method === "GET") {
+        return jsonResponse({ drafts });
+      }
+      if (url === "/api/sessions/session-1" && method === "DELETE") {
+        return archiveResponse.promise;
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    render(<DraftManagementPanel />);
+
+    const firstRow = await screen.findByRole("article", { name: "第一篇草稿" });
+    const secondRow = screen.getByRole("article", { name: "空白念头" });
+
+    await userEvent.click(within(firstRow).getByRole("button", { name: "归档" }));
+
+    await waitFor(() => expect(within(firstRow).getByRole("button", { name: "归档" })).toBeDisabled());
+    expect(within(secondRow).getByRole("button", { name: "重命名" })).toBeDisabled();
+    expect(within(secondRow).getByRole("button", { name: "归档" })).toBeDisabled();
+
+    archiveResponse.resolve(jsonResponse({ draft: { ...drafts[0], isArchived: true, status: "archived" } }));
+    await waitFor(() => expect(screen.queryByRole("article", { name: "第一篇草稿" })).not.toBeInTheDocument());
+    expect(within(secondRow).getByRole("button", { name: "重命名" })).not.toBeDisabled();
+    expect(within(secondRow).getByRole("button", { name: "归档" })).not.toBeDisabled();
   });
 
   it("shows the fallback load error when the request rejects", async () => {

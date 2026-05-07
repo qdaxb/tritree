@@ -34,6 +34,7 @@ export function DraftManagementPanel() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [busyDraftId, setBusyDraftId] = useState<string | null>(null);
+  const isMutating = Boolean(busyDraftId);
 
   useEffect(() => {
     async function loadDrafts() {
@@ -154,13 +155,12 @@ export function DraftManagementPanel() {
         ) : null}
 
         <div className="drafts-list">
-          {!isLoading && drafts.length === 0 ? (
+          {!isLoading && !message && drafts.length === 0 ? (
             <p className="drafts-empty">还没有草稿。开始一个新念头后会出现在这里。</p>
           ) : null}
 
           {drafts.map((draft) => {
             const isEditing = editingDraftId === draft.id;
-            const isBusy = busyDraftId === draft.id;
             return (
               <article className="drafts-row" aria-label={draft.title} key={draft.id}>
                 <div className="drafts-row__main">
@@ -186,10 +186,10 @@ export function DraftManagementPanel() {
                         onChange={(event) => setEditingTitle(event.target.value)}
                       />
                     </label>
-                    <button disabled={isBusy} type="submit">
+                    <button disabled={isMutating} type="submit">
                       保存名称
                     </button>
-                    <button disabled={isBusy} type="button" onClick={cancelRename}>
+                    <button disabled={isMutating} type="button" onClick={cancelRename}>
                       取消
                     </button>
                   </form>
@@ -199,10 +199,10 @@ export function DraftManagementPanel() {
                   <Link className="drafts-link-button" href={`/?sessionId=${encodeURIComponent(draft.id)}`}>
                     打开
                   </Link>
-                  <button disabled={isBusy} type="button" onClick={() => startRename(draft)}>
+                  <button disabled={isMutating} type="button" onClick={() => startRename(draft)}>
                     重命名
                   </button>
-                  <button disabled={isBusy} type="button" onClick={() => void archiveDraft(draft.id)}>
+                  <button disabled={isMutating} type="button" onClick={() => void archiveDraft(draft.id)}>
                     归档
                   </button>
                 </div>
