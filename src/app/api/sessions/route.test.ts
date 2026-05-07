@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthApiError } from "@/lib/auth/current-user";
 import { createSeedDraft } from "@/lib/seed-draft";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const streamDirectorOptionsMock = vi.hoisted(() => vi.fn());
 const getRepositoryMock = vi.hoisted(() => vi.fn());
@@ -65,6 +65,58 @@ describe("createSeedDraft", () => {
     expect(draft.title).toBe("小林是某厂的产品经理");
     expect(draft.title).not.toBe("种子念头");
     expect(draft.body).toContain("小林是某厂的产品经理");
+  });
+});
+
+describe("GET /api/sessions", () => {
+  it("lists active draft summaries for the current user", async () => {
+    const listSessionSummaries = vi.fn().mockReturnValue([
+      {
+        id: "session-1",
+        title: "Draft one",
+        status: "active",
+        currentNodeId: "node-1",
+        currentRoundIndex: 2,
+        bodyExcerpt: "Draft body",
+        bodyLength: 10,
+        isArchived: false,
+        createdAt: "2026-05-07T00:00:00.000Z",
+        updatedAt: "2026-05-07T01:00:00.000Z"
+      }
+    ]);
+    getRepositoryMock.mockReturnValue({ listSessionSummaries });
+
+    const response = await GET(new Request("http://test.local/api/sessions?view=active"));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(listSessionSummaries).toHaveBeenCalledWith("user-1", { archived: false });
+    expect(data.drafts).toEqual([expect.objectContaining({ id: "session-1", title: "Draft one" })]);
+  });
+
+  it("lists archived draft summaries for the current user", async () => {
+    const listSessionSummaries = vi.fn().mockReturnValue([
+      {
+        id: "session-archived",
+        title: "Archived",
+        status: "active",
+        currentNodeId: "node-archived",
+        currentRoundIndex: 1,
+        bodyExcerpt: "Archived body",
+        bodyLength: 13,
+        isArchived: true,
+        createdAt: "2026-05-07T00:00:00.000Z",
+        updatedAt: "2026-05-07T01:00:00.000Z"
+      }
+    ]);
+    getRepositoryMock.mockReturnValue({ listSessionSummaries });
+
+    const response = await GET(new Request("http://test.local/api/sessions?view=archived"));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(listSessionSummaries).toHaveBeenCalledWith("user-1", { archived: true });
+    expect(data.drafts[0].isArchived).toBe(true);
   });
 });
 

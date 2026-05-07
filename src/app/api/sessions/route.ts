@@ -22,9 +22,18 @@ const ndjsonHeaders = {
   "X-Content-Type-Options": "nosniff"
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await requireCurrentUser();
+    const view = new URL(request.url).searchParams.get("view");
+    if (view === "active" || view === "archived") {
+      return NextResponse.json({
+        drafts: getRepository().listSessionSummaries(user.id, { archived: view === "archived" })
+      });
+    }
+    if (view) {
+      return NextResponse.json({ error: "不支持的草稿视图。" }, { status: 400 });
+    }
     return NextResponse.json({ state: getRepository().getLatestSessionState(user.id) });
   } catch (error) {
     const response = authErrorResponse(error);
