@@ -151,6 +151,13 @@ describe("AdminUsersPanel", () => {
     vi.unstubAllGlobals();
   });
 
+  it("provides a way back to the main workspace", async () => {
+    render(<AdminUsersPanel />);
+
+    expect(await screen.findByText("awei")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回创作" })).toHaveAttribute("href", "/");
+  });
+
   it("renders users and performs create, reset, activation, role, OIDC bind, and OIDC unbind actions", async () => {
     render(<AdminUsersPanel />);
 

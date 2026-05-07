@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 
 type AdminUserView = {
@@ -228,7 +229,12 @@ export function AdminUsersPanel() {
       <section className="admin-panel" aria-labelledby="admin-users-title">
         <div className="admin-panel__header">
           <h1 id="admin-users-title">用户管理</h1>
-          <span>{isLoading ? "加载中" : `${users.length} 个用户`}</span>
+          <div className="admin-panel__actions">
+            <Link className="admin-return-link" href="/">
+              返回创作
+            </Link>
+            <span>{isLoading ? "加载中" : `${users.length} 个用户`}</span>
+          </div>
         </div>
 
         {message ? (

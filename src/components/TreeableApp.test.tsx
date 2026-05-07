@@ -405,8 +405,14 @@ describe("TreeableApp", () => {
       );
 
       expect(await screen.findByText("Awei")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "用户管理" })).toHaveAttribute("href", "/admin/users");
-      expect(screen.getByRole("button", { name: "退出登录" })).toBeInTheDocument();
+      const accountActions = screen.getByRole("group", { name: "账号操作" });
+      const workspaceActions = screen.getByRole("group", { name: "作品操作" });
+      expect(within(accountActions).getByText("Awei")).toBeInTheDocument();
+      expect(within(accountActions).getByRole("link", { name: "用户管理" })).toHaveAttribute("href", "/admin/users");
+      expect(within(accountActions).getByRole("link", { name: "用户管理" })).toHaveClass("account-controls__admin-link");
+      expect(within(accountActions).getByRole("button", { name: "退出登录" })).toBeInTheDocument();
+      expect(within(workspaceActions).getByRole("button", { name: "新念头" })).toBeInTheDocument();
+      expect(within(workspaceActions).getByRole("button", { name: "重新开始" })).toBeInTheDocument();
       expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
     });
 

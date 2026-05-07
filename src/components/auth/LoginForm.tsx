@@ -7,6 +7,19 @@ type LoginFormProps = {
   isOidcEnabled: boolean;
 };
 
+function getRelativeRedirectUrl(url: string | null | undefined) {
+  if (!url) {
+    return "/";
+  }
+
+  try {
+    const destination = new URL(url, window.location.origin);
+    return `${destination.pathname}${destination.search}${destination.hash}` || "/";
+  } catch {
+    return "/";
+  }
+}
+
 export function LoginForm({ isOidcEnabled }: LoginFormProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -31,7 +44,7 @@ export function LoginForm({ isOidcEnabled }: LoginFormProps) {
         return;
       }
 
-      window.location.assign(result?.url ?? "/");
+      window.location.assign(getRelativeRedirectUrl(result?.url));
     } catch {
       setMessage("登录失败，请稍后再试。");
     } finally {

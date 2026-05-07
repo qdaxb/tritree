@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { signOut } from "next-auth/react";
+import { LogOut, Plus, RotateCcw, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   SessionStateSchema,
@@ -1231,25 +1232,35 @@ export function TreeableApp({ currentUser }: { currentUser?: CurrentUserView } =
         </div>
         <div className="topbar-actions">
           {currentUser ? (
-            <div className="account-controls" title={currentUser.username}>
+            <div className="account-controls" role="group" aria-label="账号操作" title={currentUser.username}>
               <span className="account-controls__name">{currentUser.displayName}</span>
-              {currentUser.isAdmin ? <Link href="/admin/users">用户管理</Link> : null}
+              {currentUser.isAdmin ? (
+                <Link className="account-controls__admin-link" href="/admin/users">
+                  <UsersRound aria-hidden="true" size={16} strokeWidth={2.25} />
+                  <span>用户管理</span>
+                </Link>
+              ) : null}
               <button onClick={() => signOut({ callbackUrl: "/login" })} type="button">
-                退出登录
+                <LogOut aria-hidden="true" size={15} strokeWidth={2.25} />
+                <span>退出登录</span>
               </button>
             </div>
           ) : null}
-          <button className="start-button" disabled={isBusy} onClick={startNewSeed} type="button">
-            新念头
-          </button>
-          <button
-            className="secondary-button"
-            disabled={isBusy}
-            onClick={sessionState ? restartFromCurrentSettings : startSession}
-            type="button"
-          >
-            {startButtonLabel}
-          </button>
+          <div className="workspace-actions" role="group" aria-label="作品操作">
+            <button className="start-button" disabled={isBusy} onClick={startNewSeed} type="button">
+              <Plus aria-hidden="true" size={17} strokeWidth={2.4} />
+              <span>新念头</span>
+            </button>
+            <button
+              className="secondary-button"
+              disabled={isBusy}
+              onClick={sessionState ? restartFromCurrentSettings : startSession}
+              type="button"
+            >
+              <RotateCcw aria-hidden="true" size={16} strokeWidth={2.25} />
+              <span>{startButtonLabel}</span>
+            </button>
+          </div>
         </div>
       </header>
       {isSkillLibraryOpen ? (

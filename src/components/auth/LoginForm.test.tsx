@@ -50,6 +50,18 @@ describe("LoginForm", () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
   });
 
+  it("keeps successful credentials login on the current origin", async () => {
+    const assign = mockLocationAssign();
+    signInMock.mockResolvedValue({ ok: true, url: "http://localhost:3000/" });
+    render(<LoginForm isOidcEnabled={false} />);
+
+    await userEvent.type(screen.getByLabelText("用户名"), "awei");
+    await userEvent.type(screen.getByLabelText("密码"), "password-123");
+    await userEvent.click(screen.getByRole("button", { name: "登录" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
+  });
+
   it("displays an invalid credentials error", async () => {
     signInMock.mockResolvedValue({ error: "CredentialsSignin", ok: false, url: null });
     render(<LoginForm isOidcEnabled={false} />);
