@@ -237,6 +237,14 @@ function withStreamingOptions(node: TreeNode, streamingOptions: StreamingOptions
   };
 }
 
+function mergeSkills(current: Skill[], incoming: Skill[]) {
+  const byId = new Map(current.map((skill) => [skill.id, skill]));
+  incoming.forEach((skill) => {
+    byId.set(skill.id, skill);
+  });
+  return Array.from(byId.values());
+}
+
 function needsNodeOptions(state: SessionState, nodeId: string | null) {
   const node = findTreeNode(state, nodeId);
   return Boolean(node && draftForNode(state, nodeId) && node.options.length < 3);
@@ -601,6 +609,27 @@ export function TreeableApp() {
       return true;
     } catch (error) {
       setSkillLibraryMessage(error instanceof Error ? error.message : "技能保存失败。");
+      return false;
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function importLibrarySkills(sourceUrl: string) {
+    setIsBusy(true);
+    setSkillLibraryMessage("");
+    try {
+      const response = await fetch("/api/skills/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl })
+      });
+      const data = (await response.json()) as { skills?: Skill[]; error?: string };
+      if (!response.ok || !data.skills) throw new Error(data.error ?? "Skill 导入失败。");
+      setSkills((current) => mergeSkills(current, data.skills!));
+      return true;
+    } catch (error) {
+      setSkillLibraryMessage(error instanceof Error ? error.message : "Skill 导入失败。");
       return false;
     } finally {
       setIsBusy(false);
@@ -1216,6 +1245,7 @@ export function TreeableApp() {
             onArchive={(skillId) => void archiveLibrarySkill(skillId)}
             onClose={() => setIsSkillLibraryOpen(false)}
             onCreate={createLibrarySkill}
+            onImport={importLibrarySkills}
             onUpdate={async (skillId, input) => Boolean(await updateLibrarySkill(skillId, input))}
             skills={skills}
           />
@@ -1430,6 +1460,7 @@ export function TreeableApp() {
           onArchive={(skillId) => void archiveLibrarySkill(skillId)}
           onClose={() => setIsSkillLibraryOpen(false)}
           onCreate={createLibrarySkill}
+          onImport={importLibrarySkills}
           onUpdate={async (skillId, input) => Boolean(await updateLibrarySkill(skillId, input))}
           skills={skills}
         />

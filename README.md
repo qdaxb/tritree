@@ -65,7 +65,10 @@ ANTHROPIC_AUTH_TOKEN=your_api_key_here
 ANTHROPIC_MODEL=kimi-k2.5
 
 # 本地数据库路径（自动创建）
-TREEABLE_DB_PATH=.treeable/treeable.sqlite
+TRITREE_DB_PATH=.tritree/tritree.sqlite
+
+# 外部 Skill 执行模式：auto | macos-seatbelt | trusted-host
+TRITREE_SKILL_EXECUTION_MODE=auto
 ```
 
 > AI 调用统一通过 Mastra Agent 和 AI SDK provider 执行，不再保留手写 HTTP provider 分支。
@@ -134,7 +137,7 @@ npm run typecheck
 
 ## 数据存储
 
-所有数据默认存储在项目根目录的 `.treeable/treeable.sqlite` 文件中（可通过 `TREEABLE_DB_PATH` 环境变量修改路径）。数据库在首次启动时自动创建，包含以下数据：
+所有数据默认存储在项目根目录的 `.tritree/tritree.sqlite` 文件中（可通过 `TRITREE_DB_PATH` 环境变量修改路径；`TREEABLE_DB_PATH` 仍作为旧版兼容项）。数据库在首次启动时自动创建，包含以下数据：
 
 - 根记忆与偏好设置
 - 创作会话与树节点
@@ -147,7 +150,7 @@ npm run typecheck
 
 - 本项目为本地个人使用设计，不包含多用户、认证或计费功能。
 - AI 生成需要有效的 API 密钥，请确保 `.env.local` 配置正确后再启动。
-- 数据库文件包含你的创作内容，请妥善备份 `.treeable/` 目录。
+- 数据库文件包含你的创作内容，请妥善备份 `.tritree/` 目录。
 
 ## License
 

@@ -204,8 +204,11 @@ function buildDraftConversationMessages(state: SessionState, finalUserRequest: s
       role: "user",
       content: [
         `初始内容：\n${state.rootMemory.summary}`,
-        `已学习偏好：\n${state.rootMemory.learnedSummary || "暂无已学习偏好。"}`
-      ].join("\n\n")
+        `已学习偏好：\n${state.rootMemory.learnedSummary || "暂无已学习偏好。"}`,
+        formatToolMemoryForDirector(state.toolMemory)
+      ]
+        .filter(Boolean)
+        .join("\n\n")
     }
   ];
 
@@ -231,8 +234,11 @@ function buildEditorMessages(state: SessionState, currentDraft: Draft | null, re
       role: "user",
       content: [
         `初始内容：\n${state.rootMemory.summary}`,
-        `已学习偏好：\n${state.rootMemory.learnedSummary || "暂无已学习偏好。"}`
-      ].join("\n\n")
+        `已学习偏好：\n${state.rootMemory.learnedSummary || "暂无已学习偏好。"}`,
+        formatToolMemoryForDirector(state.toolMemory)
+      ]
+        .filter(Boolean)
+        .join("\n\n")
     }
   ];
   const lastPathIndex = state.selectedPath.length - 1;
@@ -288,6 +294,17 @@ function mergeConsecutiveUserMessages(messages: DirectorMessage[]) {
   }
 
   return merged;
+}
+
+function formatToolMemoryForDirector(toolMemory?: string) {
+  const text = toolMemory?.trim();
+  if (!text) return "";
+
+  return [
+    "已完成的外部查询/工具结果：",
+    text,
+    "使用规则：如果已有结果覆盖当前任务，先复用；不要重复相同查询，除非用户要求更新、查询条件改变或已有结果明显不足。"
+  ].join("\n");
 }
 
 function formatDraftHistoryRoundForWriter(state: SessionState, node: SessionState["selectedPath"][number]) {

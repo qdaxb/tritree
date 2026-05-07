@@ -45,6 +45,7 @@ export const sessions = sqliteTable(
     title: text("title").notNull(),
     status: text("status").notNull(),
     currentNodeId: text("current_node_id"),
+    toolMemory: text("tool_memory").notNull().default(""),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
   },

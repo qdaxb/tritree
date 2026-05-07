@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { badRequestResponse, isBadRequestError, publicServerErrorMessage } from "@/lib/api/errors";
+import { logTritreeAiDebug, summarizeTritreeStreamEventForLog } from "@/lib/ai/debug-log";
 import { streamDirectorOptions } from "@/lib/ai/director-stream";
 import { summarizeCurrentDraftOptionsForDirector } from "@/lib/app-state";
 import { getRepository } from "@/lib/db/repository";
@@ -54,10 +55,16 @@ export async function POST(request: Request) {
       async start(controller) {
         const encoder = new TextEncoder();
         const send = (value: unknown) => {
+          logTritreeAiDebug("api-sessions", "send", summarizeTritreeStreamEventForLog(value));
           controller.enqueue(encoder.encode(encodeNdjson(value)));
         };
 
         send({ type: "state", state: draftState });
+        logTritreeAiDebug("api-sessions", "options-stream-start", {
+          sessionId: draftState.session.id,
+          nodeId: draftState.currentNode?.id ?? null,
+          enabledSkillCount: enabledSkills.length
+        });
 
         try {
           const output = await streamDirectorOptions(
@@ -78,6 +85,13 @@ export async function POST(request: Request) {
               }
             }
           );
+          logTritreeAiDebug("api-sessions", "options-stream-output", {
+            sessionId: draftState.session.id,
+            nodeId: draftState.currentNode?.id ?? null,
+            roundIntent: output.roundIntent,
+            optionCount: output.options.length,
+            optionLabels: output.options.map((option) => option.label)
+          });
           const nextState = repository.updateNodeOptions({
             sessionId: draftState.session.id,
             nodeId: draftState.currentNode!.id,

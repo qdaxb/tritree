@@ -30,6 +30,13 @@ import {
   TreeNodeSchema,
   requireThreeOptions
 } from "@/lib/domain";
+import {
+  defaultSkillInstallRoot,
+  discoverInstalledSkills,
+  stripSkillRuntimeMetadata,
+  type InstalledSkillImport
+} from "@/lib/skills/skill-installer";
+import { appendSessionToolMemory } from "@/lib/tool-memory";
 import { createDatabase, defaultDbPath } from "./client";
 
 type RootMemoryRow = {
@@ -47,6 +54,7 @@ type SessionRow = {
   title: string;
   status: string;
   current_node_id: string | null;
+  tool_memory: string;
   created_at: string;
   updated_at: string;
 };
@@ -205,7 +213,7 @@ function toSkill(row: SkillRow): Skill {
     title: row.title,
     category: row.category,
     description: row.description,
-    prompt: row.prompt,
+    prompt: stripSkillRuntimeMetadata(row.prompt),
     appliesTo: row.applies_to || "both",
     isSystem: Boolean(row.is_system),
     defaultEnabled: Boolean(row.default_enabled),
@@ -228,6 +236,10 @@ function toCreationRequestOption(row: CreationRequestOptionRow): CreationRequest
 
 function uniqueSkillIds(skillIds: string[]) {
   return Array.from(new Set(skillIds.filter((id) => id.trim().length > 0)));
+}
+
+function nextSessionToolMemory(session: Pick<SessionRow, "tool_memory">, memoryObservation: string) {
+  return appendSessionToolMemory(session.tool_memory ?? "", memoryObservation);
 }
 
 function latestDraftForNode(draftsByNode: Map<string, DraftVersionRow>, nodeId: string | null) {
@@ -253,10 +265,28 @@ function activePathFor(nodes: TreeNode[], currentNode: TreeNode | null) {
   return path;
 }
 
-export function createTreeableRepository(dbPath = defaultDbPath()) {
+export function createTreeableRepository(
+  dbPath = defaultDbPath(),
+  {
+    skillInstallRoot = defaultSkillInstallRoot()
+  }: {
+    skillInstallRoot?: string;
+  } = {}
+) {
   const db = createDatabase(dbPath);
+  cleanupStoredSkillRuntimePrompts();
   ensureSystemSkills();
   ensureDefaultCreationRequestOptions();
+
+  function cleanupStoredSkillRuntimePrompts() {
+    const timestamp = now();
+    const rows = db.prepare("SELECT id, prompt FROM skills").all() as Array<Pick<SkillRow, "id" | "prompt">>;
+    for (const row of rows) {
+      const normalizedPrompt = stripSkillRuntimeMetadata(row.prompt);
+      if (normalizedPrompt === row.prompt) continue;
+      db.prepare("UPDATE skills SET prompt = ?, updated_at = ? WHERE id = ?").run(normalizedPrompt, timestamp, row.id);
+    }
+  }
 
   function ensureSystemSkills() {
     const timestamp = now();
@@ -490,6 +520,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function listSkills({ includeArchived = false }: { includeArchived?: boolean } = {}) {
+    syncInstalledSkillsFromFolder();
     const rows = db
       .prepare(
         includeArchived
@@ -507,6 +538,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function resolveSkillsByIds(skillIds: string[]) {
+    syncInstalledSkillsFromFolder();
     const ids = uniqueSkillIds(skillIds);
     if (ids.length === 0) return [];
     return ids
@@ -538,6 +570,85 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       timestamp
     );
     return toSkill(db.prepare("SELECT * FROM skills WHERE id = ?").get(id) as SkillRow);
+  }
+
+  function importSkills(inputs: InstalledSkillImport[]) {
+    const timestamp = now();
+
+    return withTransaction(db, () => {
+      const imported: Skill[] = [];
+
+      for (const input of inputs) {
+        imported.push(upsertImportedSkill(input, timestamp, { allowSystemOverwrite: false }));
+      }
+
+      return imported;
+    });
+  }
+
+  function syncInstalledSkillsFromFolder() {
+    const timestamp = now();
+    for (const installed of discoverInstalledSkills({ installRoot: skillInstallRoot })) {
+      const existing = db.prepare("SELECT * FROM skills WHERE id = ?").get(installed.skill.id) as SkillRow | undefined;
+      if (existing?.is_system) continue;
+      upsertImportedSkill(installed.skill, timestamp, { allowSystemOverwrite: false });
+    }
+  }
+
+  function upsertImportedSkill(
+    input: InstalledSkillImport,
+    timestamp: string,
+    {
+      allowSystemOverwrite
+    }: {
+      allowSystemOverwrite: boolean;
+    }
+  ) {
+    const parsed = SkillUpsertSchema.parse(input);
+    const existing = db.prepare("SELECT * FROM skills WHERE id = ?").get(input.id) as SkillRow | undefined;
+    if (existing?.is_system && !allowSystemOverwrite) {
+      throw new Error("System skills cannot be overwritten by imported skills.");
+    }
+
+    if (existing) {
+      db.prepare(
+        `
+          UPDATE skills
+          SET title = ?, category = ?, description = ?, prompt = ?, applies_to = ?, default_enabled = ?, is_archived = ?, updated_at = ?
+          WHERE id = ?
+        `
+      ).run(
+        parsed.title,
+        parsed.category,
+        parsed.description,
+        parsed.prompt,
+        parsed.appliesTo,
+        parsed.defaultEnabled ? 1 : 0,
+        parsed.isArchived ? 1 : 0,
+        timestamp,
+        input.id
+      );
+    } else {
+      db.prepare(
+        `
+          INSERT INTO skills (id, title, category, description, prompt, applies_to, is_system, default_enabled, is_archived, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+        `
+      ).run(
+        input.id,
+        parsed.title,
+        parsed.category,
+        parsed.description,
+        parsed.prompt,
+        parsed.appliesTo,
+        parsed.defaultEnabled ? 1 : 0,
+        parsed.isArchived ? 1 : 0,
+        timestamp,
+        timestamp
+      );
+    }
+
+    return toSkill(db.prepare("SELECT * FROM skills WHERE id = ?").get(input.id) as SkillRow);
   }
 
   function updateSkill(skillId: string, input: Partial<SkillUpsert>) {
@@ -575,6 +686,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function saveSessionEnabledSkills(sessionId: string, skillIds: string[], timestamp: string) {
+    syncInstalledSkillsFromFolder();
     db.prepare("DELETE FROM session_enabled_skills WHERE session_id = ?").run(sessionId);
     for (const skillId of uniqueSkillIds(skillIds)) {
       const exists = db.prepare("SELECT id FROM skills WHERE id = ? AND is_archived = 0").get(skillId);
@@ -956,13 +1068,14 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         timestamp
       );
 
+      const toolMemory = nextSessionToolMemory(session, output.memoryObservation);
       db.prepare(
         `
           UPDATE sessions
-          SET title = ?, status = ?, updated_at = ?
+          SET title = ?, status = ?, tool_memory = ?, updated_at = ?
           WHERE id = ?
         `
-      ).run(parsedDraft.title || session.title || "Untitled Tree", "active", timestamp, sessionId);
+      ).run(parsedDraft.title || session.title || "Untitled Tree", "active", toolMemory, timestamp, sessionId);
 
       const state = getSessionState(sessionId);
       if (!state) {
@@ -1002,13 +1115,14 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         `
       ).run(output.roundIntent, JSON.stringify(output.options), nodeId);
 
+      const toolMemory = nextSessionToolMemory(session, output.memoryObservation);
       db.prepare(
         `
           UPDATE sessions
-          SET updated_at = ?
+          SET tool_memory = ?, updated_at = ?
           WHERE id = ?
         `
-      ).run(timestamp, sessionId);
+      ).run(toolMemory, timestamp, sessionId);
 
       const state = getSessionState(sessionId);
       if (!state) {
@@ -1248,6 +1362,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       nodeDrafts: [...latestDraftByNode.values()].map((row) => ({ nodeId: row.node_id, draft: toDraft(row) })),
       selectedPath,
       treeNodes: nodes,
+      toolMemory: session.tool_memory ?? "",
       enabledSkillIds: enabledSkills.map((skill) => skill.id),
       enabledSkills,
       foldedBranches: historyRows.map((row) => ({
@@ -1279,6 +1394,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     resetCreationRequestOptions,
     listSkills,
     createSkill,
+    importSkills,
     updateSkill,
     defaultEnabledSkillIds,
     resolveSkillsByIds,

@@ -1,5 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { Agent } from "@mastra/core/agent";
+import type { ToolsInput } from "@mastra/core/agent";
 import { getDirectorAuthToken, getDirectorBaseUrl, getDirectorModel } from "./director";
 import {
   buildTreeDraftInstructions,
@@ -28,24 +29,32 @@ export function getAnthropicProviderBaseUrl(env: Record<string, string | undefin
 
 export function createTreeDraftAgent(
   context: SharedAgentContextInput,
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
+  tools?: ToolsInput
 ) {
   return new Agent({
     id: "treeable-tree-draft-agent",
     name: "Treeable Tree Draft Agent",
     instructions: buildTreeDraftInstructions(context),
-    model: createTreeableAnthropicModel(env)
+    model: createTreeableAnthropicModel(env),
+    ...(hasTools(tools) ? { tools } : {})
   });
 }
 
 export function createTreeOptionsAgent(
   context: SharedAgentContextInput,
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
+  tools?: ToolsInput
 ) {
   return new Agent({
     id: "treeable-tree-options-agent",
     name: "Treeable Tree Options Agent",
     instructions: buildTreeOptionsInstructions(context),
-    model: createTreeableAnthropicModel(env)
+    model: createTreeableAnthropicModel(env),
+    ...(hasTools(tools) ? { tools } : {})
   });
+}
+
+function hasTools(tools: ToolsInput | undefined): tools is ToolsInput {
+  return Boolean(tools && Object.keys(tools).length > 0);
 }

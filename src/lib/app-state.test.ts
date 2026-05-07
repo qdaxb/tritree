@@ -129,6 +129,27 @@ describe("summarizeSessionForDirector", () => {
     expect(summary.selectedOptionLabel).not.toContain("小改");
   });
 
+  it("includes completed tool query memory in later draft and option prompts", () => {
+    const state = {
+      ...createStateWithPath([]),
+      toolMemory: [
+        "# 工具查询记忆",
+        "后续轮次优先复用这些结果；不要重复相同查询。",
+        "[工具结果:完成] run_skill_command: {\"feeds\":[{\"displayTitle\":\"青岛三天两晚攻略\"}]}"
+      ].join("\n")
+    };
+
+    const draftSummary = summarizeSessionForDirector(state, option("a", "避开游客打卡视角"));
+    const optionSummary = summarizeCurrentDraftOptionsForDirector(state);
+    const draftMessages = (draftSummary as any).messages as Array<{ role: string; content: string }>;
+    const optionMessages = (optionSummary as any).messages as Array<{ role: string; content: string }>;
+
+    expect(draftMessages[0].content).toContain("青岛三天两晚攻略");
+    expect(draftMessages[0].content).toContain("不要重复相同查询");
+    expect(optionMessages[0].content).toContain("青岛三天两晚攻略");
+    expect(optionMessages[0].content).toContain("不要重复相同查询");
+  });
+
   it("puts the direction range into editor conversation messages", () => {
     const state = createStateWithPath([
       createNode({

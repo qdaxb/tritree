@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { SkillLibraryPanel } from "./SkillLibraryPanel";
@@ -50,7 +50,7 @@ describe("SkillLibraryPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "新建技能" }));
     await userEvent.type(screen.getByRole("textbox", { name: "技能名称" }), "小红书风格");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "分类" }), "平台");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "作用方式" }), "writer");
+    await userEvent.click(screen.getByRole("checkbox", { name: "影响建议" }));
     await userEvent.type(screen.getByRole("textbox", { name: "说明" }), "适合小红书。");
     await userEvent.type(screen.getByRole("textbox", { name: "提示词" }), "标题口语一点。");
     await userEvent.click(screen.getByRole("checkbox", { name: "默认启用" }));
@@ -148,5 +148,110 @@ describe("SkillLibraryPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "归档 我的约束" }));
 
     expect(onArchive).toHaveBeenCalledWith("user-constraint");
+  });
+
+  it("edits skill effects with checkboxes and keeps both selected by default", async () => {
+    const onCreate = vi.fn();
+    render(
+      <SkillLibraryPanel
+        isSaving={false}
+        onArchive={vi.fn()}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        skills={skills}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "新建技能" }));
+    expect(screen.getByRole("checkbox", { name: "影响草稿" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "影响建议" })).toBeChecked();
+    await userEvent.type(screen.getByRole("textbox", { name: "技能名称" }), "全程约束");
+    await userEvent.type(screen.getByRole("textbox", { name: "提示词" }), "标题和正文都要克制。");
+    await userEvent.click(screen.getByRole("button", { name: "保存技能" }));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appliesTo: "both"
+      })
+    );
+  });
+
+  it("brings the edit form into view and focuses it after clicking edit", async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView
+    });
+
+    try {
+      render(
+        <SkillLibraryPanel
+          isSaving={false}
+          onArchive={vi.fn()}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          onUpdate={vi.fn()}
+          skills={skills}
+        />
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "编辑 我的约束" }));
+
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" }));
+      expect(screen.getByRole("textbox", { name: "技能名称" })).toHaveFocus();
+    } finally {
+      if (originalScrollIntoView) {
+        Object.defineProperty(Element.prototype, "scrollIntoView", {
+          configurable: true,
+          value: originalScrollIntoView
+        });
+      } else {
+        delete (Element.prototype as { scrollIntoView?: Element["scrollIntoView"] }).scrollIntoView;
+      }
+    }
+  });
+
+  it("imports executable skills from a GitHub repository URL", async () => {
+    const onImport = vi.fn();
+    render(
+      <SkillLibraryPanel
+        isSaving={false}
+        onArchive={vi.fn()}
+        onClose={vi.fn()}
+        onCreate={vi.fn()}
+        onImport={onImport}
+        onUpdate={vi.fn()}
+        skills={skills}
+      />
+    );
+
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Skill GitHub URL" }),
+      "https://github.com/autoclaw-cc/xiaohongshu-skills"
+    );
+    await userEvent.click(screen.getByRole("button", { name: "导入" }));
+
+    expect(onImport).toHaveBeenCalledWith("https://github.com/autoclaw-cc/xiaohongshu-skills");
+  });
+
+  it("uses a generic skill repository placeholder", () => {
+    render(
+      <SkillLibraryPanel
+        isSaving={false}
+        onArchive={vi.fn()}
+        onClose={vi.fn()}
+        onCreate={vi.fn()}
+        onImport={vi.fn()}
+        onUpdate={vi.fn()}
+        skills={skills}
+      />
+    );
+
+    expect(screen.getByRole("textbox", { name: "Skill GitHub URL" })).toHaveAttribute(
+      "placeholder",
+      "https://github.com/owner/skill-name"
+    );
   });
 });

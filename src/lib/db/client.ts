@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const CURRENT_SCHEMA_VERSION = 5;
+const CURRENT_SCHEMA_VERSION = 6;
 const TREEABLE_TABLES = [
   "publish_packages",
   "branch_history",
@@ -24,7 +24,7 @@ class UnsupportedDatabaseVersionError extends Error {
 }
 
 export function defaultDbPath() {
-  return process.env.TREEABLE_DB_PATH ?? path.join(process.cwd(), ".treeable", "treeable.sqlite");
+  return process.env.TRITREE_DB_PATH ?? process.env.TREEABLE_DB_PATH ?? path.join(process.cwd(), ".tritree", "tritree.sqlite");
 }
 
 export function createDatabase(dbPath = defaultDbPath()) {
@@ -93,6 +93,7 @@ function createSchema(sqlite: DatabaseSync) {
       title TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('active', 'finished')),
       current_node_id TEXT,
+      tool_memory TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -150,6 +151,7 @@ function createSchema(sqlite: DatabaseSync) {
   `);
   addColumnIfMissing(sqlite, "tree_nodes", "parent_option_id", "TEXT");
   addColumnIfMissing(sqlite, "skills", "applies_to", "TEXT NOT NULL DEFAULT 'both'");
+  addColumnIfMissing(sqlite, "sessions", "tool_memory", "TEXT NOT NULL DEFAULT ''");
 }
 
 function addColumnIfMissing(sqlite: DatabaseSync, tableName: string, columnName: string, definition: string) {

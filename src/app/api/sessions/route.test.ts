@@ -413,6 +413,95 @@ describe("POST /api/sessions", () => {
     );
   });
 
+  it("streams generic upstream error details to the frontend", async () => {
+    const draftState = {
+      rootMemory: {
+        id: "root",
+        preferences: {
+          seed: "写一篇青岛旅游攻略",
+          domains: ["旅行"],
+          tones: ["轻松"],
+          styles: ["攻略"],
+          personas: ["旅行者"]
+        },
+        summary: "Seed：写一篇青岛旅游攻略",
+        learnedSummary: "",
+        createdAt: "2026-04-26T00:00:00.000Z",
+        updatedAt: "2026-04-26T00:00:00.000Z"
+      },
+      session: {
+        id: "session-1",
+        title: "Draft",
+        status: "active",
+        currentNodeId: "node-1",
+        createdAt: "2026-04-26T00:00:00.000Z",
+        updatedAt: "2026-04-26T00:00:00.000Z"
+      },
+      currentNode: {
+        id: "node-1",
+        sessionId: "session-1",
+        parentId: null,
+        parentOptionId: null,
+        roundIndex: 1,
+        roundIntent: "选择起始方式",
+        options: [],
+        selectedOptionId: null,
+        foldedOptions: [],
+        createdAt: "2026-04-26T00:00:00.000Z"
+      },
+      currentDraft: createSeedDraft("写一篇青岛旅游攻略"),
+      nodeDrafts: [{ nodeId: "node-1", draft: createSeedDraft("写一篇青岛旅游攻略") }],
+      selectedPath: [],
+      treeNodes: [],
+      enabledSkillIds: ["system-analysis"],
+      enabledSkills: resolvedSkills,
+      foldedBranches: [],
+      publishPackage: null
+    };
+    getRepositoryMock.mockReturnValue({
+      getRootMemory: () => ({
+        id: "root",
+        preferences: {
+          seed: "写一篇青岛旅游攻略",
+          domains: ["旅行"],
+          tones: ["轻松"],
+          styles: ["攻略"],
+          personas: ["旅行者"]
+        },
+        summary: "Seed：写一篇青岛旅游攻略",
+        learnedSummary: "",
+        createdAt: "2026-04-26T00:00:00.000Z",
+        updatedAt: "2026-04-26T00:00:00.000Z"
+      }),
+      defaultEnabledSkillIds: vi.fn(() => ["system-analysis"]),
+      resolveSkillsByIds: vi.fn(() => resolvedSkills),
+      createSessionDraft: vi.fn().mockReturnValue(draftState),
+      updateNodeOptions: vi.fn()
+    });
+    streamDirectorOptionsMock.mockRejectedValue({
+      name: "AI_APICallError",
+      statusCode: 429,
+      responseHeaders: { "retry-after": "60" },
+      data: {
+        type: "error",
+        error: {
+          type: "engine_overloaded_error",
+          message: "The engine is currently overloaded, please try again later"
+        }
+      },
+      message: "The engine is currently overloaded, please try again later"
+    });
+
+    const response = await POST(new Request("http://test.local/api/sessions", { method: "POST" }));
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(text).toContain('"type":"state"');
+    expect(text).toContain('"type":"error"');
+    expect(text).toContain("无法启动创作：上游服务返回 429，可在 60 秒后重试：The engine is currently overloaded, please try again later");
+    expect(text).not.toContain('"error":"无法启动创作。"');
+  });
+
   it("rejects malformed session start JSON", async () => {
     const response = await POST(
       new Request("http://test.local/api/sessions", {

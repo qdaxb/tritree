@@ -1,4 +1,5 @@
 import type { BranchOption, DirectorDraftOutput, DirectorOptionsOutput, Draft } from "@/lib/domain";
+import { logTritreeAiDebug } from "./debug-log";
 import { streamTreeDraft, streamTreeOptions, type MemoryScope } from "./mastra-executor";
 import type { DirectorInputParts } from "./prompts";
 
@@ -29,13 +30,25 @@ export async function streamDirectorDraft(
     const text = JSON.stringify(value);
     if (!text || text === accumulatedText) return;
     accumulatedText = text;
+    const partialDraft = extractPartialDirectorDraft(accumulatedText);
+    logTritreeAiDebug("director-stream", "draft-emit", {
+      chars: accumulatedText.length,
+      hasPartialDraft: Boolean(partialDraft),
+      title: partialDraft?.title ?? "",
+      bodyChars: partialDraft?.body.length ?? 0
+    });
     options.onText?.({
       delta: text,
       accumulatedText,
-      partialDraft: extractPartialDirectorDraft(accumulatedText)
+      partialDraft
     });
   };
 
+  logTritreeAiDebug("director-stream", "draft-start", {
+    rootChars: parts.rootSummary.length,
+    currentDraftChars: parts.currentDraft.length,
+    messageCount: parts.messages?.length ?? 0
+  });
   const output = await streamTreeDraft({
     parts,
     env: options.env,
@@ -43,6 +56,10 @@ export async function streamDirectorDraft(
     signal: options.signal,
     onPartialObject: emit,
     onReasoningText: options.onReasoningText
+  });
+  logTritreeAiDebug("director-stream", "draft-output", {
+    title: output.draft.title,
+    bodyChars: output.draft.body.length
   });
   emit(output);
   return output;
@@ -57,13 +74,25 @@ export async function streamDirectorOptions(
     const text = JSON.stringify(value);
     if (!text || text === accumulatedText) return;
     accumulatedText = text;
+    const partialOptions = extractPartialDirectorOptions(accumulatedText);
+    logTritreeAiDebug("director-stream", "options-emit", {
+      chars: accumulatedText.length,
+      hasPartialOptions: Boolean(partialOptions),
+      optionCount: partialOptions?.length ?? 0,
+      optionLabels: partialOptions?.map((option) => option.label) ?? []
+    });
     options.onText?.({
       delta: text,
       accumulatedText,
-      partialOptions: extractPartialDirectorOptions(accumulatedText)
+      partialOptions
     });
   };
 
+  logTritreeAiDebug("director-stream", "options-start", {
+    rootChars: parts.rootSummary.length,
+    currentDraftChars: parts.currentDraft.length,
+    messageCount: parts.messages?.length ?? 0
+  });
   const output = await streamTreeOptions({
     parts,
     env: options.env,
@@ -71,6 +100,11 @@ export async function streamDirectorOptions(
     signal: options.signal,
     onPartialObject: emit,
     onReasoningText: options.onReasoningText
+  });
+  logTritreeAiDebug("director-stream", "options-output", {
+    roundIntent: output.roundIntent,
+    optionCount: output.options.length,
+    optionLabels: output.options.map((option) => option.label)
   });
   emit(output);
   return output;

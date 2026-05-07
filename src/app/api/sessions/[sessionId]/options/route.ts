@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { streamDirectorOptions } from "@/lib/ai/director-stream";
+import { logTritreeAiDebug, summarizeTritreeStreamEventForLog } from "@/lib/ai/debug-log";
 import { badRequestResponse, isBadRequestError, publicServerErrorMessage } from "@/lib/api/errors";
 import { focusSessionStateForNode, summarizeCurrentDraftOptionsForDirector } from "@/lib/app-state";
 import { getRepository } from "@/lib/db/repository";
@@ -46,8 +47,9 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   if (!focusedState?.currentNode) {
     return NextResponse.json({ error: "没有找到这个历史节点。" }, { status: 404 });
   }
+  const focusedNode = focusedState.currentNode;
 
-  if (focusedState.currentNode.options.length === 3 && !body.force) {
+  if (focusedNode.options.length === 3 && !body.force) {
     return new Response(encodeNdjson({ type: "done", state }), { headers: ndjsonHeaders });
   }
 
@@ -59,10 +61,18 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     async start(controller) {
       const encoder = new TextEncoder();
       const send = (value: unknown) => {
+        logTritreeAiDebug("api-options", "send", summarizeTritreeStreamEventForLog(value));
         controller.enqueue(encoder.encode(encodeNdjson(value)));
       };
 
       try {
+        logTritreeAiDebug("api-options", "stream-start", {
+          sessionId,
+          nodeId: body.nodeId,
+          force: body.force,
+          optionMode: body.optionMode,
+          existingOptionCount: focusedNode.options.length
+        });
         const output = await streamDirectorOptions(summarizeCurrentDraftOptionsForDirector(focusedState, body.optionMode), {
           memory: { resource: state.rootMemory.id, thread: sessionId },
           signal: request.signal,
@@ -74,6 +84,13 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
               send({ type: "options", nodeId: body.nodeId, options: event.partialOptions });
             }
           }
+        });
+        logTritreeAiDebug("api-options", "stream-output", {
+          sessionId,
+          nodeId: body.nodeId,
+          roundIntent: output.roundIntent,
+          optionCount: output.options.length,
+          optionLabels: output.options.map((option) => option.label)
         });
         const nextState = repository.updateNodeOptions({
           sessionId,

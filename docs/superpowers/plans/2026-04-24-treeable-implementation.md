@@ -276,7 +276,7 @@ Ensure `.gitignore` contains:
 
 ```gitignore
 .superpowers/
-.treeable/
+.tritree/
 .env*.local
 node_modules/
 .next/
@@ -724,7 +724,7 @@ import { drizzle } from "drizzle-orm/node-sqlite";
 import * as schema from "./schema";
 
 export function defaultDbPath() {
-  return process.env.TREEABLE_DB_PATH ?? path.join(process.cwd(), ".treeable", "treeable.sqlite");
+  return process.env.TRITREE_DB_PATH ?? path.join(process.cwd(), ".tritree", "tritree.sqlite");
 }
 
 export function createDatabase(dbPath = defaultDbPath()) {
@@ -2593,7 +2593,7 @@ Create `.env.example`:
 ```dotenv
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.4
-TREEABLE_DB_PATH=.treeable/treeable.sqlite
+TRITREE_DB_PATH=.tritree/tritree.sqlite
 ```
 
 - [ ] **Step 2: Add README**
@@ -2701,7 +2701,7 @@ npm run build
 
 Expected:
 
-- `git status --short` shows no unexpected changes except the active dev-server database under `.treeable/`, which is ignored.
+- `git status --short` shows no unexpected changes except the active dev-server database under `.tritree/`, which is ignored.
 - Tests pass.
 - TypeScript passes.
 - Production build passes.

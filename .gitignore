@@ -1,6 +1,6 @@
 .superpowers/
 .worktrees/
-.treeable/
+.tritree/
 .env*.local
 node_modules/
 .next/
