@@ -740,7 +740,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function replaceSessionEnabledSkills(userId: string, sessionId: string, skillIds: string[]) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
+    const session = getActiveSession(userId, sessionId);
     if (!session) throw new Error("Session was not found.");
     const timestamp = now();
     return withTransaction(db, () => {
@@ -1123,7 +1123,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     nodeId: string;
     selectedOptionId: BranchOption["id"];
   }) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
+    const session = getActiveSession(userId, sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -1275,7 +1275,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     output: DirectorOutput;
   }) {
     requireThreeOptions(output.options);
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
+    const session = getActiveSession(userId, sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -1307,7 +1307,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     nodeId: string;
     output: DirectorDraftOutput;
   }) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
+    const session = getActiveSession(userId, sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -1373,7 +1373,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     output: DirectorOptionsOutput;
   }) {
     requireThreeOptions(output.options);
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
+    const session = getActiveSession(userId, sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -1420,7 +1420,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     nodeId: string;
     selectedOptionId: BranchOption["id"];
   }) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
+    const session = getActiveSession(userId, sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -1471,7 +1471,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     nodeId: string;
     selectedOptionId: BranchOption["id"];
   }) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
+    const session = getActiveSession(userId, sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -1601,12 +1601,18 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     return latestDraftByNode;
   }
 
+  function getActiveSession(userId: string, sessionId: string) {
+    return db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ? AND is_archived = 0").get(sessionId, userId) as
+      | SessionRow
+      | undefined;
+  }
+
   function toDraftSummary(row: DraftSummaryRow): DraftSummary {
     const body = row.latest_body ?? "";
     return DraftSummarySchema.parse({
       id: row.id,
       title: row.title,
-      status: SessionStatusSchema.parse(row.status === "finished" ? "active" : row.status),
+      status: SessionStatusSchema.parse(row.status),
       currentNodeId: row.current_node_id,
       currentRoundIndex: row.current_round_index,
       bodyExcerpt: Array.from(body).slice(0, 120).join(""),
@@ -1709,9 +1715,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function getSessionState(userId: string, sessionId: string): SessionState | null {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ? AND is_archived = 0").get(sessionId, userId) as
-      | SessionRow
-      | undefined;
+    const session = getActiveSession(userId, sessionId);
     if (!session) return null;
 
     const root = db.prepare("SELECT * FROM root_memory WHERE id = ? AND user_id = ?").get(session.root_memory_id, userId) as

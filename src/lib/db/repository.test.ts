@@ -13,11 +13,53 @@ function testDbPath() {
 
 type Repository = ReturnType<typeof createTreeableRepository>;
 
+type ArchivedMutationSnapshot = {
+  session: {
+    title: string;
+    status: string;
+    current_node_id: string | null;
+    updated_at: string;
+  };
+  enabledSkillIds: string[];
+  nodeCount: number;
+  draftCount: number;
+  branchHistoryCount: number;
+  selectedOptionIds: Array<string | null>;
+  roundIntents: string[];
+};
+
 async function createTestUser(repo: Repository, username: string, role: "admin" | "member" = "member") {
   if (!repo.hasUsers()) {
     return repo.createInitialAdmin({ username, displayName: username, password: "password-123" });
   }
   return repo.createUser({ username, displayName: username, password: "password-123", role });
+}
+
+function readArchivedMutationSnapshot(dbPath: string, sessionId: string): ArchivedMutationSnapshot {
+  const sqlite = new DatabaseSync(dbPath);
+  const session = sqlite
+    .prepare("SELECT title, status, current_node_id, updated_at FROM sessions WHERE id = ?")
+    .get(sessionId) as ArchivedMutationSnapshot["session"];
+  const enabledSkillRows = sqlite
+    .prepare("SELECT skill_id FROM session_enabled_skills WHERE session_id = ? ORDER BY skill_id")
+    .all(sessionId) as Array<{ skill_id: string }>;
+  const nodeCount = (sqlite.prepare("SELECT COUNT(*) AS count FROM tree_nodes WHERE session_id = ?").get(sessionId) as { count: number }).count;
+  const draftCount = (sqlite.prepare("SELECT COUNT(*) AS count FROM draft_versions WHERE session_id = ?").get(sessionId) as { count: number }).count;
+  const branchHistoryCount = (sqlite.prepare("SELECT COUNT(*) AS count FROM branch_history WHERE session_id = ?").get(sessionId) as { count: number }).count;
+  const nodeRows = sqlite
+    .prepare("SELECT selected_option_id, round_intent FROM tree_nodes WHERE session_id = ? ORDER BY round_index, created_at, rowid")
+    .all(sessionId) as Array<{ selected_option_id: string | null; round_intent: string }>;
+  sqlite.close();
+
+  return {
+    session,
+    enabledSkillIds: enabledSkillRows.map((row) => row.skill_id),
+    nodeCount,
+    draftCount,
+    branchHistoryCount,
+    selectedOptionIds: nodeRows.map((row) => row.selected_option_id),
+    roundIntents: nodeRows.map((row) => row.round_intent)
+  };
 }
 
 function createSessionDraftWithOptions(
@@ -473,6 +515,165 @@ describe("Treeable repository", () => {
 
     expect(columns).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "is_archived", dflt_value: "0" })])
+    );
+  });
+
+  it("preserves finished status in draft summaries", async () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
+      domains: ["AI"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+    const state = createSessionDraftWithOptions(repo, {
+      userId: user.id,
+      rootMemoryId: root.id,
+      output: {
+        roundIntent: "Finished",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "finish" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "finish" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "finish" }
+        ],
+        draft: { title: "Finished draft", body: "A persisted finished summary.", hashtags: [], imagePrompt: "" },
+        memoryObservation: "",
+        finishAvailable: true,
+        publishPackage: null
+      }
+    });
+    const sqlite = new DatabaseSync(dbPath);
+    sqlite.prepare("UPDATE sessions SET status = 'finished' WHERE id = ?").run(state.session.id);
+    sqlite.close();
+
+    expect(repo.listSessionSummaries(user.id)[0].status).toBe("finished");
+  });
+
+  it("rejects archived draft mutations without changing persisted rows", async () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
+      domains: ["AI"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+    const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
+      rootMemoryId: root.id,
+      enabledSkillIds: ["system-analysis"],
+      output: {
+        roundIntent: "Start",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "explore" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "explore" }
+        ],
+        draft: { title: "Draft", body: "Body", hashtags: ["#AI"], imagePrompt: "Tree" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    appendGeneratedChild(repo, {
+      userId: user.id,
+      sessionId: first.session.id,
+      nodeId: first.currentNode!.id,
+      selectedOptionId: "b",
+      output: {
+        roundIntent: "Old route",
+        options: [
+          { id: "a", label: "Old A", description: "A", impact: "A", kind: "deepen" },
+          { id: "b", label: "Old B", description: "B", impact: "B", kind: "reframe" },
+          { id: "c", label: "Old C", description: "C", impact: "C", kind: "finish" }
+        ],
+        draft: { title: "Old", body: "Old route body", hashtags: ["#Old"], imagePrompt: "Old tree" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    const current = createHistoricalGeneratedChild(repo, {
+      userId: user.id,
+      sessionId: first.session.id,
+      nodeId: first.currentNode!.id,
+      selectedOptionId: "a",
+      output: {
+        roundIntent: "Current route",
+        options: [
+          { id: "a", label: "Current A", description: "A", impact: "A", kind: "deepen" },
+          { id: "b", label: "Current B", description: "B", impact: "B", kind: "reframe" },
+          { id: "c", label: "Current C", description: "C", impact: "C", kind: "finish" }
+        ],
+        draft: { title: "Current", body: "Current route body", hashtags: ["#Current"], imagePrompt: "Current tree" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    repo.archiveSession(user.id, first.session.id);
+
+    const expectArchivedMutationBlocked = (mutate: () => unknown) => {
+      const before = readArchivedMutationSnapshot(dbPath, first.session.id);
+      expect(mutate).toThrow("Session was not found.");
+      expect(readArchivedMutationSnapshot(dbPath, first.session.id)).toEqual(before);
+    };
+
+    expectArchivedMutationBlocked(() => repo.replaceSessionEnabledSkills(user.id, first.session.id, ["system-polish"]));
+    expectArchivedMutationBlocked(() =>
+      repo.createDraftChild({
+        userId: user.id,
+        sessionId: first.session.id,
+        nodeId: current.currentNode!.id,
+        selectedOptionId: "a"
+      })
+    );
+    expectArchivedMutationBlocked(() =>
+      repo.updateNodeDraft({
+        userId: user.id,
+        sessionId: first.session.id,
+        nodeId: current.currentNode!.id,
+        output: {
+          roundIntent: "Archived draft update",
+          draft: { title: "Mutated", body: "Should not save", hashtags: [], imagePrompt: "" },
+          memoryObservation: ""
+        }
+      })
+    );
+    expectArchivedMutationBlocked(() =>
+      repo.updateNodeOptions({
+        userId: user.id,
+        sessionId: first.session.id,
+        nodeId: current.currentNode!.id,
+        output: {
+          roundIntent: "Archived options update",
+          options: [
+            { id: "a", label: "Archived A", description: "A", impact: "A", kind: "deepen" },
+            { id: "b", label: "Archived B", description: "B", impact: "B", kind: "reframe" },
+            { id: "c", label: "Archived C", description: "C", impact: "C", kind: "finish" }
+          ],
+          memoryObservation: ""
+        }
+      })
+    );
+    expectArchivedMutationBlocked(() =>
+      repo.activateHistoricalBranch({
+        userId: user.id,
+        sessionId: first.session.id,
+        nodeId: first.currentNode!.id,
+        selectedOptionId: "b"
+      })
+    );
+    expectArchivedMutationBlocked(() =>
+      repo.createHistoricalDraftChild({
+        userId: user.id,
+        sessionId: first.session.id,
+        nodeId: first.currentNode!.id,
+        selectedOptionId: "c"
+      })
     );
   });
 
