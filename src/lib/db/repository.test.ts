@@ -468,6 +468,71 @@ describe("Treeable repository", () => {
     expect(repo.getSessionState(user.id, latest.session.id)).toBeNull();
   });
 
+  it("does not rename archived draft sessions", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
+      domains: ["AI"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+    const state = createSessionDraftWithOptions(repo, {
+      userId: user.id,
+      rootMemoryId: root.id,
+      output: {
+        roundIntent: "Archived",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "explore" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "explore" }
+        ],
+        draft: { title: "Original archived title", body: "Archived body.", hashtags: [], imagePrompt: "" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    repo.archiveSession(user.id, state.session.id);
+
+    expect(repo.renameSession(user.id, state.session.id, "Should not stick")).toBeNull();
+    expect(repo.listSessionSummaries(user.id, { archived: true })[0]).toEqual(
+      expect.objectContaining({ id: state.session.id, title: "Original archived title" })
+    );
+  });
+
+  it("does not update archived draft timestamps when archived again", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
+      domains: ["AI"],
+      tones: ["calm"],
+      styles: ["opinion-driven"],
+      personas: ["practitioner"]
+    });
+    const state = createSessionDraftWithOptions(repo, {
+      userId: user.id,
+      rootMemoryId: root.id,
+      output: {
+        roundIntent: "Archived",
+        options: [
+          { id: "a", label: "A", description: "A", impact: "A", kind: "explore" },
+          { id: "b", label: "B", description: "B", impact: "B", kind: "explore" },
+          { id: "c", label: "C", description: "C", impact: "C", kind: "explore" }
+        ],
+        draft: { title: "Archive once", body: "Archived body.", hashtags: [], imagePrompt: "" },
+        memoryObservation: "",
+        finishAvailable: false,
+        publishPackage: null
+      }
+    });
+    repo.archiveSession(user.id, state.session.id);
+    const archivedUpdatedAt = repo.listSessionSummaries(user.id, { archived: true })[0].updatedAt;
+
+    expect(repo.archiveSession(user.id, state.session.id)).toBeNull();
+    expect(repo.listSessionSummaries(user.id, { archived: true })[0].updatedAt).toBe(archivedUpdatedAt);
+  });
+
   it("adds the archived flag to legacy sessions during migration", async () => {
     const dbPath = testDbPath();
     const sqlite = new DatabaseSync(dbPath);

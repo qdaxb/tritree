@@ -1701,7 +1701,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   function renameSession(userId: string, sessionId: string, title: string) {
     const timestamp = now();
     const result = db
-      .prepare("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?")
+      .prepare("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ? AND is_archived = 0")
       .run(title, timestamp, sessionId, userId) as { changes: number };
     return result.changes > 0 ? getSessionSummary(userId, sessionId) : null;
   }
@@ -1709,7 +1709,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   function archiveSession(userId: string, sessionId: string) {
     const timestamp = now();
     const result = db
-      .prepare("UPDATE sessions SET is_archived = 1, updated_at = ? WHERE id = ? AND user_id = ?")
+      .prepare("UPDATE sessions SET is_archived = 1, updated_at = ? WHERE id = ? AND user_id = ? AND is_archived = 0")
       .run(timestamp, sessionId, userId) as { changes: number };
     return result.changes > 0 ? getSessionSummary(userId, sessionId) : null;
   }
