@@ -118,6 +118,17 @@ describe("GET /api/sessions", () => {
     expect(listSessionSummaries).toHaveBeenCalledWith("user-1", { archived: true });
     expect(data.drafts[0].isArchived).toBe(true);
   });
+
+  it("rejects an empty draft view parameter", async () => {
+    const getLatestSessionState = vi.fn();
+    getRepositoryMock.mockReturnValue({ getLatestSessionState });
+
+    const response = await GET(new Request("http://test.local/api/sessions?view="));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "不支持的草稿视图。" });
+    expect(getLatestSessionState).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/sessions", () => {
