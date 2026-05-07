@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { signOut } from "next-auth/react";
+import { LogOut, Plus, RotateCcw, UsersRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   SessionStateSchema,
@@ -19,6 +22,7 @@ import {
   isCustomBranchOptionId,
   isPrimaryBranchOptionId
 } from "@/lib/domain";
+import type { UserRole } from "@/lib/auth/types";
 import { LiveDraft } from "@/components/draft/LiveDraft";
 import { RootMemorySetup } from "@/components/root-memory/RootMemorySetup";
 import { SkillLibraryPanel } from "@/components/skills/SkillLibraryPanel";
@@ -36,6 +40,13 @@ type RootSetupDefaults = {
   creationRequest?: string;
   enabledSkillIds?: string[];
   seed: string;
+};
+type CurrentUserView = {
+  id: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  isAdmin: boolean;
 };
 
 function defaultCreationRequestOptions(): CreationRequestOption[] {
@@ -358,7 +369,7 @@ function incomingOptionLabelForNode(node: TreeNode, nodesById: Map<string, TreeN
   return null;
 }
 
-export function TreeableApp() {
+export function TreeableApp({ currentUser }: { currentUser?: CurrentUserView } = {}) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [rootMemory, setRootMemory] = useState<RootMemory | null>(null);
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
@@ -1380,17 +1391,36 @@ export function TreeableApp() {
           <span>{formatRootSummary(rootMemory)}</span>
         </div>
         <div className="topbar-actions">
-          <button className="start-button" disabled={isBusy} onClick={startNewSeed} type="button">
-            新念头
-          </button>
-          <button
-            className="secondary-button"
-            disabled={isBusy}
-            onClick={sessionState ? restartFromCurrentSettings : startSession}
-            type="button"
-          >
-            {startButtonLabel}
-          </button>
+          {currentUser ? (
+            <div className="account-controls" role="group" aria-label="账号操作" title={currentUser.username}>
+              <span className="account-controls__name">{currentUser.displayName}</span>
+              {currentUser.isAdmin ? (
+                <Link className="account-controls__admin-link" href="/admin/users">
+                  <UsersRound aria-hidden="true" size={16} strokeWidth={2.25} />
+                  <span>用户管理</span>
+                </Link>
+              ) : null}
+              <button onClick={() => signOut({ callbackUrl: "/login" })} type="button">
+                <LogOut aria-hidden="true" size={15} strokeWidth={2.25} />
+                <span>退出登录</span>
+              </button>
+            </div>
+          ) : null}
+          <div className="workspace-actions" role="group" aria-label="作品操作">
+            <button className="start-button" disabled={isBusy} onClick={startNewSeed} type="button">
+              <Plus aria-hidden="true" size={17} strokeWidth={2.4} />
+              <span>新念头</span>
+            </button>
+            <button
+              className="secondary-button"
+              disabled={isBusy}
+              onClick={sessionState ? restartFromCurrentSettings : startSession}
+              type="button"
+            >
+              <RotateCcw aria-hidden="true" size={16} strokeWidth={2.25} />
+              <span>{startButtonLabel}</span>
+            </button>
+          </div>
         </div>
       </header>
       {isMobileLayout ? (

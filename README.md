@@ -18,7 +18,7 @@ Tritree 的核心交互是一棵不断生长的创作树。每一轮，AI 导演
 - **草稿对比**：可选择任意两个历史节点的草稿进行差异对比。
 - **技能系统（Skills）**：为每次创作会话启用特定写作技能，影响 AI 的生成风格与策略。
 - **发布包输出**：最终输出包含标题、正文、话题标签和配图提示词，可直接复制使用。
-- **本地持久化**：所有数据存储在本地 SQLite 文件中，无需登录，无需联网（除 AI API 调用外）。
+- **认证与本地持久化**：面向自托管使用，登录后访问工作区；创作数据存储在本地 SQLite 文件中，除认证提供方和 AI API 调用外不依赖外部服务。
 
 ## 技术栈
 
@@ -46,13 +46,32 @@ npm install
 
 ### 配置
 
-复制 `.env.example` 为 `.env.local` 并填写 API 密钥：
+复制 `.env.example` 为 `.env.local`，补充认证配置并填写 API 密钥：
 
 ```bash
 cp .env.example .env.local
 ```
 
-编辑 `.env.local`：
+编辑 `.env.local`，先配置认证与本地数据库：
+
+```env
+# Auth.js 会话密钥，生产环境请使用随机长字符串
+AUTH_SECRET=replace-with-random-secret
+
+# 反向代理或自托管域名部署时通常需要启用
+AUTH_TRUST_HOST=true
+
+# 可选：OIDC 登录。只有 issuer、client id、client secret 都存在时才会启用
+OIDC_ISSUER=https://issuer.example.com
+OIDC_CLIENT_ID=your_client_id
+OIDC_CLIENT_SECRET=your_client_secret
+OIDC_SCOPE=openid email profile
+
+# 本地数据库路径（自动创建）
+TREEABLE_DB_PATH=.treeable/treeable.sqlite
+```
+
+继续配置 AI 接口：
 
 ```env
 # AI SDK Anthropic provider 兼容接口地址
@@ -64,8 +83,6 @@ ANTHROPIC_AUTH_TOKEN=your_api_key_here
 # 使用的模型
 ANTHROPIC_MODEL=kimi-k2.5
 
-# 本地数据库路径（自动创建）
-TREEABLE_DB_PATH=.treeable/treeable.sqlite
 ```
 
 > AI 调用统一通过 Mastra Agent 和 AI SDK provider 执行，不再保留手写 HTTP provider 分支。
@@ -76,16 +93,17 @@ TREEABLE_DB_PATH=.treeable/treeable.sqlite
 npm run dev
 ```
 
-打开浏览器访问 [http://localhost:3000](http://localhost:3000)。
+打开浏览器访问 [http://localhost:3000](http://localhost:3000)。首次启动且数据库没有用户时，应用会进入管理员初始化页；第一个用户会成为管理员，之后用户由管理员在「用户管理」中创建。
 
 ## 使用流程
 
-1. **初始化根记忆**：首次打开时，选择你的内容偏好（领域、语气、风格、视角），或直接输入一句 Seed 描述你想创作的方向。
-2. **开始创作**：点击「开始创作」，AI 自动生成第一轮三个分支选项。
-3. **选择分支**：在树画布上点击你想要的方向，草稿实时更新。
-4. **持续迭代**：每轮选择后，AI 继续生成下一轮选项，直到内容成熟。
-5. **完成发布包**：当 AI 判断内容足够完整时，会提供「完成」选项，生成可直接使用的发布包。
-6. **新念头**：点击「新念头」可随时开启全新的创作主题。
+1. **登录工作区**：使用管理员创建的用户名和密码登录；首次自托管部署先完成管理员初始化。
+2. **初始化根记忆**：首次进入工作区时，选择你的内容偏好（领域、语气、风格、视角），或直接输入一句 Seed 描述你想创作的方向。
+3. **开始创作**：点击「开始创作」，AI 自动生成第一轮三个分支选项。
+4. **选择分支**：在树画布上点击你想要的方向，草稿实时更新。
+5. **持续迭代**：每轮选择后，AI 继续生成下一轮选项，直到内容成熟。
+6. **完成发布包**：当 AI 判断内容足够完整时，会提供「完成」选项，生成可直接使用的发布包。
+7. **新念头**：点击「新念头」可随时开启全新的创作主题。
 
 ## 项目结构
 
@@ -143,9 +161,17 @@ npm run typecheck
 - 最终发布包
 - 技能库
 
+启用多用户后，旧版单人数据不会自动迁移到任何账号。登录用户只会读取自己名下的数据，并会从空白工作区开始。
+
+## 用户与登录
+
+Tritree 当前面向自托管团队或个人多账号场景。没有用户时，访问应用会进入管理员初始化页；第一个用户会成为管理员。数据库已有用户后，新用户、角色调整、停用账号、密码重置和 OIDC 绑定都由管理员在「用户管理」中完成。
+
+OIDC 登录不会自动创建 Tritree 用户。管理员必须先为本地用户绑定 OIDC issuer 和 subject，绑定后该外部身份才能登录。
+
 ## 注意事项
 
-- 本项目为本地个人使用设计，不包含多用户、认证或计费功能。
+- 请妥善保管 `AUTH_SECRET`；更换该值会使现有会话失效。
 - AI 生成需要有效的 API 密钥，请确保 `.env.local` 配置正确后再启动。
 - 数据库文件包含你的创作内容，请妥善备份 `.treeable/` 目录。
 

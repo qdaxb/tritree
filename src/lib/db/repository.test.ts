@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
+import { hashPassword } from "@/lib/auth/password";
 import { createTreeableRepository } from "./repository";
 import type { BranchOption, DirectorOutput, OptionGenerationMode } from "@/lib/domain";
 
@@ -12,25 +13,36 @@ function testDbPath() {
 
 type Repository = ReturnType<typeof createTreeableRepository>;
 
+async function createTestUser(repo: Repository, username: string, role: "admin" | "member" = "member") {
+  if (!repo.hasUsers()) {
+    return repo.createInitialAdmin({ username, displayName: username, password: "password-123" });
+  }
+  return repo.createUser({ username, displayName: username, password: "password-123", role });
+}
+
 function createSessionDraftWithOptions(
   repo: Repository,
   {
+    userId,
     enabledSkillIds,
     rootMemoryId,
     output
   }: {
+    userId: string;
     enabledSkillIds?: string[];
     rootMemoryId: string;
     output: DirectorOutput;
   }
 ) {
   const draftState = repo.createSessionDraft({
+    userId,
     enabledSkillIds,
     rootMemoryId,
     draft: output.draft,
     roundIntent: output.roundIntent
   });
   const optionsState = repo.updateNodeOptions({
+    userId,
     sessionId: draftState.session.id,
     nodeId: draftState.currentNode!.id,
     output: {
@@ -45,6 +57,7 @@ function createSessionDraftWithOptions(
 function appendGeneratedChild(
   repo: Repository,
   {
+    userId,
     customOption,
     optionMode = "balanced",
     sessionId,
@@ -52,6 +65,7 @@ function appendGeneratedChild(
     selectedOptionId,
     output
   }: {
+    userId: string;
     customOption?: BranchOption;
     optionMode?: OptionGenerationMode;
     sessionId: string;
@@ -60,12 +74,13 @@ function appendGeneratedChild(
     output: DirectorOutput;
   }
 ) {
-  const activeState = repo.getSessionState(sessionId);
+  const activeState = repo.getSessionState(userId, sessionId);
   if (activeState?.session.currentNodeId !== nodeId) {
     throw new Error("Selected node is not the active node.");
   }
 
   const childState = repo.createDraftChild({
+    userId,
     customOption,
     optionMode,
     sessionId,
@@ -73,6 +88,7 @@ function appendGeneratedChild(
     selectedOptionId
   });
   const draftState = repo.updateNodeDraft({
+    userId,
     sessionId,
     nodeId: childState.currentNode!.id,
     output: {
@@ -83,6 +99,7 @@ function appendGeneratedChild(
   });
 
   return repo.updateNodeOptions({
+    userId,
     sessionId,
     nodeId: draftState.currentNode!.id,
     output: {
@@ -96,12 +113,14 @@ function appendGeneratedChild(
 function createHistoricalGeneratedChild(
   repo: Repository,
   {
+    userId,
     optionMode = "balanced",
     sessionId,
     nodeId,
     selectedOptionId,
     output
   }: {
+    userId: string;
     optionMode?: OptionGenerationMode;
     sessionId: string;
     nodeId: string;
@@ -110,6 +129,7 @@ function createHistoricalGeneratedChild(
   }
 ) {
   const childState = repo.createHistoricalDraftChild({
+    userId,
     optionMode,
     sessionId,
     nodeId,
@@ -117,6 +137,7 @@ function createHistoricalGeneratedChild(
   });
 
   const draftState = repo.updateNodeDraft({
+    userId,
     sessionId,
     nodeId: childState.currentNode!.id,
     output: {
@@ -127,6 +148,7 @@ function createHistoricalGeneratedChild(
   });
 
   return repo.updateNodeOptions({
+    userId,
     sessionId,
     nodeId: draftState.currentNode!.id,
     output: {
@@ -138,12 +160,286 @@ function createHistoricalGeneratedChild(
 }
 
 describe("Treeable repository", () => {
-  it("seeds system skills idempotently", () => {
+  it("creates the first local user as the initial administrator", async () => {
+    const repo = createTreeableRepository(testDbPath());
+
+    expect(repo.hasUsers()).toBe(false);
+
+    const admin = await repo.createInitialAdmin({
+      username: "awei",
+      displayName: "Awei",
+      password: "correct horse battery staple"
+    });
+
+    expect(repo.hasUsers()).toBe(true);
+    expect(admin).toEqual(
+      expect.objectContaining({
+        username: "awei",
+        displayName: "Awei",
+        role: "admin",
+        isActive: true
+      })
+    );
+    expect(admin).not.toHaveProperty("passwordHash");
+    await expect(repo.createInitialAdmin({ username: "second", displayName: "Second", password: "password-123" })).rejects.toThrow(
+      "Initial administrator already exists."
+    );
+    expect(() => repo.setUserActive(admin.id, false)).toThrow("Cannot deactivate the final active administrator.");
+  });
+
+  it("verifies local password login without exposing inactive users", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({
+      username: "awei",
+      displayName: "Awei",
+      password: "correct horse battery staple"
+    });
+    const member = await repo.createUser({
+      username: "writer",
+      displayName: "Writer",
+      password: "password-456",
+      role: "member"
+    });
+
+    await expect(repo.verifyPasswordLogin("awei", "correct horse battery staple")).resolves.toEqual(
+      expect.objectContaining({ id: admin.id, username: "awei", role: "admin" })
+    );
+    await expect(repo.verifyPasswordLogin("awei", "wrong password")).resolves.toBeNull();
+    await expect(repo.verifyPasswordLogin("writer", "password-456")).resolves.toEqual(
+      expect.objectContaining({ id: member.id, username: "writer", role: "member" })
+    );
+    repo.setUserActive(member.id, false);
+    await expect(repo.verifyPasswordLogin("writer", "password-456")).resolves.toBeNull();
+  });
+
+  it("manages users and protects the final active administrator", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
+    const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
+
+    expect(repo.listUsers().map((user) => user.username)).toEqual(["awei", "writer"]);
+    expect(repo.listUsers()[0]).not.toHaveProperty("passwordHash");
+    expect(repo.updateUserDisplayName(member.id, "Updated Writer")).toEqual(expect.objectContaining({ displayName: "Updated Writer" }));
+    expect(repo.setUserRole(member.id, "admin")).toEqual(expect.objectContaining({ role: "admin" }));
+    expect(repo.setUserRole(admin.id, "member")).toEqual(expect.objectContaining({ role: "member" }));
+    expect(() => repo.setUserActive(member.id, false)).toThrow("Cannot deactivate the final active administrator.");
+  });
+
+  it("rolls back all user updates when final administrator guards fail", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
+
+    expect(() => repo.updateUser(admin.id, { displayName: "Renamed Admin", isActive: false })).toThrow(
+      "Cannot deactivate the final active administrator."
+    );
+    expect(repo.getUser(admin.id)).toEqual(expect.objectContaining({ displayName: "Awei", isActive: true }));
+  });
+
+  it("binds OIDC identities to existing users", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
+
+    const identity = repo.bindOidcIdentity(admin.id, {
+      issuer: "https://issuer.example.com",
+      subject: "oidc-subject-1",
+      email: "awei@example.com",
+      name: "Awei OIDC"
+    });
+
+    expect(identity).toEqual(expect.objectContaining({ userId: admin.id, issuer: "https://issuer.example.com", subject: "oidc-subject-1" }));
+    expect(repo.findUserByOidcIdentity("https://issuer.example.com", "oidc-subject-1")).toEqual(
+      expect.objectContaining({ id: admin.id, username: "awei" })
+    );
+    expect(repo.listUsersWithOidcIdentities()).toEqual([
+      expect.objectContaining({
+        id: admin.id,
+        oidcIdentities: [expect.objectContaining({ id: identity.id, subject: "oidc-subject-1" })]
+      })
+    ]);
+    expect(() =>
+      repo.bindOidcIdentity(admin.id, { issuer: "https://issuer.example.com", subject: "oidc-subject-1" })
+    ).toThrow("OIDC identity is already bound.");
+  });
+
+  it("deletes OIDC identities only through the owning user", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
+    const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
+    const identity = repo.bindOidcIdentity(admin.id, {
+      issuer: "https://issuer.example.com",
+      subject: "oidc-subject-1"
+    });
+
+    expect(() => repo.deleteOidcIdentityForUser(member.id, identity.id)).toThrow("OIDC identity was not found.");
+
+    repo.deleteOidcIdentityForUser(admin.id, identity.id);
+
+    expect(repo.findUserByOidcIdentity("https://issuer.example.com", "oidc-subject-1")).toBeNull();
+  });
+
+  it("isolates root memory by user", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const first = await createTestUser(repo, "first");
+    const second = await createTestUser(repo, "second");
+
+    repo.saveRootMemory(first.id, {
+      seed: "first seed",
+      domains: ["创作"],
+      tones: ["平静"],
+      styles: ["观点型"],
+      personas: ["实践者"]
+    });
+    repo.saveRootMemory(second.id, {
+      seed: "second seed",
+      domains: ["工作"],
+      tones: ["真诚"],
+      styles: ["故事型"],
+      personas: ["观察者"]
+    });
+
+    expect(repo.getRootMemory(first.id)?.preferences.seed).toBe("first seed");
+    expect(repo.getRootMemory(second.id)?.preferences.seed).toBe("second seed");
+  });
+
+  it("isolates latest sessions by user", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const first = await createTestUser(repo, "first");
+    const second = await createTestUser(repo, "second");
+    const firstRoot = repo.saveRootMemory(first.id, {
+      seed: "first seed",
+      domains: ["创作"],
+      tones: ["平静"],
+      styles: ["观点型"],
+      personas: ["实践者"]
+    });
+    const secondRoot = repo.saveRootMemory(second.id, {
+      seed: "second seed",
+      domains: ["工作"],
+      tones: ["真诚"],
+      styles: ["故事型"],
+      personas: ["观察者"]
+    });
+
+    const firstState = repo.createSessionDraft({
+      userId: first.id,
+      rootMemoryId: firstRoot.id,
+      draft: { title: "First", body: "First body", hashtags: [], imagePrompt: "" }
+    });
+    const secondState = repo.createSessionDraft({
+      userId: second.id,
+      rootMemoryId: secondRoot.id,
+      draft: { title: "Second", body: "Second body", hashtags: [], imagePrompt: "" }
+    });
+
+    expect(repo.getLatestSessionState(first.id)?.session.id).toBe(firstState.session.id);
+    expect(repo.getLatestSessionState(second.id)?.session.id).toBe(secondState.session.id);
+    expect(repo.getSessionState(first.id, secondState.session.id)).toBeNull();
+  });
+
+  it("isolates custom skills while keeping system skills global", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const first = await createTestUser(repo, "first");
+    const second = await createTestUser(repo, "second");
+
+    const custom = repo.createSkill(first.id, {
+      title: "第一用户技能",
+      category: "风格",
+      description: "只属于第一个用户。",
+      prompt: "写得更像第一用户。",
+      appliesTo: "writer"
+    });
+
+    expect(repo.listSkills(first.id).map((skill) => skill.id)).toContain(custom.id);
+    expect(repo.listSkills(second.id).map((skill) => skill.id)).not.toContain(custom.id);
+    expect(repo.listSkills(second.id).map((skill) => skill.id)).toContain("system-analysis");
+  });
+
+  it("does not resolve another user's custom skill ids", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const first = await createTestUser(repo, "first");
+    const second = await createTestUser(repo, "second");
+
+    const custom = repo.createSkill(first.id, {
+      title: "第一用户技能",
+      category: "风格",
+      description: "只属于第一个用户。",
+      prompt: "写得更像第一用户。",
+      appliesTo: "writer"
+    });
+
+    expect(repo.resolveSkillsByIds([custom.id], second.id)).toEqual([]);
+  });
+
+  it("does not resolve skills without a user scope", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
+
+    const custom = repo.createSkill(user.id, {
+      title: "用户技能",
+      category: "风格",
+      description: "用户自定义技能。",
+      prompt: "写得更像用户。",
+      appliesTo: "writer"
+    });
+
+    expect(repo.resolveSkillsByIds([custom.id], undefined as unknown as string)).toEqual([]);
+  });
+
+  it("does not resolve legacy null-user non-system skill rows", async () => {
+    const dbPath = testDbPath();
+    const repo = createTreeableRepository(dbPath);
+    const user = await createTestUser(repo, "writer");
+    const sqlite = new DatabaseSync(dbPath);
+    sqlite
+      .prepare(
+        `
+          INSERT INTO skills (id, user_id, title, category, description, prompt, applies_to, is_system, default_enabled, is_archived, created_at, updated_at)
+          VALUES ('legacy-user-skill', NULL, '旧用户技能', '风格', '', '旧提示词。', 'both', 0, 0, 0, '2026-05-01T00:00:00.000Z', '2026-05-01T00:00:00.000Z')
+        `
+      )
+      .run();
+    sqlite.close();
+
+    expect(repo.resolveSkillsByIds(["legacy-user-skill"], user.id)).toEqual([]);
+  });
+
+  it("copies and isolates creation request options per user", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const first = await createTestUser(repo, "first");
+    const second = await createTestUser(repo, "second");
+
+    const firstOptions = repo.listCreationRequestOptions(first.id);
+    const secondOptions = repo.listCreationRequestOptions(second.id);
+
+    expect(firstOptions.map((option) => option.label)).toEqual(secondOptions.map((option) => option.label));
+    expect(firstOptions[0].id).not.toBe(secondOptions[0].id);
+
+    repo.updateCreationRequestOption(first.id, firstOptions[0].id, { label: "第一用户改过" });
+    repo.deleteCreationRequestOption(first.id, firstOptions[1].id);
+
+    expect(repo.listCreationRequestOptions(first.id).map((option) => option.label)).toContain("第一用户改过");
+    expect(repo.listCreationRequestOptions(second.id).map((option) => option.label)).not.toContain("第一用户改过");
+    expect(repo.listCreationRequestOptions(second.id).map((option) => option.label)).toContain(firstOptions[1].label);
+  });
+
+  it("keeps quick request options empty after deleting all until explicit reset", async () => {
+    const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
+    const options = repo.listCreationRequestOptions(user.id);
+
+    options.forEach((option) => repo.deleteCreationRequestOption(user.id, option.id));
+
+    expect(repo.listCreationRequestOptions(user.id)).toEqual([]);
+    expect(repo.resetCreationRequestOptions(user.id).map((option) => option.label)).toEqual(options.map((option) => option.label));
+  });
+
+  it("seeds system skills idempotently", async () => {
     const dbPath = testDbPath();
     const first = createTreeableRepository(dbPath);
-    const firstSkills = first.listSkills({ includeArchived: true });
+    const user = await createTestUser(first, "writer");
+    const firstSkills = first.listSkills(user.id, { includeArchived: true });
     const second = createTreeableRepository(dbPath);
-    const secondSkills = second.listSkills({ includeArchived: true });
+    const secondSkills = second.listSkills(user.id, { includeArchived: true });
 
     expect(firstSkills.filter((skill) => skill.isSystem)).toHaveLength(
       secondSkills.filter((skill) => skill.isSystem).length
@@ -151,11 +447,12 @@ describe("Treeable repository", () => {
     expect(secondSkills.find((skill) => skill.id === "system-analysis")?.defaultEnabled).toBe(true);
   });
 
-  it("hides merged system skills from the visible skill list", () => {
+  it("hides merged system skills from the visible skill list", async () => {
     const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
 
-    expect(repo.listSkills().map((skill) => skill.id)).not.toContain("system-compress");
-    expect(repo.listSkills({ includeArchived: true }).find((skill) => skill.id === "system-compress")?.isArchived).toBe(true);
+    expect(repo.listSkills(user.id).map((skill) => skill.id)).not.toContain("system-compress");
+    expect(repo.listSkills(user.id, { includeArchived: true }).find((skill) => skill.id === "system-compress")?.isArchived).toBe(true);
     expect(repo.defaultEnabledSkillIds()).toEqual([
       "system-content-workflow",
       "system-polish",
@@ -169,13 +466,14 @@ describe("Treeable repository", () => {
     ]);
   });
 
-  it("persists skill applicability for system and user skills", () => {
+  it("persists skill applicability for system and user skills", async () => {
     const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
 
-    const logicSkill = repo.listSkills({ includeArchived: true }).find((skill) => skill.id === "system-logic-review");
+    const logicSkill = repo.listSkills(user.id, { includeArchived: true }).find((skill) => skill.id === "system-logic-review");
     expect(logicSkill?.appliesTo).toBe("editor");
 
-    const custom = repo.createSkill({
+    const custom = repo.createSkill(user.id, {
       title: "朋友圈短句",
       category: "风格",
       description: "更像自然分享。",
@@ -184,10 +482,10 @@ describe("Treeable repository", () => {
     });
 
     expect(custom.appliesTo).toBe("writer");
-    expect(repo.listSkills().find((skill) => skill.id === custom.id)?.appliesTo).toBe("writer");
+    expect(repo.listSkills(user.id).find((skill) => skill.id === custom.id)?.appliesTo).toBe("writer");
   });
 
-  it("defaults legacy skill rows to shared applicability during migration", () => {
+  it("defaults legacy skill rows to shared applicability during migration", async () => {
     const dbPath = testDbPath();
     const sqlite = new DatabaseSync(dbPath);
     sqlite.exec(`
@@ -204,20 +502,22 @@ describe("Treeable repository", () => {
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       INSERT INTO skills (id, title, category, description, prompt, is_system, default_enabled, is_archived, created_at, updated_at)
-      VALUES ('legacy-user', '旧技能', '约束', '', '保留原意。', 0, 0, 0, '2026-05-01T00:00:00.000Z', '2026-05-01T00:00:00.000Z');
+      VALUES ('legacy-system', '旧技能', '约束', '', '保留原意。', 1, 0, 0, '2026-05-01T00:00:00.000Z', '2026-05-01T00:00:00.000Z');
     `);
     sqlite.close();
 
     const repo = createTreeableRepository(dbPath);
+    const user = await createTestUser(repo, "writer");
 
-    expect(repo.listSkills().find((skill) => skill.id === "legacy-user")?.appliesTo).toBe("both");
+    expect(repo.listSkills(user.id).find((skill) => skill.id === "legacy-system")?.appliesTo).toBe("both");
   });
 
-  it("stores editable creation request quick buttons in sqlite", () => {
+  it("stores editable creation request quick buttons in sqlite", async () => {
     const dbPath = testDbPath();
     const repo = createTreeableRepository(dbPath);
+    const user = await createTestUser(repo, "writer");
 
-    expect(repo.listCreationRequestOptions().map((option) => option.label)).toEqual([
+    expect(repo.listCreationRequestOptions(user.id).map((option) => option.label)).toEqual([
       "保留我的原意",
       "不要扩写太多",
       "适合发微博",
@@ -229,31 +529,32 @@ describe("Treeable repository", () => {
       "改成英文"
     ]);
 
-    const created = repo.createCreationRequestOption({ label: "面向海外游客" });
-    expect(repo.listCreationRequestOptions().at(-1)).toEqual(expect.objectContaining({ label: "面向海外游客" }));
+    const created = repo.createCreationRequestOption(user.id, { label: "面向海外游客" });
+    expect(repo.listCreationRequestOptions(user.id).at(-1)).toEqual(expect.objectContaining({ label: "面向海外游客" }));
 
-    const updated = repo.updateCreationRequestOption(created.id, { label: "写给第一次来的人" });
+    const updated = repo.updateCreationRequestOption(user.id, created.id, { label: "写给第一次来的人" });
     expect(updated.label).toBe("写给第一次来的人");
 
-    repo.deleteCreationRequestOption(created.id);
-    expect(repo.listCreationRequestOptions().map((option) => option.label)).not.toContain("写给第一次来的人");
+    repo.deleteCreationRequestOption(user.id, created.id);
+    expect(repo.listCreationRequestOptions(user.id).map((option) => option.label)).not.toContain("写给第一次来的人");
 
     const reopened = createTreeableRepository(dbPath);
-    expect(reopened.listCreationRequestOptions().map((option) => option.label)).not.toContain("写给第一次来的人");
+    expect(reopened.listCreationRequestOptions(user.id).map((option) => option.label)).not.toContain("写给第一次来的人");
   });
 
-  it("sorts and resets creation request quick buttons", () => {
+  it("sorts and resets creation request quick buttons", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const original = repo.listCreationRequestOptions();
+    const user = await createTestUser(repo, "writer");
+    const original = repo.listCreationRequestOptions(user.id);
 
-    const sorted = repo.reorderCreationRequestOptions([original[1].id, original[0].id, ...original.slice(2).map((option) => option.id)]);
+    const sorted = repo.reorderCreationRequestOptions(user.id, [original[1].id, original[0].id, ...original.slice(2).map((option) => option.id)]);
     expect(sorted.slice(0, 2).map((option) => option.label)).toEqual(["不要扩写太多", "保留我的原意"]);
 
-    repo.updateCreationRequestOption(original[0].id, { label: "用户改过的默认项" });
-    repo.deleteCreationRequestOption(original[1].id);
-    repo.createCreationRequestOption({ label: "用户新增项" });
+    repo.updateCreationRequestOption(user.id, original[0].id, { label: "用户改过的默认项" });
+    repo.deleteCreationRequestOption(user.id, original[1].id);
+    repo.createCreationRequestOption(user.id, { label: "用户新增项" });
 
-    const reset = repo.resetCreationRequestOptions();
+    const reset = repo.resetCreationRequestOptions(user.id);
     expect(reset.map((option) => option.label)).toEqual([
       "保留我的原意",
       "不要扩写太多",
@@ -269,100 +570,83 @@ describe("Treeable repository", () => {
     expect(reset.map((option) => option.label)).not.toContain("用户改过的默认项");
   });
 
-  it("updates the old moments default request label to weibo without adding a duplicate", () => {
+  it("copies the current moments request label without adding a duplicate", async () => {
     const dbPath = testDbPath();
     const repo = createTreeableRepository(dbPath);
-
-    repo.updateCreationRequestOption("default-moments", { label: "适合发朋友圈" });
+    const user = await createTestUser(repo, "writer");
 
     const reopened = createTreeableRepository(dbPath);
-    const labels = reopened.listCreationRequestOptions().map((option) => option.label);
+    const labels = reopened.listCreationRequestOptions(user.id).map((option) => option.label);
 
     expect(labels).toContain("适合发微博");
     expect(labels).not.toContain("适合发朋友圈");
-    expect(reopened.listCreationRequestOptions().filter((option) => option.id === "default-moments")).toHaveLength(1);
+    expect(labels.filter((label) => label === "适合发微博")).toHaveLength(1);
   });
 
-  it("updates the old first-time reader default request label without adding a duplicate", () => {
+  it("copies the current first-time reader request label without adding a duplicate", async () => {
     const dbPath = testDbPath();
     const repo = createTreeableRepository(dbPath);
-
-    repo.updateCreationRequestOption("default-first-time-reader", { label: "写给第一次接触的人" });
+    const user = await createTestUser(repo, "writer");
 
     const reopened = createTreeableRepository(dbPath);
-    const labels = reopened.listCreationRequestOptions().map((option) => option.label);
+    const labels = reopened.listCreationRequestOptions(user.id).map((option) => option.label);
 
     expect(labels).toContain("写给新手");
     expect(labels).not.toContain("写给第一次接触的人");
-    expect(reopened.listCreationRequestOptions().filter((option) => option.id === "default-first-time-reader")).toHaveLength(1);
+    expect(labels.filter((label) => label === "写给新手")).toHaveLength(1);
   });
 
-  it("moves old untouched default creation request order to the new default order", () => {
+  it("copies default creation request options in the new default order", async () => {
     const dbPath = testDbPath();
     const repo = createTreeableRepository(dbPath);
-    repo.reorderCreationRequestOptions([
-      "default-preserve-my-meaning",
-      "default-dont-expand-much",
-      "default-first-time-reader",
-      "default-friend-tone",
-      "default-english",
-      "default-no-ad-tone",
-      "default-experienced-reader",
-      "default-moments",
-      "default-short-version"
-    ]);
+    const user = await createTestUser(repo, "writer");
 
     const reopened = createTreeableRepository(dbPath);
 
-    expect(reopened.listCreationRequestOptions().map((option) => option.id)).toEqual([
-      "default-preserve-my-meaning",
-      "default-dont-expand-much",
-      "default-moments",
-      "default-short-version",
-      "default-first-time-reader",
-      "default-no-ad-tone",
-      "default-friend-tone",
-      "default-experienced-reader",
-      "default-english"
+    expect(reopened.listCreationRequestOptions(user.id).map((option) => option.label)).toEqual([
+      "保留我的原意",
+      "不要扩写太多",
+      "适合发微博",
+      "先给短版",
+      "写给新手",
+      "别太像广告",
+      "像发给朋友",
+      "写给懂行的人",
+      "改成英文"
     ]);
   });
 
-  it("preserves a custom creation request order after restart", () => {
+  it("preserves a custom creation request order after restart", async () => {
     const dbPath = testDbPath();
     const repo = createTreeableRepository(dbPath);
-    repo.reorderCreationRequestOptions([
-      "default-english",
-      "default-preserve-my-meaning",
-      "default-dont-expand-much",
-      "default-moments",
-      "default-short-version",
-      "default-first-time-reader",
-      "default-friend-tone",
-      "default-no-ad-tone",
-      "default-experienced-reader"
-    ]);
+    const user = await createTestUser(repo, "writer");
+    const original = repo.listCreationRequestOptions(user.id);
+    const english = original.find((option) => option.label === "改成英文")!;
+    repo.reorderCreationRequestOptions(user.id, [english.id, ...original.filter((option) => option.id !== english.id).map((option) => option.id)]);
 
     const reopened = createTreeableRepository(dbPath);
 
-    expect(reopened.listCreationRequestOptions().map((option) => option.id)[0]).toBe("default-english");
+    expect(reopened.listCreationRequestOptions(user.id).map((option) => option.label)[0]).toBe("改成英文");
   });
 
-  it("keeps deleted default creation request quick buttons hidden after restart", () => {
+  it("keeps deleted default creation request quick buttons hidden after restart", async () => {
     const dbPath = testDbPath();
     const repo = createTreeableRepository(dbPath);
-    const defaultOption = repo.listCreationRequestOptions().find((option) => option.label === "保留我的原意");
+    const user = await createTestUser(repo, "writer");
+    const defaultOption = repo.listCreationRequestOptions(user.id).find((option) => option.label === "保留我的原意");
 
     expect(defaultOption).toBeTruthy();
 
-    repo.deleteCreationRequestOption(defaultOption!.id);
+    repo.deleteCreationRequestOption(user.id, defaultOption!.id);
 
     const reopened = createTreeableRepository(dbPath);
-    expect(reopened.listCreationRequestOptions().map((option) => option.label)).not.toContain("保留我的原意");
+    expect(reopened.listCreationRequestOptions(user.id).map((option) => option.label)).not.toContain("保留我的原意");
   });
 
-  it("creates a session with default enabled skills", () => {
+  it("creates a session with default enabled skills", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       seed: "写一篇解释为什么要写作的文章",
       domains: ["创作"],
       tones: ["平静"],
@@ -371,6 +655,7 @@ describe("Treeable repository", () => {
     });
 
     const state = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -391,9 +676,10 @@ describe("Treeable repository", () => {
     expect(state.enabledSkills!.map((skill) => skill.id)).toContain("system-analysis");
   });
 
-  it("ignores archived system skills when reading session skills", () => {
+  it("ignores archived system skills when reading session skills", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       seed: "写一篇解释为什么要写作的文章",
       domains: ["创作"],
       tones: ["平静"],
@@ -402,6 +688,7 @@ describe("Treeable repository", () => {
     });
 
     const state = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       enabledSkillIds: ["system-analysis", "system-compress"],
       output: {
@@ -421,9 +708,10 @@ describe("Treeable repository", () => {
     expect(state.enabledSkillIds).toEqual(["system-analysis"]);
   });
 
-  it("replaces session enabled skills", () => {
+  it("replaces session enabled skills", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       seed: "写一篇解释为什么要写作的文章",
       domains: ["创作"],
       tones: ["平静"],
@@ -431,6 +719,7 @@ describe("Treeable repository", () => {
       personas: ["实践者"]
     });
     const state = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       enabledSkillIds: ["system-analysis"],
       output: {
@@ -447,17 +736,18 @@ describe("Treeable repository", () => {
       }
     });
 
-    const updated = repo.replaceSessionEnabledSkills(state.session.id, ["system-polish", "system-no-hype-title"]);
+    const updated = repo.replaceSessionEnabledSkills(user.id, state.session.id, ["system-polish", "system-no-hype-title"]);
 
     expect(updated?.enabledSkillIds).toEqual(["system-polish", "system-no-hype-title"]);
     expect(updated?.enabledSkills!.map((skill) => skill.title)).toEqual(["发布准备", "标题不要夸张"]);
   });
 
-  it("rejects direct edits to system skills", () => {
+  it("rejects direct edits to system skills", async () => {
     const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
 
     expect(() =>
-      repo.updateSkill("system-analysis", {
+      repo.updateSkill(user.id, "system-analysis", {
         title: "用户分析",
         category: "方向",
         description: "修改系统技能。",
@@ -466,10 +756,11 @@ describe("Treeable repository", () => {
     ).toThrow("System skills cannot be edited directly.");
   });
 
-  it("saves and reads root memory", () => {
+  it("saves and reads root memory", async () => {
     const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
 
-    const root = repo.saveRootMemory({
+    const root = repo.saveRootMemory(user.id, {
       seed: "我想写 AI 产品经理的真实困境",
       domains: ["AI", "product"],
       tones: ["calm"],
@@ -478,13 +769,14 @@ describe("Treeable repository", () => {
     });
 
     expect(root.summary).toContain("我想写 AI 产品经理的真实困境");
-    expect(repo.getRootMemory()?.preferences.domains).toEqual(["AI", "product"]);
+    expect(repo.getRootMemory(user.id)?.preferences.domains).toEqual(["AI", "product"]);
   });
 
-  it("includes the creation request in root memory summary", () => {
+  it("includes the creation request in root memory summary", async () => {
     const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
 
-    const root = repo.saveRootMemory({
+    const root = repo.saveRootMemory(user.id, {
       seed: "我想写 AI 产品经理的真实困境",
       creationRequest: "改成英文的，保留口语感",
       domains: ["AI", "product"],
@@ -502,9 +794,10 @@ describe("Treeable repository", () => {
     expect(root.preferences.creationRequest).toBe("改成英文的，保留口语感");
   });
 
-  it("creates a session with an initial node and draft", () => {
+  it("creates a session with an initial node and draft", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["sincere"],
       styles: ["story-driven"],
@@ -512,6 +805,7 @@ describe("Treeable repository", () => {
     });
 
     const state = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Find a starting point",
@@ -531,9 +825,10 @@ describe("Treeable repository", () => {
     expect(state.currentDraft?.body).toBe("Pick a starting point.");
   });
 
-  it("keeps finishing output as an active draft instead of a publish package", () => {
+  it("keeps finishing output as an active draft instead of a publish package", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["sincere"],
       styles: ["story-driven"],
@@ -541,6 +836,7 @@ describe("Treeable repository", () => {
     });
 
     const state = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Finish the post",
@@ -569,14 +865,16 @@ describe("Treeable repository", () => {
       imagePrompt: "A bright tree"
     });
     expect(state.publishPackage).toBeNull();
-    expect(repo.getSessionState(state.session.id)?.publishPackage).toBeNull();
+    expect(repo.getSessionState(user.id, state.session.id)?.publishPackage).toBeNull();
   });
 
-  it("rejects sessions for missing root memory", () => {
+  it("rejects sessions for missing root memory", async () => {
     const repo = createTreeableRepository(testDbPath());
+    const user = await createTestUser(repo, "writer");
 
     expect(() =>
       createSessionDraftWithOptions(repo, {
+        userId: user.id,
         rootMemoryId: "missing-root",
         output: {
           roundIntent: "Start",
@@ -594,7 +892,7 @@ describe("Treeable repository", () => {
     ).toThrow();
   });
 
-  it("preserves existing local data when migrating an unversioned schema", () => {
+  it("does not expose unowned legacy root memory through user-scoped reads", async () => {
     const dbPath = testDbPath();
     const sqlite = new DatabaseSync(dbPath);
     sqlite.exec(`
@@ -639,20 +937,22 @@ describe("Treeable repository", () => {
     sqlite.close();
 
     const repo = createTreeableRepository(dbPath);
+    const user = await createTestUser(repo, "writer");
 
-    expect(repo.getRootMemory()?.id).toBe("old-root");
-    expect(repo.getRootMemory()?.summary).toBe("old summary");
+    expect(repo.getRootMemory(user.id)).toBeNull();
   });
 
-  it("applies a branch choice and folds unselected options into history", () => {
+  it("applies a branch choice and folds unselected options into history", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -669,6 +969,7 @@ describe("Treeable repository", () => {
     });
 
     const next = appendGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "b",
@@ -693,9 +994,10 @@ describe("Treeable repository", () => {
     expect(next.currentDraft?.title).toBe("Updated");
   });
 
-  it("reads the latest existing session", () => {
+  it("reads the latest existing session", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
@@ -703,6 +1005,7 @@ describe("Treeable repository", () => {
     });
 
     createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "First",
@@ -718,6 +1021,7 @@ describe("Treeable repository", () => {
       }
     });
     const latest = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Latest",
@@ -733,18 +1037,20 @@ describe("Treeable repository", () => {
       }
     });
 
-    expect(repo.getLatestSessionState()?.session.id).toBe(latest.session.id);
+    expect(repo.getLatestSessionState(user.id)?.session.id).toBe(latest.session.id);
   });
 
-  it("persists a user-authored custom branch when it is selected", () => {
+  it("persists a user-authored custom branch when it is selected", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -761,6 +1067,7 @@ describe("Treeable repository", () => {
     });
 
     const next = appendGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "custom-user",
@@ -788,18 +1095,20 @@ describe("Treeable repository", () => {
     expect(next.selectedPath[0].selectedOptionId).toBe("custom-user");
     expect(next.selectedPath[0].options.map((option) => option.id)).toEqual(["a", "b", "c", "custom-user"]);
     expect(next.foldedBranches.map((branch) => branch.option.id).sort()).toEqual(["a", "b", "c"]);
-    expect(repo.getSessionState(first.session.id)?.selectedPath[0].options.at(-1)?.label).toBe("自定义方向");
+    expect(repo.getSessionState(user.id, first.session.id)?.selectedPath[0].options.at(-1)?.label).toBe("自定义方向");
   });
 
-  it("persists a user-authored custom branch when branching from a historical node", () => {
+  it("persists a user-authored custom branch when branching from a historical node", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -815,6 +1124,7 @@ describe("Treeable repository", () => {
       }
     });
     appendGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "b",
@@ -840,6 +1150,7 @@ describe("Treeable repository", () => {
     };
 
     const next = repo.createHistoricalDraftChild({
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "custom-history",
@@ -855,15 +1166,17 @@ describe("Treeable repository", () => {
     expect(next.foldedBranches.map((branch) => branch.option.id).sort()).toEqual(["a", "b", "c"]);
   });
 
-  it("keeps multiple custom branches from the same historical node distinct", () => {
+  it("keeps multiple custom branches from the same historical node distinct", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -894,12 +1207,14 @@ describe("Treeable repository", () => {
     };
 
     repo.createHistoricalDraftChild({
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: firstCustom.id,
       customOption: firstCustom
     });
     const next = repo.createHistoricalDraftChild({
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: secondCustom.id,
@@ -919,15 +1234,17 @@ describe("Treeable repository", () => {
     expect(customChildren?.map((node) => node.parentOptionId).sort()).toEqual(["custom-first", "custom-second"]);
   });
 
-  it("branches from a historical option and makes that branch the active route", () => {
+  it("branches from a historical option and makes that branch the active route", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -943,6 +1260,7 @@ describe("Treeable repository", () => {
       }
     });
     const oldRoute = appendGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "b",
@@ -961,6 +1279,7 @@ describe("Treeable repository", () => {
     });
 
     const newRoute = createHistoricalGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "a",
@@ -990,15 +1309,17 @@ describe("Treeable repository", () => {
     expect(newRoute.treeNodes?.find((node) => node.id === oldRoute.currentNode!.id)?.parentOptionId).toBe("b");
   });
 
-  it("activates an existing historical branch without creating another child", () => {
+  it("activates an existing historical branch without creating another child", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -1014,6 +1335,7 @@ describe("Treeable repository", () => {
       }
     });
     const oldRoute = appendGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "b",
@@ -1031,6 +1353,7 @@ describe("Treeable repository", () => {
       }
     });
     createHistoricalGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "a",
@@ -1049,6 +1372,7 @@ describe("Treeable repository", () => {
     });
 
     const switched = repo.activateHistoricalBranch({
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "b"
@@ -1058,15 +1382,17 @@ describe("Treeable repository", () => {
     expect(switched?.treeNodes).toHaveLength(3);
   });
 
-  it("creates a custom edit child node instead of overwriting the edited node", () => {
+  it("creates a custom edit child node instead of overwriting the edited node", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -1083,6 +1409,7 @@ describe("Treeable repository", () => {
     });
 
     const updated = repo.updateCurrentNodeDraftAndOptions({
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       draft: { title: "Edited", body: "Edited body", hashtags: ["#Edited"], imagePrompt: "Edited image" },
@@ -1111,15 +1438,17 @@ describe("Treeable repository", () => {
     expect(updated.treeNodes?.find((node) => node.id === first.currentNode!.id)?.options.at(-1)?.label).toBe("自定义编辑");
   });
 
-  it("updates current node options without changing its draft", () => {
+  it("updates current node options without changing its draft", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -1136,6 +1465,7 @@ describe("Treeable repository", () => {
     });
 
     const updated = repo.updateNodeOptions({
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       output: {
@@ -1154,15 +1484,17 @@ describe("Treeable repository", () => {
     expect(updated.currentNode?.options.map((option) => option.label)).toEqual(["选项A", "选项B", "选项C"]);
   });
 
-  it("updates options for a non-current historical node", () => {
+  it("updates options for a non-current historical node", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -1178,6 +1510,7 @@ describe("Treeable repository", () => {
       }
     });
     const next = appendGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "a",
@@ -1196,6 +1529,7 @@ describe("Treeable repository", () => {
     });
 
     const updated = repo.updateNodeOptions({
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       output: {
@@ -1221,15 +1555,17 @@ describe("Treeable repository", () => {
     ]);
   });
 
-  it("rejects choices from stale nodes", () => {
+  it("rejects choices from stale nodes", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -1246,6 +1582,7 @@ describe("Treeable repository", () => {
     });
 
     appendGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "b",
@@ -1265,6 +1602,7 @@ describe("Treeable repository", () => {
 
     expect(() =>
       appendGeneratedChild(repo, {
+        userId: user.id,
         sessionId: first.session.id,
         nodeId: first.currentNode!.id,
         selectedOptionId: "a",
@@ -1284,15 +1622,17 @@ describe("Treeable repository", () => {
     ).toThrow("Selected node is not the active node.");
   });
 
-  it("rejects selected options that are not in the current node", () => {
+  it("rejects selected options that are not in the current node", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -1310,6 +1650,7 @@ describe("Treeable repository", () => {
 
     expect(() =>
       appendGeneratedChild(repo, {
+        userId: user.id,
         sessionId: first.session.id,
         nodeId: first.currentNode!.id,
         selectedOptionId: "b",
@@ -1329,15 +1670,17 @@ describe("Treeable repository", () => {
     ).toThrow("Selected option is not part of the parent node.");
   });
 
-  it("continues from finish directions because every generated result stays a draft", () => {
+  it("continues from finish directions because every generated result stays a draft", async () => {
     const repo = createTreeableRepository(testDbPath());
-    const root = repo.saveRootMemory({
+    const user = await createTestUser(repo, "writer");
+    const root = repo.saveRootMemory(user.id, {
       domains: ["AI"],
       tones: ["calm"],
       styles: ["opinion-driven"],
       personas: ["practitioner"]
     });
     const first = createSessionDraftWithOptions(repo, {
+      userId: user.id,
       rootMemoryId: root.id,
       output: {
         roundIntent: "Start",
@@ -1354,6 +1697,7 @@ describe("Treeable repository", () => {
     });
 
     const finished = appendGeneratedChild(repo, {
+      userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "c",
@@ -1380,6 +1724,7 @@ describe("Treeable repository", () => {
     expect(finished.publishPackage).toBeNull();
 
     const continued = appendGeneratedChild(repo, {
+      userId: user.id,
       sessionId: finished.session.id,
       nodeId: finished.currentNode!.id,
       selectedOptionId: "a",

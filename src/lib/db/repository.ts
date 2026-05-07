@@ -1,4 +1,25 @@
 import { nanoid } from "nanoid";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import {
+  type CreateInitialAdminInput,
+  type CreateUserInput,
+  type OidcIdentity,
+  type OidcIdentityUpsert,
+  type UpdateUserInput,
+  type User,
+  type UserRole,
+  type UserWithPasswordHash,
+  CreateInitialAdminSchema,
+  CreateUserSchema,
+  CredentialsLoginSchema,
+  OidcIdentitySchema,
+  OidcIdentityUpsertSchema,
+  ResetPasswordSchema,
+  UpdateUserSchema,
+  UserRoleSchema,
+  UserSchema,
+  UserWithPasswordHashSchema
+} from "@/lib/auth/types";
 import {
   type BranchOption,
   type CreationRequestOption,
@@ -32,8 +53,31 @@ import {
 } from "@/lib/domain";
 import { createDatabase, defaultDbPath } from "./client";
 
+type UserRow = {
+  id: string;
+  username: string;
+  display_name: string;
+  password_hash: string | null;
+  role: string;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type OidcIdentityRow = {
+  id: string;
+  user_id: string;
+  issuer: string;
+  subject: string;
+  email: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type RootMemoryRow = {
   id: string;
+  user_id: string | null;
   preferences_json: string;
   summary: string;
   learned_summary: string;
@@ -43,6 +87,7 @@ type RootMemoryRow = {
 
 type SessionRow = {
   id: string;
+  user_id: string | null;
   root_memory_id: string;
   title: string;
   status: string;
@@ -86,6 +131,7 @@ type BranchHistoryRow = {
 
 type SkillRow = {
   id: string;
+  user_id: string | null;
   title: string;
   category: string;
   description: string;
@@ -100,6 +146,7 @@ type SkillRow = {
 
 type CreationRequestOptionRow = {
   id: string;
+  user_id: string | null;
   label: string;
   sort_order: number;
   is_archived: number;
@@ -125,6 +172,38 @@ function now() {
 
 function parseJson<T>(value: string): T {
   return JSON.parse(value) as T;
+}
+
+function toUser(row: UserRow): User {
+  return UserSchema.parse({
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+    role: row.role,
+    isActive: Boolean(row.is_active),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+}
+
+function toUserWithPasswordHash(row: UserRow): UserWithPasswordHash {
+  return UserWithPasswordHashSchema.parse({
+    ...toUser(row),
+    passwordHash: row.password_hash
+  });
+}
+
+function toOidcIdentity(row: OidcIdentityRow): OidcIdentity {
+  return OidcIdentitySchema.parse({
+    id: row.id,
+    userId: row.user_id,
+    issuer: row.issuer,
+    subject: row.subject,
+    email: row.email,
+    name: row.name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
 }
 
 function withTransaction<T>(db: ReturnType<typeof createDatabase>, write: () => T) {
@@ -362,42 +441,66 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     });
   }
 
-  function listCreationRequestOptions({ includeArchived = false }: { includeArchived?: boolean } = {}) {
+  function ensureUserCreationRequestOptions(userId: string) {
+    const row = db
+      .prepare("SELECT id FROM creation_request_options WHERE user_id = ? LIMIT 1")
+      .get(userId);
+    if (row) return;
+
+    const timestamp = now();
+    DEFAULT_CREATION_REQUEST_OPTIONS.forEach((option, index) => {
+      db.prepare(
+        `
+          INSERT INTO creation_request_options (id, user_id, label, sort_order, is_archived, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 0, ?, ?)
+        `
+      ).run(nanoid(), userId, option.label, index, timestamp, timestamp);
+    });
+  }
+
+  function listCreationRequestOptions(
+    userId: string,
+    { includeArchived = false }: { includeArchived?: boolean } = {}
+  ) {
+    ensureUserCreationRequestOptions(userId);
     const rows = db
       .prepare(
         includeArchived
-          ? "SELECT * FROM creation_request_options ORDER BY sort_order, created_at, rowid"
-          : "SELECT * FROM creation_request_options WHERE is_archived = 0 ORDER BY sort_order, created_at, rowid"
+          ? "SELECT * FROM creation_request_options WHERE user_id = ? ORDER BY sort_order, created_at, rowid"
+          : "SELECT * FROM creation_request_options WHERE user_id = ? AND is_archived = 0 ORDER BY sort_order, created_at, rowid"
       )
-      .all() as CreationRequestOptionRow[];
+      .all(userId) as CreationRequestOptionRow[];
     return rows.map(toCreationRequestOption);
   }
 
-  function nextCreationRequestOptionSortOrder() {
-    const row = db.prepare("SELECT MAX(sort_order) AS max_sort_order FROM creation_request_options").get() as
-      | { max_sort_order: number | null }
-      | undefined;
+  function nextCreationRequestOptionSortOrder(userId: string) {
+    const row = db
+      .prepare("SELECT MAX(sort_order) AS max_sort_order FROM creation_request_options WHERE user_id = ?")
+      .get(userId) as { max_sort_order: number | null } | undefined;
     return typeof row?.max_sort_order === "number" ? row.max_sort_order + 1 : 0;
   }
 
-  function createCreationRequestOption(input: CreationRequestOptionUpsert) {
+  function createCreationRequestOption(userId: string, input: CreationRequestOptionUpsert) {
+    ensureUserCreationRequestOptions(userId);
     const parsed = CreationRequestOptionUpsertSchema.parse(input);
     const id = nanoid();
     const timestamp = now();
-    const sortOrder = parsed.sortOrder ?? nextCreationRequestOptionSortOrder();
+    const sortOrder = parsed.sortOrder ?? nextCreationRequestOptionSortOrder(userId);
 
     db.prepare(
       `
-        INSERT INTO creation_request_options (id, label, sort_order, is_archived, created_at, updated_at)
-        VALUES (?, ?, ?, 0, ?, ?)
+        INSERT INTO creation_request_options (id, user_id, label, sort_order, is_archived, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 0, ?, ?)
       `
-    ).run(id, parsed.label, sortOrder, timestamp, timestamp);
+    ).run(id, userId, parsed.label, sortOrder, timestamp, timestamp);
 
-    return toCreationRequestOption(db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(id) as CreationRequestOptionRow);
+    return toCreationRequestOption(
+      db.prepare("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?").get(id, userId) as CreationRequestOptionRow
+    );
   }
 
-  function updateCreationRequestOption(optionId: string, input: Partial<CreationRequestOptionUpsert>) {
-    const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(optionId) as
+  function updateCreationRequestOption(userId: string, optionId: string, input: Partial<CreationRequestOptionUpsert>) {
+    const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?").get(optionId, userId) as
       | CreationRequestOptionRow
       | undefined;
     if (!existing) throw new Error("Creation request option was not found.");
@@ -412,17 +515,17 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       `
         UPDATE creation_request_options
         SET label = ?, sort_order = ?, updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND user_id = ?
       `
-    ).run(parsed.label, parsed.sortOrder ?? existing.sort_order, timestamp, optionId);
+    ).run(parsed.label, parsed.sortOrder ?? existing.sort_order, timestamp, optionId, userId);
 
     return toCreationRequestOption(
-      db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(optionId) as CreationRequestOptionRow
+      db.prepare("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?").get(optionId, userId) as CreationRequestOptionRow
     );
   }
 
-  function deleteCreationRequestOption(optionId: string) {
-    const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(optionId) as
+  function deleteCreationRequestOption(userId: string, optionId: string) {
+    const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?").get(optionId, userId) as
       | CreationRequestOptionRow
       | undefined;
     if (!existing) throw new Error("Creation request option was not found.");
@@ -431,17 +534,18 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       `
         UPDATE creation_request_options
         SET is_archived = 1, updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND user_id = ?
       `
-    ).run(now(), optionId);
+    ).run(now(), optionId, userId);
   }
 
-  function reorderCreationRequestOptions(orderedIds: string[]) {
+  function reorderCreationRequestOptions(userId: string, orderedIds: string[]) {
+    ensureUserCreationRequestOptions(userId);
     const ids = Array.from(new Set(orderedIds));
-    const existingIds = new Set(listCreationRequestOptions().map((option) => option.id));
+    const existingIds = new Set(listCreationRequestOptions(userId).map((option) => option.id));
     const timestamp = now();
     const orderedKnownIds = ids.filter((id) => existingIds.has(id));
-    const remainingIds = listCreationRequestOptions()
+    const remainingIds = listCreationRequestOptions(userId)
       .map((option) => option.id)
       .filter((id) => !orderedKnownIds.includes(id));
 
@@ -450,83 +554,98 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         `
           UPDATE creation_request_options
           SET sort_order = ?, updated_at = ?
-          WHERE id = ?
+          WHERE id = ? AND user_id = ?
         `
-      ).run(index, timestamp, id);
+      ).run(index, timestamp, id, userId);
     });
 
-    return listCreationRequestOptions();
+    return listCreationRequestOptions(userId);
   }
 
-  function resetCreationRequestOptions() {
+  function resetCreationRequestOptions(userId: string) {
+    ensureUserCreationRequestOptions(userId);
     const timestamp = now();
 
     return withTransaction(db, () => {
-      db.prepare("UPDATE creation_request_options SET is_archived = 1, updated_at = ?").run(timestamp);
+      db.prepare("UPDATE creation_request_options SET is_archived = 1, updated_at = ? WHERE user_id = ?").run(timestamp, userId);
 
       DEFAULT_CREATION_REQUEST_OPTIONS.forEach((option, index) => {
-        const existing = db.prepare("SELECT id FROM creation_request_options WHERE id = ?").get(option.id);
-        if (existing) {
-          db.prepare(
-            `
-              UPDATE creation_request_options
-              SET label = ?, sort_order = ?, is_archived = 0, updated_at = ?
-              WHERE id = ?
-            `
-          ).run(option.label, index, timestamp, option.id);
-          return;
-        }
-
         db.prepare(
           `
-            INSERT INTO creation_request_options (id, label, sort_order, is_archived, created_at, updated_at)
-            VALUES (?, ?, ?, 0, ?, ?)
+            INSERT INTO creation_request_options (id, user_id, label, sort_order, is_archived, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 0, ?, ?)
           `
-        ).run(option.id, option.label, index, timestamp, timestamp);
+        ).run(nanoid(), userId, option.label, index, timestamp, timestamp);
       });
 
-      return listCreationRequestOptions();
+      return listCreationRequestOptions(userId);
     });
   }
 
-  function listSkills({ includeArchived = false }: { includeArchived?: boolean } = {}) {
+  function listSkills(userId: string, { includeArchived = false }: { includeArchived?: boolean } = {}) {
     const rows = db
       .prepare(
         includeArchived
-          ? "SELECT * FROM skills ORDER BY is_system DESC, category, title"
-          : "SELECT * FROM skills WHERE is_archived = 0 ORDER BY is_system DESC, category, title"
+          ? `
+              SELECT *
+              FROM skills
+              WHERE (is_system = 1 AND user_id IS NULL) OR user_id = ?
+              ORDER BY is_system DESC, category, title
+            `
+          : `
+              SELECT *
+              FROM skills
+              WHERE ((is_system = 1 AND user_id IS NULL) OR user_id = ?) AND is_archived = 0
+              ORDER BY is_system DESC, category, title
+            `
       )
-      .all() as SkillRow[];
+      .all(userId) as SkillRow[];
     return rows.map(toSkill);
   }
 
   function defaultEnabledSkillIds() {
-    return listSkills()
-      .filter((skill) => skill.isSystem && skill.defaultEnabled)
+    const rows = db
+      .prepare("SELECT * FROM skills WHERE is_system = 1 AND user_id IS NULL AND is_archived = 0 ORDER BY category, title")
+      .all() as SkillRow[];
+    return rows
+      .map(toSkill)
+      .filter((skill) => skill.defaultEnabled)
       .map((skill) => skill.id);
   }
 
-  function resolveSkillsByIds(skillIds: string[]) {
+  function resolveSkillsByIds(skillIds: string[], userId: string) {
     const ids = uniqueSkillIds(skillIds);
-    if (ids.length === 0) return [];
+    if (ids.length === 0 || !userId) return [];
     return ids
-      .map((id) => db.prepare("SELECT * FROM skills WHERE id = ?").get(id) as SkillRow | undefined)
+      .map((id) =>
+        db
+          .prepare(
+            `
+              SELECT *
+              FROM skills
+              WHERE id = ?
+                AND is_archived = 0
+                AND ((is_system = 1 AND user_id IS NULL) OR user_id = ?)
+            `
+          )
+          .get(id, userId) as SkillRow | undefined
+      )
       .filter((row): row is SkillRow => Boolean(row))
-      .filter((row) => !row.is_archived)
       .map(toSkill);
   }
 
-  function createSkill(input: SkillUpsert) {
+  function createSkill(userId: string, input: SkillUpsert) {
     const parsed = SkillUpsertSchema.parse(input);
     const id = nanoid();
     const timestamp = now();
     db.prepare(
       `
-        INSERT INTO skills (id, title, category, description, prompt, applies_to, is_system, default_enabled, is_archived, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+        INSERT INTO skills (id, user_id, title, category, description, prompt, applies_to, is_system, default_enabled, is_archived, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
       `
     ).run(
       id,
+      userId,
       parsed.title,
       parsed.category,
       parsed.description,
@@ -537,11 +656,13 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       timestamp,
       timestamp
     );
-    return toSkill(db.prepare("SELECT * FROM skills WHERE id = ?").get(id) as SkillRow);
+    return toSkill(db.prepare("SELECT * FROM skills WHERE id = ? AND user_id = ?").get(id, userId) as SkillRow);
   }
 
-  function updateSkill(skillId: string, input: Partial<SkillUpsert>) {
-    const existing = db.prepare("SELECT * FROM skills WHERE id = ?").get(skillId) as SkillRow | undefined;
+  function updateSkill(userId: string, skillId: string, input: Partial<SkillUpsert>) {
+    const existing = db
+      .prepare("SELECT * FROM skills WHERE id = ? AND ((is_system = 1 AND user_id IS NULL) OR user_id = ?)")
+      .get(skillId, userId) as SkillRow | undefined;
     if (!existing) throw new Error("Skill was not found.");
     if (existing.is_system) throw new Error("System skills cannot be edited directly.");
     const parsed = SkillUpsertSchema.parse({
@@ -558,7 +679,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       `
         UPDATE skills
         SET title = ?, category = ?, description = ?, prompt = ?, applies_to = ?, default_enabled = ?, is_archived = ?, updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND user_id = ?
       `
     ).run(
       parsed.title,
@@ -569,15 +690,20 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
       parsed.defaultEnabled ? 1 : 0,
       parsed.isArchived ? 1 : 0,
       timestamp,
-      skillId
+      skillId,
+      userId
     );
-    return toSkill(db.prepare("SELECT * FROM skills WHERE id = ?").get(skillId) as SkillRow);
+    return toSkill(db.prepare("SELECT * FROM skills WHERE id = ? AND user_id = ?").get(skillId, userId) as SkillRow);
   }
 
-  function saveSessionEnabledSkills(sessionId: string, skillIds: string[], timestamp: string) {
+  function saveSessionEnabledSkills(sessionId: string, userId: string, skillIds: string[], timestamp: string) {
     db.prepare("DELETE FROM session_enabled_skills WHERE session_id = ?").run(sessionId);
     for (const skillId of uniqueSkillIds(skillIds)) {
-      const exists = db.prepare("SELECT id FROM skills WHERE id = ? AND is_archived = 0").get(skillId);
+      const exists = db
+        .prepare(
+          "SELECT id FROM skills WHERE id = ? AND is_archived = 0 AND ((is_system = 1 AND user_id IS NULL) OR user_id = ?)"
+        )
+        .get(skillId, userId);
       if (!exists) continue;
       db.prepare(
         `
@@ -588,40 +714,279 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     }
   }
 
-  function enabledSkillsForSession(sessionId: string) {
+  function enabledSkillsForSession(sessionId: string, userId: string) {
     const rows = db
       .prepare(
         `
           SELECT skills.*
           FROM session_enabled_skills
           JOIN skills ON skills.id = session_enabled_skills.skill_id
-          WHERE session_enabled_skills.session_id = ? AND skills.is_archived = 0
+          WHERE session_enabled_skills.session_id = ?
+            AND skills.is_archived = 0
+            AND ((skills.is_system = 1 AND skills.user_id IS NULL) OR skills.user_id = ?)
           ORDER BY session_enabled_skills.created_at, session_enabled_skills.rowid
         `
       )
-      .all(sessionId) as SkillRow[];
+      .all(sessionId, userId) as SkillRow[];
     return rows.map(toSkill);
   }
 
-  function replaceSessionEnabledSkills(sessionId: string, skillIds: string[]) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
+  function replaceSessionEnabledSkills(userId: string, sessionId: string, skillIds: string[]) {
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
     if (!session) throw new Error("Session was not found.");
     const timestamp = now();
     return withTransaction(db, () => {
-      saveSessionEnabledSkills(sessionId, skillIds, timestamp);
-      return getSessionState(sessionId);
+      saveSessionEnabledSkills(sessionId, userId, skillIds, timestamp);
+      return getSessionState(userId, sessionId);
     });
   }
 
-  function getRootMemory() {
-    const row = db.prepare("SELECT * FROM root_memory LIMIT 1").get() as RootMemoryRow | undefined;
+  function hasUsers() {
+    const row = db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number };
+    return row.count > 0;
+  }
+
+  async function createInitialAdmin(input: CreateInitialAdminInput) {
+    const parsed = CreateInitialAdminSchema.parse(input);
+    const passwordHash = await hashPassword(parsed.password);
+    const timestamp = now();
+    const id = nanoid();
+
+    return withTransaction(db, () => {
+      if (hasUsers()) {
+        throw new Error("Initial administrator already exists.");
+      }
+
+      db.prepare(
+        `
+          INSERT INTO users (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)
+        `
+      ).run(id, parsed.username, parsed.displayName, passwordHash, timestamp, timestamp);
+
+      return getUser(id)!;
+    });
+  }
+
+  async function createUser(input: CreateUserInput) {
+    const parsed = CreateUserSchema.parse(input);
+    const passwordHash = await hashPassword(parsed.password);
+    const timestamp = now();
+    const id = nanoid();
+
+    db.prepare(
+      `
+        INSERT INTO users (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(id, parsed.username, parsed.displayName, passwordHash, parsed.role, parsed.isActive ? 1 : 0, timestamp, timestamp);
+
+    return getUser(id)!;
+  }
+
+  function listUsers() {
+    const rows = db.prepare("SELECT * FROM users ORDER BY created_at, rowid").all() as UserRow[];
+    return rows.map(toUser);
+  }
+
+  function listUsersWithOidcIdentities() {
+    const users = listUsers();
+    const identityRows = db.prepare("SELECT * FROM user_oidc_identities ORDER BY created_at, rowid").all() as OidcIdentityRow[];
+    const identitiesByUserId = new Map<string, OidcIdentity[]>();
+
+    for (const row of identityRows) {
+      const identities = identitiesByUserId.get(row.user_id) ?? [];
+      identities.push(toOidcIdentity(row));
+      identitiesByUserId.set(row.user_id, identities);
+    }
+
+    return users.map((user) => ({
+      ...user,
+      oidcIdentities: identitiesByUserId.get(user.id) ?? []
+    }));
+  }
+
+  function getUser(userId: string) {
+    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    return row ? toUser(row) : null;
+  }
+
+  function getUserWithPasswordHashByUsername(username: string) {
+    const row = db.prepare("SELECT * FROM users WHERE username = ?").get(username.trim()) as UserRow | undefined;
+    return row ? toUserWithPasswordHash(row) : null;
+  }
+
+  async function verifyPasswordLogin(username: string, password: string) {
+    const parsed = CredentialsLoginSchema.parse({ username, password });
+    const user = getUserWithPasswordHashByUsername(parsed.username);
+    if (!user?.isActive || !user.passwordHash) return null;
+
+    const isValid = await verifyPassword(parsed.password, user.passwordHash);
+    if (!isValid) return null;
+
+    return UserSchema.parse({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    });
+  }
+
+  async function resetUserPassword(userId: string, password: string) {
+    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    if (!existing) throw new Error("User was not found.");
+
+    const parsed = ResetPasswordSchema.parse({ password });
+    const passwordHash = await hashPassword(parsed.password);
+    db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(passwordHash, now(), userId);
+
+    return getUser(userId)!;
+  }
+
+  function updateUserDisplayName(userId: string, displayName: string) {
+    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    if (!existing) throw new Error("User was not found.");
+
+    const parsedDisplayName = UpdateUserSchema.shape.displayName.unwrap().parse(displayName);
+    db.prepare("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?").run(parsedDisplayName, now(), userId);
+    return getUser(userId)!;
+  }
+
+  function activeAdminCountExcluding(userId: string) {
+    const row = db
+      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = 1 AND id <> ?")
+      .get(userId) as { count: number };
+    return row.count;
+  }
+
+  function setUserActive(userId: string, isActive: boolean) {
+    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    if (!existing) throw new Error("User was not found.");
+
+    if (
+      existing.role === "admin" &&
+      Boolean(existing.is_active) &&
+      !isActive &&
+      activeAdminCountExcluding(userId) === 0
+    ) {
+      throw new Error("Cannot deactivate the final active administrator.");
+    }
+
+    db.prepare("UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?").run(isActive ? 1 : 0, now(), userId);
+    return getUser(userId)!;
+  }
+
+  function setUserRole(userId: string, role: UserRole) {
+    const parsedRole = UserRoleSchema.parse(role);
+    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    if (!existing) throw new Error("User was not found.");
+
+    if (
+      existing.role === "admin" &&
+      Boolean(existing.is_active) &&
+      parsedRole !== "admin" &&
+      activeAdminCountExcluding(userId) === 0
+    ) {
+      throw new Error("Cannot demote the final active administrator.");
+    }
+
+    db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(parsedRole, now(), userId);
+    return getUser(userId)!;
+  }
+
+  function updateUser(userId: string, input: UpdateUserInput) {
+    const parsed = UpdateUserSchema.parse(input);
+
+    return withTransaction(db, () => {
+      const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+      if (!existing) throw new Error("User was not found.");
+
+      const nextRole = parsed.role ?? UserRoleSchema.parse(existing.role);
+      const nextIsActive = parsed.isActive ?? Boolean(existing.is_active);
+      if (existing.role === "admin" && Boolean(existing.is_active) && activeAdminCountExcluding(userId) === 0) {
+        if (!nextIsActive) {
+          throw new Error("Cannot deactivate the final active administrator.");
+        }
+        if (nextRole !== "admin") {
+          throw new Error("Cannot demote the final active administrator.");
+        }
+      }
+
+      const timestamp = now();
+      if (parsed.displayName !== undefined) {
+        db.prepare("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?").run(parsed.displayName, timestamp, userId);
+      }
+      if (parsed.isActive !== undefined) {
+        db.prepare("UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?").run(parsed.isActive ? 1 : 0, timestamp, userId);
+      }
+      if (parsed.role !== undefined) {
+        db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(parsed.role, timestamp, userId);
+      }
+
+      return getUser(userId)!;
+    });
+  }
+
+  function bindOidcIdentity(userId: string, input: OidcIdentityUpsert) {
+    const user = getUser(userId);
+    if (!user) throw new Error("User was not found.");
+
+    const parsed = OidcIdentityUpsertSchema.parse(input);
+    const existing = db
+      .prepare("SELECT id FROM user_oidc_identities WHERE issuer = ? AND subject = ?")
+      .get(parsed.issuer, parsed.subject);
+    if (existing) throw new Error("OIDC identity is already bound.");
+
+    const id = nanoid();
+    const timestamp = now();
+    db.prepare(
+      `
+        INSERT INTO user_oidc_identities (id, user_id, issuer, subject, email, name, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(id, userId, parsed.issuer, parsed.subject, parsed.email, parsed.name, timestamp, timestamp);
+
+    return toOidcIdentity(db.prepare("SELECT * FROM user_oidc_identities WHERE id = ?").get(id) as OidcIdentityRow);
+  }
+
+  function deleteOidcIdentity(identityId: string) {
+    db.prepare("DELETE FROM user_oidc_identities WHERE id = ?").run(identityId);
+  }
+
+  function deleteOidcIdentityForUser(userId: string, identityId: string) {
+    const result = db
+      .prepare("DELETE FROM user_oidc_identities WHERE id = ? AND user_id = ?")
+      .run(identityId, userId) as { changes: number };
+    if (result.changes === 0) throw new Error("OIDC identity was not found.");
+  }
+
+  function findUserByOidcIdentity(issuer: string, subject: string) {
+    const row = db
+      .prepare(
+        `
+          SELECT users.*
+          FROM user_oidc_identities
+          JOIN users ON users.id = user_oidc_identities.user_id
+          WHERE user_oidc_identities.issuer = ? AND user_oidc_identities.subject = ? AND users.is_active = 1
+        `
+      )
+      .get(issuer.trim(), subject.trim()) as UserRow | undefined;
+
+    return row ? toUser(row) : null;
+  }
+
+  function getRootMemory(userId: string) {
+    const row = db.prepare("SELECT * FROM root_memory WHERE user_id = ? LIMIT 1").get(userId) as RootMemoryRow | undefined;
     return row ? toRootMemory(row) : null;
   }
 
-  function saveRootMemory(preferences: RootPreferences) {
+  function saveRootMemory(userId: string, preferences: RootPreferences) {
     const parsed = RootPreferencesSchema.parse(preferences);
-    const existing = getRootMemory();
-    const id = existing?.id ?? "default";
+    const existing = getRootMemory(userId);
+    const id = existing?.id ?? nanoid();
     const timestamp = now();
     const summary = summarizePreferences(parsed);
 
@@ -630,27 +995,29 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         `
           UPDATE root_memory
           SET preferences_json = ?, summary = ?, updated_at = ?
-          WHERE id = ?
+          WHERE id = ? AND user_id = ?
         `
-      ).run(JSON.stringify(parsed), summary, timestamp, id);
+      ).run(JSON.stringify(parsed), summary, timestamp, id, userId);
     } else {
       db.prepare(
         `
-          INSERT INTO root_memory (id, preferences_json, summary, learned_summary, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO root_memory (id, user_id, preferences_json, summary, learned_summary, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
         `
-      ).run(id, JSON.stringify(parsed), summary, "", timestamp, timestamp);
+      ).run(id, userId, JSON.stringify(parsed), summary, "", timestamp, timestamp);
     }
 
-    return getRootMemory()!;
+    return getRootMemory(userId)!;
   }
 
   function createSessionDraft({
+    userId,
     enabledSkillIds,
     rootMemoryId,
     draft,
     roundIntent = "种子念头"
   }: {
+    userId: string;
     enabledSkillIds?: string[];
     rootMemoryId: string;
     draft: Draft;
@@ -663,12 +1030,15 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const parsedDraft = DraftSchema.parse(draft);
 
     return withTransaction(db, () => {
+      const root = db.prepare("SELECT id FROM root_memory WHERE id = ? AND user_id = ?").get(rootMemoryId, userId);
+      if (!root) throw new Error("Root memory was not found.");
+
       db.prepare(
         `
-          INSERT INTO sessions (id, root_memory_id, title, status, current_node_id, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO sessions (id, user_id, root_memory_id, title, status, current_node_id, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `
-      ).run(sessionId, rootMemoryId, parsedDraft.title || "Untitled Tree", "active", nodeId, timestamp, timestamp);
+      ).run(sessionId, userId, rootMemoryId, parsedDraft.title || "Untitled Tree", "active", nodeId, timestamp, timestamp);
 
       db.prepare(
         `
@@ -716,9 +1086,9 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         timestamp
       );
 
-      saveSessionEnabledSkills(sessionId, enabledSkillIds ?? defaultEnabledSkillIds(), timestamp);
+      saveSessionEnabledSkills(sessionId, userId, enabledSkillIds ?? defaultEnabledSkillIds(), timestamp);
 
-      const state = getSessionState(sessionId);
+      const state = getSessionState(userId, sessionId);
       if (!state) {
         throw new Error("Failed to create session draft state.");
       }
@@ -727,6 +1097,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function createDraftChild({
+    userId,
     customOption,
     draft,
     optionMode = "balanced",
@@ -735,6 +1106,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     nodeId,
     selectedOptionId
   }: {
+    userId: string;
     customOption?: BranchOption;
     draft?: Draft;
     optionMode?: OptionGenerationMode;
@@ -743,7 +1115,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     nodeId: string;
     selectedOptionId: BranchOption["id"];
   }) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -829,11 +1201,11 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         `
           UPDATE sessions
           SET current_node_id = ?, title = ?, status = ?, updated_at = ?
-          WHERE id = ?
+          WHERE id = ? AND user_id = ?
         `
-      ).run(nextNodeId, parsedDraft?.title || session.title || "Untitled Tree", "active", timestamp, sessionId);
+      ).run(nextNodeId, parsedDraft?.title || session.title || "Untitled Tree", "active", timestamp, sessionId, userId);
 
-      const state = getSessionState(sessionId);
+      const state = getSessionState(userId, sessionId);
       if (!state) {
         throw new Error("Failed to create draft child state.");
       }
@@ -842,11 +1214,13 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function createEditedDraftChild({
+    userId,
     sessionId,
     nodeId,
     draft,
     output
   }: {
+    userId: string;
     sessionId: string;
     nodeId: string;
     draft: Draft;
@@ -859,6 +1233,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     });
 
     const draftState = createDraftChild({
+      userId,
       customOption: customEditOption,
       draft: parsedDraft,
       optionMode: "balanced",
@@ -871,6 +1246,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     if (!output) return draftState;
 
     return updateNodeOptions({
+      userId,
       sessionId,
       nodeId: draftState.currentNode!.id,
       output
@@ -878,18 +1254,20 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function updateCurrentNodeDraftAndOptions({
+    userId,
     sessionId,
     nodeId,
     draft,
     output
   }: {
+    userId: string;
     sessionId: string;
     nodeId: string;
     draft: Draft;
     output: DirectorOutput;
   }) {
     requireThreeOptions(output.options);
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -898,6 +1276,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     }
 
     return createEditedDraftChild({
+      userId,
       sessionId,
       nodeId,
       draft,
@@ -910,15 +1289,17 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function updateNodeDraft({
+    userId,
     sessionId,
     nodeId,
     output
   }: {
+    userId: string;
     sessionId: string;
     nodeId: string;
     output: DirectorDraftOutput;
   }) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -960,11 +1341,11 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         `
           UPDATE sessions
           SET title = ?, status = ?, updated_at = ?
-          WHERE id = ?
+          WHERE id = ? AND user_id = ?
         `
-      ).run(parsedDraft.title || session.title || "Untitled Tree", "active", timestamp, sessionId);
+      ).run(parsedDraft.title || session.title || "Untitled Tree", "active", timestamp, sessionId, userId);
 
-      const state = getSessionState(sessionId);
+      const state = getSessionState(userId, sessionId);
       if (!state) {
         throw new Error("Failed to update node draft.");
       }
@@ -973,16 +1354,18 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function updateNodeOptions({
+    userId,
     sessionId,
     nodeId,
     output
   }: {
+    userId: string;
     sessionId: string;
     nodeId: string;
     output: DirectorOptionsOutput;
   }) {
     requireThreeOptions(output.options);
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -1006,11 +1389,11 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         `
           UPDATE sessions
           SET updated_at = ?
-          WHERE id = ?
+          WHERE id = ? AND user_id = ?
         `
-      ).run(timestamp, sessionId);
+      ).run(timestamp, sessionId, userId);
 
-      const state = getSessionState(sessionId);
+      const state = getSessionState(userId, sessionId);
       if (!state) {
         throw new Error("Failed to update session options.");
       }
@@ -1019,15 +1402,17 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
   }
 
   function activateHistoricalBranch({
+    userId,
     sessionId,
     nodeId,
     selectedOptionId
   }: {
+    userId: string;
     sessionId: string;
     nodeId: string;
     selectedOptionId: BranchOption["id"];
   }) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -1055,28 +1440,30 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         `
           UPDATE sessions
           SET current_node_id = ?, title = ?, status = ?, updated_at = ?
-          WHERE id = ?
+          WHERE id = ? AND user_id = ?
         `
-      ).run(existingChild.id, draft?.title || session.title, "active", timestamp, sessionId);
+      ).run(existingChild.id, draft?.title || session.title, "active", timestamp, sessionId, userId);
 
-      return getSessionState(sessionId);
+      return getSessionState(userId, sessionId);
     });
   }
 
   function createHistoricalDraftChild({
+    userId,
     customOption,
     optionMode = "balanced",
     sessionId,
     nodeId,
     selectedOptionId
   }: {
+    userId: string;
     customOption?: BranchOption;
     optionMode?: OptionGenerationMode;
     sessionId: string;
     nodeId: string;
     selectedOptionId: BranchOption["id"];
   }) {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as SessionRow | undefined;
     if (!session) {
       throw new Error("Session was not found.");
     }
@@ -1132,11 +1519,11 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
         `
           UPDATE sessions
           SET current_node_id = ?, status = ?, updated_at = ?
-          WHERE id = ?
+          WHERE id = ? AND user_id = ?
         `
-      ).run(nextNodeId, "active", timestamp, sessionId);
+      ).run(nextNodeId, "active", timestamp, sessionId, userId);
 
-      const state = getSessionState(sessionId);
+      const state = getSessionState(userId, sessionId);
       if (!state) {
         throw new Error("Failed to create historical draft child state.");
       }
@@ -1206,11 +1593,13 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     return latestDraftByNode;
   }
 
-  function getSessionState(sessionId: string): SessionState | null {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
+  function getSessionState(userId: string, sessionId: string): SessionState | null {
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ?").get(sessionId, userId) as
+      | SessionRow
+      | undefined;
     if (!session) return null;
 
-    const root = db.prepare("SELECT * FROM root_memory WHERE id = ?").get(session.root_memory_id) as
+    const root = db.prepare("SELECT * FROM root_memory WHERE id = ? AND user_id = ?").get(session.root_memory_id, userId) as
       | RootMemoryRow
       | undefined;
     if (!root) return null;
@@ -1231,7 +1620,7 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     const currentDraft = latestDraftForNode(latestDraftByNode, currentNode?.id ?? null);
     const historyRows = db.prepare("SELECT * FROM branch_history WHERE session_id = ?").all(sessionId) as BranchHistoryRow[];
     const selectedPath = activePathFor(nodes, currentNode);
-    const enabledSkills = enabledSkillsForSession(sessionId);
+    const enabledSkills = enabledSkillsForSession(sessionId, userId);
 
     return SessionStateSchema.parse({
       rootMemory: toRootMemory(root),
@@ -1260,15 +1649,32 @@ export function createTreeableRepository(dbPath = defaultDbPath()) {
     });
   }
 
-  function getLatestSessionState(): SessionState | null {
+  function getLatestSessionState(userId: string): SessionState | null {
     const row = db
-      .prepare("SELECT id FROM sessions ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1")
-      .get() as { id: string } | undefined;
+      .prepare("SELECT id FROM sessions WHERE user_id = ? ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1")
+      .get(userId) as { id: string } | undefined;
 
-    return row ? getSessionState(row.id) : null;
+    return row ? getSessionState(userId, row.id) : null;
   }
 
   return {
+    createInitialAdmin,
+    createUser,
+    listUsers,
+    listUsersWithOidcIdentities,
+    getUser,
+    getUserWithPasswordHashByUsername,
+    verifyPasswordLogin,
+    resetUserPassword,
+    updateUser,
+    updateUserDisplayName,
+    setUserActive,
+    setUserRole,
+    bindOidcIdentity,
+    deleteOidcIdentity,
+    deleteOidcIdentityForUser,
+    findUserByOidcIdentity,
+    hasUsers,
     getRootMemory,
     saveRootMemory,
     listCreationRequestOptions,

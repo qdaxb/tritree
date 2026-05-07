@@ -1,16 +1,38 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthApiError } from "@/lib/auth/current-user";
 import { POST } from "./route";
 
 const streamDirectorDraftMock = vi.hoisted(() => vi.fn());
 const extractPartialDirectorDraftMock = vi.hoisted(() => vi.fn());
 const extractActiveDirectorDraftFieldMock = vi.hoisted(() => vi.fn());
 const getRepositoryMock = vi.hoisted(() => vi.fn());
+const requireCurrentUserMock = vi.hoisted(() => vi.fn());
+
+const currentUser = {
+  id: "user-1",
+  username: "awei",
+  displayName: "Awei",
+  role: "admin",
+  isActive: true,
+  createdAt: "2026-05-06T00:00:00.000Z",
+  updatedAt: "2026-05-06T00:00:00.000Z"
+};
 
 vi.mock("@/lib/ai/director-stream", () => ({
   streamDirectorDraft: streamDirectorDraftMock,
   extractPartialDirectorDraft: extractPartialDirectorDraftMock,
   extractActiveDirectorDraftField: extractActiveDirectorDraftFieldMock
 }));
+
+vi.mock("server-only", () => ({}));
+
+vi.mock("@/lib/auth/current-user", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/auth/current-user")>("@/lib/auth/current-user");
+  return {
+    ...actual,
+    requireCurrentUser: requireCurrentUserMock
+  };
+});
 
 vi.mock("@/lib/db/repository", () => ({
   getRepository: getRepositoryMock
@@ -81,9 +103,26 @@ beforeEach(() => {
   extractPartialDirectorDraftMock.mockReset();
   extractActiveDirectorDraftFieldMock.mockReset();
   getRepositoryMock.mockReset();
+  requireCurrentUserMock.mockReset();
+  requireCurrentUserMock.mockResolvedValue(currentUser);
 });
 
 describe("POST /api/sessions/:sessionId/draft/generate/stream", () => {
+  it("returns 401 when generating a draft without login", async () => {
+    requireCurrentUserMock.mockRejectedValue(new AuthApiError(401, "请先登录。"));
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/draft/generate/stream", {
+        method: "POST",
+        body: JSON.stringify({})
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "请先登录。" });
+  });
+
   it("streams partial draft events before persisting and sending done", async () => {
     const finalOutput = {
       roundIntent: "扩写",
@@ -128,6 +167,7 @@ describe("POST /api/sessions/:sessionId/draft/generate/stream", () => {
     expect(text.indexOf('"type":"thinking"')).toBeLessThan(text.indexOf('"type":"draft"'));
     expect(text.indexOf('"type":"draft"')).toBeLessThan(text.indexOf('"type":"done"'));
     expect(updateNodeDraft).toHaveBeenCalledWith({
+      userId: "user-1",
       sessionId: "session-1",
       nodeId: "node-2",
       output: finalOutput

@@ -9,6 +9,11 @@ import type { Skill } from "@/lib/domain";
 
 const liveDraftMock = vi.hoisted(() => vi.fn());
 const treeCanvasMock = vi.hoisted(() => vi.fn());
+const signOutMock = vi.hoisted(() => vi.fn());
+
+vi.mock("next-auth/react", () => ({
+  signOut: signOutMock
+}));
 
 vi.mock("@/components/tree/TreeCanvas", () => ({
   TreeCanvas: ({
@@ -485,6 +490,90 @@ describe("TreeableApp", () => {
     const topbar = await screen.findByText("Seed：我想写 AI 产品经理的真实困境 | 本次创作要求：改成英文的");
     expect(topbar).toBeInTheDocument();
     expect(topbar).toHaveTextContent(/^Seed：我想写 AI 产品经理的真实困境 \| 本次创作要求：改成英文的$/);
+  });
+
+  describe("account controls", () => {
+    it("shows the admin account controls for the current user", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TreeableApp
+          currentUser={{
+            id: "user-1",
+            username: "awei",
+            displayName: "Awei",
+            role: "admin",
+            isAdmin: true
+          }}
+        />
+      );
+
+      expect(await screen.findByText("Awei")).toBeInTheDocument();
+      const accountActions = screen.getByRole("group", { name: "账号操作" });
+      const workspaceActions = screen.getByRole("group", { name: "作品操作" });
+      expect(within(accountActions).getByText("Awei")).toBeInTheDocument();
+      expect(within(accountActions).getByRole("link", { name: "用户管理" })).toHaveAttribute("href", "/admin/users");
+      expect(within(accountActions).getByRole("link", { name: "用户管理" })).toHaveClass("account-controls__admin-link");
+      expect(within(accountActions).getByRole("button", { name: "退出登录" })).toBeInTheDocument();
+      expect(within(workspaceActions).getByRole("button", { name: "新念头" })).toBeInTheDocument();
+      expect(within(workspaceActions).getByRole("button", { name: "重新开始" })).toBeInTheDocument();
+      expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
+    });
+
+    it("signs out to the login page", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TreeableApp
+          currentUser={{
+            id: "user-1",
+            username: "awei",
+            displayName: "Awei",
+            role: "admin",
+            isAdmin: true
+          }}
+        />
+      );
+
+      await userEvent.click(await screen.findByRole("button", { name: "退出登录" }));
+
+      expect(signOutMock).toHaveBeenCalledWith({ callbackUrl: "/login" });
+    });
+
+    it("hides the admin link from member users", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TreeableApp
+          currentUser={{
+            id: "user-2",
+            username: "xiaolin",
+            displayName: "Xiaolin",
+            role: "member",
+            isAdmin: false
+          }}
+        />
+      );
+
+      expect(await screen.findByText("Xiaolin")).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "用户管理" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "退出登录" })).toBeInTheDocument();
+    });
   });
 
   it("opens the seed screen when no existing tree is available", async () => {

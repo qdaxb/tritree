@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { badRequestResponse, isBadRequestError, publicServerErrorMessage } from "@/lib/api/errors";
 import { focusSessionStateForNode } from "@/lib/app-state";
+import { authErrorResponse, requireCurrentUser } from "@/lib/auth/current-user";
 import { getRepository } from "@/lib/db/repository";
 import { DraftSchema } from "@/lib/domain";
 
@@ -14,6 +15,13 @@ const DraftBodySchema = z.object({
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await context.params;
+  const user = await requireCurrentUser().catch((error) => {
+    const response = authErrorResponse(error);
+    if (response) return response;
+    throw error;
+  });
+  if (user instanceof Response) return user;
+
   let body: z.infer<typeof DraftBodySchema>;
 
   try {
@@ -27,7 +35,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   }
 
   const repository = getRepository();
-  const state = repository.getSessionState(sessionId);
+  const state = repository.getSessionState(user.id, sessionId);
 
   if (!state?.currentNode) {
     return NextResponse.json({ error: "没有找到当前创作方向。" }, { status: 404 });
@@ -40,6 +48,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
 
   try {
     const draftState = repository.createEditedDraftChild({
+      userId: user.id,
       sessionId,
       nodeId: body.nodeId,
       draft: body.draft

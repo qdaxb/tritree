@@ -3,6 +3,7 @@ import { z } from "zod";
 import { badRequestResponse, isBadRequestError, publicServerErrorMessage } from "@/lib/api/errors";
 import { streamDirectorOptions } from "@/lib/ai/director-stream";
 import { summarizeCurrentDraftOptionsForDirector } from "@/lib/app-state";
+import { authErrorResponse, requireCurrentUser } from "@/lib/auth/current-user";
 import { getRepository } from "@/lib/db/repository";
 import { createSeedDraft } from "@/lib/seed-draft";
 import { encodeNdjson } from "@/lib/stream/ndjson";
@@ -22,10 +23,24 @@ const ndjsonHeaders = {
 };
 
 export async function GET() {
-  return NextResponse.json({ state: getRepository().getLatestSessionState() });
+  try {
+    const user = await requireCurrentUser();
+    return NextResponse.json({ state: getRepository().getLatestSessionState(user.id) });
+  } catch (error) {
+    const response = authErrorResponse(error);
+    if (response) return response;
+    throw error;
+  }
 }
 
 export async function POST(request: Request) {
+  const user = await requireCurrentUser().catch((error) => {
+    const response = authErrorResponse(error);
+    if (response) return response;
+    throw error;
+  });
+  if (user instanceof Response) return user;
+
   let body: z.infer<typeof StartSessionBodySchema> = {};
   try {
     const text = await request.text();
@@ -37,15 +52,16 @@ export async function POST(request: Request) {
   }
 
   const repository = getRepository();
-  const rootMemory = repository.getRootMemory();
+  const rootMemory = repository.getRootMemory(user.id);
   if (!rootMemory?.preferences.seed.trim()) {
     return NextResponse.json({ error: "还没有输入创作 seed。" }, { status: 400 });
   }
 
   try {
     const seedDraft = createSeedDraft(rootMemory.preferences.seed);
-    const enabledSkills = repository.resolveSkillsByIds(body.enabledSkillIds ?? repository.defaultEnabledSkillIds());
+    const enabledSkills = repository.resolveSkillsByIds(body.enabledSkillIds ?? repository.defaultEnabledSkillIds(), user.id);
     const draftState = repository.createSessionDraft({
+      userId: user.id,
       rootMemoryId: rootMemory.id,
       draft: seedDraft,
       ...(body.enabledSkillIds ? { enabledSkillIds: body.enabledSkillIds } : {})
@@ -79,6 +95,7 @@ export async function POST(request: Request) {
             }
           );
           const nextState = repository.updateNodeOptions({
+            userId: user.id,
             sessionId: draftState.session.id,
             nodeId: draftState.currentNode!.id,
             output

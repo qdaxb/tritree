@@ -1,13 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthApiError } from "@/lib/auth/current-user";
 import { createSeedDraft } from "@/lib/seed-draft";
 import { POST } from "./route";
 
 const streamDirectorOptionsMock = vi.hoisted(() => vi.fn());
 const getRepositoryMock = vi.hoisted(() => vi.fn());
+const requireCurrentUserMock = vi.hoisted(() => vi.fn());
+
+const currentUser = {
+  id: "user-1",
+  username: "awei",
+  displayName: "Awei",
+  role: "admin",
+  isActive: true,
+  createdAt: "2026-05-06T00:00:00.000Z",
+  updatedAt: "2026-05-06T00:00:00.000Z"
+};
 
 vi.mock("@/lib/ai/director-stream", () => ({
   streamDirectorOptions: streamDirectorOptionsMock
 }));
+
+vi.mock("server-only", () => ({}));
+
+vi.mock("@/lib/auth/current-user", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/auth/current-user")>("@/lib/auth/current-user");
+  return {
+    ...actual,
+    requireCurrentUser: requireCurrentUserMock
+  };
+});
 
 vi.mock("@/lib/db/repository", () => ({
   getRepository: getRepositoryMock
@@ -32,6 +54,8 @@ const resolvedSkills = [
 beforeEach(() => {
   streamDirectorOptionsMock.mockReset();
   getRepositoryMock.mockReset();
+  requireCurrentUserMock.mockReset();
+  requireCurrentUserMock.mockResolvedValue(currentUser);
 });
 
 describe("createSeedDraft", () => {
@@ -45,6 +69,15 @@ describe("createSeedDraft", () => {
 });
 
 describe("POST /api/sessions", () => {
+  it("returns 401 when starting a session without login", async () => {
+    requireCurrentUserMock.mockRejectedValue(new AuthApiError(401, "请先登录。"));
+
+    const response = await POST(new Request("http://test.local/api/sessions", { method: "POST" }));
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "请先登录。" });
+  });
+
   it("streams first-round options through the same option stream used by existing nodes", async () => {
     const draftState = {
       rootMemory: {
@@ -191,11 +224,12 @@ describe("POST /api/sessions", () => {
     );
     expect(createSessionDraft).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: "user-1",
         rootMemoryId: "root",
         draft: expect.objectContaining({ body: "写一篇解释为什么要写作的文章" })
       })
     );
-    expect(updateNodeOptions).toHaveBeenCalledWith({ sessionId: "session-1", nodeId: "node-1", output });
+    expect(updateNodeOptions).toHaveBeenCalledWith({ userId: "user-1", sessionId: "session-1", nodeId: "node-1", output });
     expect(text).toContain('"type":"state"');
     expect(text).toContain('"type":"thinking"');
     expect(text).toContain('"text":"先判断 seed。"');
@@ -292,6 +326,7 @@ describe("POST /api/sessions", () => {
     expect(response.status).toBe(200);
     expect(createSessionDraft).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: "user-1",
         draft: expect.objectContaining({
           body: "写一篇解释为什么要写作的文章"
         })
@@ -401,13 +436,14 @@ describe("POST /api/sessions", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(resolveSkillsByIds).toHaveBeenCalledWith(["system-analysis", "system-no-hype-title"]);
+    expect(resolveSkillsByIds).toHaveBeenCalledWith(["system-analysis", "system-no-hype-title"], "user-1");
     expect(streamDirectorOptionsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabledSkills: resolvedSkills }),
       expect.anything()
     );
     expect(createSessionDraft).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: "user-1",
         enabledSkillIds: ["system-analysis", "system-no-hype-title"]
       })
     );
