@@ -1566,7 +1566,15 @@ function parseJsonStringValue(rawValue: string) {
   try {
     return JSON.parse(`"${rawValue}"`) as string;
   } catch {
-    return rawValue;
+    for (let end = rawValue.length - 1; end >= 0; end -= 1) {
+      try {
+        return JSON.parse(`"${rawValue.slice(0, end)}"`) as string;
+      } catch {
+        // Keep trimming until the visible JSON string prefix ends before an incomplete escape.
+      }
+    }
+
+    return "";
   }
 }
 

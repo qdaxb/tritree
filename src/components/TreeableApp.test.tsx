@@ -1913,6 +1913,31 @@ describe("TreeableApp", () => {
     });
 
     act(() => {
+      optionsStream.push({ type: "options", nodeId: "node-2", options: finalOptions });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("canvas-options").textContent).toBe("First A|Second B|Third C");
+      expect(screen.getByTestId("live-draft-generation-status")).toHaveTextContent("options:streaming:");
+      expect(screen.getByTestId("live-draft-generation-status")).not.toHaveTextContent("第二步排除重复建议");
+    });
+
+    act(() => {
+      optionsStream.push({ type: "thinking", text: "结构修复重试，重新判断三个方向。" });
+      optionsStream.push({
+        type: "options",
+        nodeId: "node-2",
+        options: [{ ...finalOptions[0], label: "Retry A" }]
+      });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("canvas-options").textContent).toBe("First A|Second B|Third C");
+      expect(screen.getByTestId("live-draft-generation-status")).toHaveTextContent("options:streaming:");
+      expect(screen.getByTestId("live-draft-generation-status")).not.toHaveTextContent("结构修复重试");
+    });
+
+    act(() => {
       optionsStream.push({ type: "done", state: optionsState });
       optionsStream.close();
     });

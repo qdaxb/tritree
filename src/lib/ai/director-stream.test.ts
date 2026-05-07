@@ -63,6 +63,26 @@ describe("extractPartialDirectorDraft", () => {
       imagePrompt: ""
     });
   });
+
+  it("does not expose incomplete JSON escape sequences in partial body text", () => {
+    expect(
+      extractPartialDirectorDraft('{"roundIntent":"扩写","draft":{"title":"新标题","body":"第一段。\\')
+    ).toEqual({
+      title: "新标题",
+      body: "第一段。",
+      hashtags: [],
+      imagePrompt: ""
+    });
+
+    expect(
+      extractPartialDirectorDraft('{"roundIntent":"扩写","draft":{"title":"新标题","body":"第一段。\\n\\n第二段')
+    ).toEqual({
+      title: "新标题",
+      body: "第一段。\n\n第二段",
+      hashtags: [],
+      imagePrompt: ""
+    });
+  });
 });
 
 describe("extractActiveDirectorDraftField", () => {

@@ -1003,6 +1003,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewDraft = fal
     let receivedOptions = false;
     let receivedThinking = false;
     let receivedDone = false;
+    const completeOptionPreviewNodeIds = new Set<string>();
     const decoder = new TextDecoder();
     const reader = response.body.getReader();
     const throwStreamError = () => {
@@ -1028,6 +1029,17 @@ export function TreeableApp({ currentUser, initialSessionId, startNewDraft = fal
       }
 
       if (value.type === "options") {
+        if (completeOptionPreviewNodeIds.has(value.nodeId) && value.options.length < 3) {
+          return;
+        }
+
+        if (value.options.length >= 3) {
+          completeOptionPreviewNodeIds.add(value.nodeId);
+          setStreamingThinking((current) =>
+            current?.stage === "options" && (!current.nodeId || current.nodeId === value.nodeId) ? null : current
+          );
+        }
+
         setStreamingOptions({ nodeId: value.nodeId, options: value.options });
         markMobilePanelUnread("tree");
         receivedOptions = true;
@@ -1035,8 +1047,13 @@ export function TreeableApp({ currentUser, initialSessionId, startNewDraft = fal
       }
 
       if (value.type === "thinking") {
+        const thinkingNodeId = value.nodeId ?? fallbackNodeId ?? null;
+        if (thinkingNodeId && completeOptionPreviewNodeIds.has(thinkingNodeId)) {
+          return;
+        }
+
         setStreamingThinking({
-          nodeId: value.nodeId ?? fallbackNodeId ?? null,
+          nodeId: thinkingNodeId,
           stage: "options",
           text: value.text
         });

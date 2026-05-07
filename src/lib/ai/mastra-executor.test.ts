@@ -1697,6 +1697,92 @@ describe("tree director compatibility generators", () => {
     expect(partials).toContainEqual(finalObject);
   });
 
+  it("does not expose incomplete escaped newlines from submit_tree_draft argument deltas", async () => {
+    const runSkillCommand = {
+      id: "run_skill_command",
+      description: "Run an installed skill command.",
+      execute: vi.fn()
+    };
+    const finalObject = {
+      roundIntent: "继续成稿",
+      draft: {
+        title: "青岛反攻略",
+        body: "第一段。\n\n第二段。",
+        hashtags: ["#青岛"],
+        imagePrompt: "青岛老城街道"
+      },
+      memoryObservation: "用户想保留段落换行。"
+    };
+    const stream = vi.fn(async () => ({
+      fullStream: async function* () {
+        yield {
+          type: "tool-call-streaming-start",
+          payload: {
+            toolCallId: "submit-1",
+            toolName: "submit_tree_draft"
+          }
+        };
+        yield {
+          type: "tool-call-delta",
+          payload: {
+            toolCallId: "submit-1",
+            toolName: "submit_tree_draft",
+            argsTextDelta: '{"roundIntent":"继续成稿","draft":{"title":"青岛反攻略","body":"第一段。\\'
+          }
+        };
+        yield {
+          type: "tool-call-delta",
+          payload: {
+            toolCallId: "submit-1",
+            toolName: "submit_tree_draft",
+            argsTextDelta: 'n\\n第二段。","hashtags":["#青岛"],"imagePrompt":"青岛老城街道"}'
+          }
+        };
+        yield {
+          type: "tool-call",
+          payload: {
+            toolCallId: "submit-1",
+            toolName: "submit_tree_draft",
+            args: finalObject
+          }
+        };
+      },
+      object: Promise.resolve(undefined)
+    }));
+    mocks.createSkillRuntimeTools.mockResolvedValueOnce({
+      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      tools: { run_skill_command: runSkillCommand }
+    });
+    mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
+      return {
+        options,
+        stream,
+        generate: vi.fn()
+      };
+    });
+    const partials: unknown[] = [];
+
+    await expect(
+      streamTreeDraft({
+        parts: directorParts,
+        env: { KIMI_API_KEY: "token" },
+        onPartialObject: (partial) => partials.push(partial)
+      })
+    ).resolves.toMatchObject({
+      roundIntent: finalObject.roundIntent,
+      draft: finalObject.draft
+    });
+
+    expect(partials[0]).toMatchObject({
+      roundIntent: "继续成稿",
+      draft: { title: "青岛反攻略", body: "第一段。" }
+    });
+    expect(partials[0]).not.toMatchObject({
+      draft: { body: expect.stringContaining("\\") }
+    });
+    expect(partials).toContainEqual(finalObject);
+  });
+
   it("streams structured partial options after runtime tool calls finish", async () => {
     const runSkillCommand = {
       id: "run_skill_command",
