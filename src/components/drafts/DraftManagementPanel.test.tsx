@@ -84,13 +84,13 @@ describe("DraftManagementPanel", () => {
       if (url === "/api/sessions/session-1" && method === "DELETE") {
         const draft = drafts.find((currentDraft) => currentDraft.id === "session-1");
         drafts = drafts.filter((currentDraft) => currentDraft.id !== "session-1");
-        return jsonResponse({ draft: draft ? { ...draft, isArchived: true, status: "archived" } : undefined });
+        return jsonResponse({ draft: draft ? { ...draft, isArchived: true, status: "active" } : undefined });
       }
 
       if (url === "/api/sessions/session-2" && method === "DELETE") {
         const draft = drafts.find((currentDraft) => currentDraft.id === "session-2");
         drafts = drafts.filter((currentDraft) => currentDraft.id !== "session-2");
-        return jsonResponse({ draft: draft ? { ...draft, isArchived: true, status: "archived" } : undefined });
+        return jsonResponse({ draft: draft ? { ...draft, isArchived: true, status: "active" } : undefined });
       }
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
@@ -209,7 +209,7 @@ describe("DraftManagementPanel", () => {
     expect(within(secondRow).getByRole("button", { name: "重命名" })).toBeDisabled();
     expect(within(secondRow).getByRole("button", { name: "归档" })).toBeDisabled();
 
-    archiveResponse.resolve(jsonResponse({ draft: { ...drafts[0], isArchived: true, status: "archived" } }));
+    archiveResponse.resolve(jsonResponse({ draft: { ...drafts[0], isArchived: true, status: "active" } }));
     await waitFor(() => expect(screen.queryByRole("article", { name: "第一篇草稿" })).not.toBeInTheDocument());
     expect(within(secondRow).getByRole("button", { name: "重命名" })).not.toBeDisabled();
     expect(within(secondRow).getByRole("button", { name: "归档" })).not.toBeDisabled();

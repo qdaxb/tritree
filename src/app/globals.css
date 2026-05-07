@@ -511,10 +511,8 @@
   flex-wrap: wrap;
   gap: 8px;
   align-items: end;
-  padding: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .drafts-rename-form label {
