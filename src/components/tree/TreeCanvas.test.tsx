@@ -170,6 +170,33 @@ describe("TreeCanvas", () => {
     expect(tray.querySelector("foreignObject")).toBeNull();
   });
 
+  it("keeps three primary slots while options stream in", () => {
+    const { rerender } = render(
+      <BranchOptionTray isBusy={false} onChoose={vi.fn()} options={[]} pendingChoice={null} visibleCount={0} />
+    );
+    const main = screen.getByRole("group", { name: "三个主选项" });
+
+    expect(within(main).getAllByText("等待中")).toHaveLength(3);
+    expect(screen.queryByRole("group", { name: "方向控制" })).not.toBeInTheDocument();
+
+    rerender(
+      <BranchOptionTray
+        isBusy={false}
+        onChoose={vi.fn()}
+        options={[currentNode.options[0]]}
+        pendingChoice={null}
+        visibleCount={1}
+      />
+    );
+
+    expect(main.querySelectorAll('[data-choice-button="true"]')).toHaveLength(1);
+    expect(within(main).getByRole("button", { name: /A 具体场景/ })).toBeDisabled();
+    expect(within(main).getAllByText("等待中")).toHaveLength(2);
+    expect(within(main).getByText("B")).toBeInTheDocument();
+    expect(within(main).getByText("C")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "方向控制" })).not.toBeInTheDocument();
+  });
+
   it("keeps full option titles in the three-choice cards", () => {
     render(
       <BranchOptionTray

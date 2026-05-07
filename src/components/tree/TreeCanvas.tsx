@@ -1150,7 +1150,11 @@ export function BranchOptionTray({
   const [optionMode, setOptionMode] = useState<OptionGenerationMode>("balanced");
   const orderedOptions = orderBranchOptions(options);
   const primaryOptions = orderedOptions.filter((option) => isPrimaryBranchOptionId(option.id));
-  const primaryAllVisible = visibleCount >= primaryOptions.length;
+  const visiblePrimaryOptionIds = new Set(primaryOptions.slice(0, Math.max(0, visibleCount)).map((option) => option.id));
+  const primaryOptionById = new Map(primaryOptions.map((option) => [option.id, option]));
+  const primaryAllVisible = PRIMARY_BRANCH_OPTION_IDS.every(
+    (optionId) => primaryOptionById.has(optionId) && visiblePrimaryOptionIds.has(optionId)
+  );
 
   return (
     <div aria-label="下一步方向选项" className="branch-option-tray" role="group">
@@ -1166,8 +1170,9 @@ export function BranchOptionTray({
         </div>
       ) : null}
       <div aria-label="三个主选项" className="branch-option-main branch-option-main--horizontal" role="group">
-        {primaryOptions.map((option, index) =>
-          index < visibleCount ? (
+        {PRIMARY_BRANCH_OPTION_IDS.map((optionId) => {
+          const option = primaryOptionById.get(optionId);
+          return option && visiblePrimaryOptionIds.has(optionId) ? (
             <BranchOptionCard
               isBusy={isBusy || !primaryAllVisible}
               isPending={pendingChoice === option.id}
@@ -1179,9 +1184,9 @@ export function BranchOptionTray({
               optionMode={optionMode}
             />
           ) : (
-            <BranchOptionPlaceholder key={option.id} optionId={option.id} />
-          )
-        )}
+            <BranchOptionPlaceholder key={optionId} optionId={optionId} />
+          );
+        })}
       </div>
     </div>
   );
