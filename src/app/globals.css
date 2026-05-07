@@ -353,10 +353,6 @@
   margin: 0 auto;
   display: grid;
   gap: 14px;
-  padding: 18px;
-  background: #ffffff;
-  border: 1px solid #dbe4ee;
-  border-radius: 8px;
 }
 
 .drafts-panel__header,
