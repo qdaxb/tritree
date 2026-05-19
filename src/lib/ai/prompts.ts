@@ -5,7 +5,7 @@ const DIRECTOR_BASE_SYSTEM_PROMPT = `
 You are a generic ReAct agent running inside a structured product runtime.
 Follow active skills, inspect tool results, and complete the requested target through the available final-submit tool.
 The system prompt defines execution boundaries and output contracts only; domain strategy comes from active skills and user-provided context.
-User-facing fields default to Simplified Chinese unless the user content or an active skill requires otherwise.
+The agent must communicate with users in Simplified Chinese for all user-facing fields unless the user content or an active skill explicitly requires otherwise.
 `.trim();
 
 export const DIRECTOR_OPTIONS_SYSTEM_PROMPT = `
@@ -36,30 +36,28 @@ export type DirectorInputParts = {
   selectedOptionLabel: string;
 };
 
-const NO_SELECTED_DIRECTION_PROMPT = `
-本轮没有用户已选答案。
-`.trim();
+const NO_SELECTED_DIRECTION_PROMPT = "No user-selected answer for this turn.";
 
 export function formatEnabledSkills(skills: Skill[]) {
   if (skills.length === 0) {
-    return "暂无已选 Skills。";
+    return "No selected Skills.";
   }
 
   const skillList = skills
     .map((skill, index) =>
       [
-        `技能 ${index + 1}：${skill.title}`,
-        `说明：${skill.description}`,
-        `加载状态：${skill.defaultLoaded === false ? "按需加载" : "默认加载"}`,
-        skill.parentSkillId ? `父级 Skill：${skill.parentSkillId}` : "",
-        skill.defaultLoaded === false ? "提示词：未展开，按需加载后再使用具体规则。" : `提示词：\n${skill.prompt}`
+        `Skill ${index + 1}: ${skill.title}`,
+        `Description: ${skill.description}`,
+        `Load state: ${skill.defaultLoaded === false ? "load on demand" : "loaded by default"}`,
+        skill.parentSkillId ? `Parent Skill: ${skill.parentSkillId}` : "",
+        skill.defaultLoaded === false ? "Prompt: not expanded; load it on demand before using concrete rules." : `Prompt:\n${skill.prompt}`
       ].filter(Boolean).join("\n")
     )
     .join("\n\n");
 
   return [
-    "以下 Skills 是本轮 active instructions；根据本轮目标和上下文应用。",
-    "Skill 清单：",
+    "The following Skills are active instructions for this turn; apply them according to this turn's goal and context.",
+    "Skill list:",
     skillList
   ].join("\n");
 }
@@ -67,27 +65,25 @@ export function formatEnabledSkills(skills: Skill[]) {
 export function buildDirectorUserPrompt(parts: DirectorInputParts) {
   return `
 # Runtime Input
-本消息只提供上下文数据，不定义业务策略。请按系统提示词、已启用 Skills、可用工具和本轮目标输出契约完成任务。
+This message provides context data only; it does not define business strategy. Complete the task according to the system prompt, enabled Skills, available tools, and this turn's output contract.
+User-facing fields must be written in Simplified Chinese unless user-authored text or an active Skill explicitly requires otherwise.
 
 # Artifact Context
-${parts.artifactContext || "未指定。"}
+${parts.artifactContext || "Not specified."}
 
 # Initial Input
 ${parts.rootSummary}
-
-# Learned Preferences
-${parts.learnedSummary || "暂无已学习偏好。"}
 
 # User Selection Or Request
 ${parts.selectedOptionLabel || NO_SELECTED_DIRECTION_PROMPT}
 
 # Current Visible Result
-${parts.currentArtifact || "暂无。"}
+${parts.currentArtifact || "None yet."}
 
 # Active Skills
 ${formatEnabledSkills(parts.enabledSkills)}
 
 # Reminder
-当前时间：${formatCurrentDateTime()}
+Current time: ${formatCurrentDateTime()}
 `.trim();
 }

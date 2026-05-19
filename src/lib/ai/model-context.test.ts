@@ -31,7 +31,7 @@ describe("summarizeDirectorMessageContent", () => {
     const content = summarizeDirectorMessageContent([
       {
         type: "tool-result",
-        toolName: "statusServer_getStatus",
+        toolName: "records_getItem",
         output: {
           type: "json",
           value: {
@@ -41,8 +41,8 @@ describe("summarizeDirectorMessageContent", () => {
       }
     ]);
 
-    expect(content).toContain("statusServer_getStatus");
-    expect(content).toContain("原始工具输出已省略");
+    expect(content).toContain("records_getItem");
+    expect(content).toContain("raw tool output was omitted");
     expect(content).not.toContain("RAW_TOOL_OUTPUT_SHOULD_NOT_BE_REPLAYED");
   });
 });
@@ -51,17 +51,17 @@ describe("compactDirectorMessagesForModel", () => {
   it("preserves raw tool details when they fit the current model budget", () => {
     const messages = compactDirectorMessagesForModel(
       [
-        { role: "user", content: "初始内容：想从热搜里挑选题" },
+        { role: "user", content: "初始内容：想从趋势里挑选题" },
         {
           role: "tool",
           content: [
             {
               type: "tool-result",
-              toolName: "weiboHotServer_getWeiboHotWordRealTime",
+              toolName: "trendServer_listSignals",
               output: {
                 type: "json",
                 value: {
-                  hotWords: ["杨威一家六口挤香港40平租房", "香港教育", "学区房"]
+                  signals: ["行业讨论 A", "用户问题 B", "场景变化 C"]
                 }
               }
             }
@@ -78,8 +78,8 @@ describe("compactDirectorMessagesForModel", () => {
 
     const serialized = JSON.stringify(messages);
     expect(messages[1]?.role).toBe("tool");
-    expect(serialized).toContain("杨威一家六口挤香港40平租房");
-    expect(serialized).not.toContain("原始工具输出已省略");
+    expect(serialized).toContain("行业讨论 A");
+    expect(serialized).not.toContain("raw tool output was omitted");
   });
 
   it("keeps the first and latest messages while dropping oversized middle history", () => {
@@ -92,7 +92,7 @@ describe("compactDirectorMessagesForModel", () => {
           content: [
             {
               type: "tool-result",
-              toolName: "statusServer_getTimeline",
+              toolName: "records_listItems",
               output: {
                 type: "json",
                 value: {
@@ -115,7 +115,7 @@ describe("compactDirectorMessagesForModel", () => {
     expect(messages[0]).toMatchObject({ role: "user", content: expect.stringContaining("初始内容") });
     expect(messages.at(-1)).toMatchObject({ role: "user", content: expect.stringContaining("最终请求") });
     expect(messages.some((message) => message.role === "tool")).toBe(false);
-    expect(serialized).toContain("已省略");
+    expect(serialized).toContain("omitted");
     expect(serialized).not.toContain("RAW_TIMELINE_SHOULD_NOT_BE_REPLAYED");
   });
 });

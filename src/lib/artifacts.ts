@@ -63,9 +63,9 @@ const ARTIFACT_TYPES = [
     showImagePrompt: true,
     showPublishAssistant: true,
     generationInstructions:
-      "作品类型：社媒内容。输出 artifact.type=\"social-post\"。artifact.payload.title 是可选标题，artifact.payload.body 是正文，artifact.payload.hashtags 是话题数组，artifact.payload.imagePrompt 是可选配图提示。",
+      "Artifact type: social-post content. Output artifact.type=\"social-post\". User-facing text must be Simplified Chinese by default. artifact.payload.title is an optional title, artifact.payload.body is the body text, artifact.payload.hashtags is a string array of topics, and artifact.payload.imagePrompt is an optional image prompt.",
     optionInstructions:
-      "澄清问题和三个答案应该围绕社交媒体表达决策，例如读者、角度、故事、观点、结构、压缩、标题、话题或发布前收口。"
+      "Clarifying questions and the three answers should focus on social-media expression decisions, such as reader, angle, story, point of view, structure, compression, title, topics, or pre-publish closure."
   },
   {
     id: "prd",
@@ -84,15 +84,16 @@ const ARTIFACT_TYPES = [
     showImagePrompt: false,
     showPublishAssistant: false,
     generationInstructions: [
-      "作品类型：PRD 文档。",
-      "输出 artifact.type=\"prd\"。",
-      "artifact.payload.title 必须是清楚的 PRD 文档标题。",
-      "artifact.payload.markdown 必须使用 Markdown 章节组织，优先包含：背景、目标、非目标、用户、需求、指标、风险、待确认。",
-      "需求章节要写成可执行的产品需求，可以包含列表、验收标准或优先级。",
-      "不要生成社交媒体话题或配图提示。"
+      "Artifact type: PRD document.",
+      "Output artifact.type=\"prd\".",
+      "User-facing text must be Simplified Chinese by default.",
+      "artifact.payload.title must be a clear PRD document title.",
+      "artifact.payload.markdown must be organized with Markdown sections; prefer sections for background, goals, non-goals, users, requirements, metrics, risks, and open questions.",
+      "The requirements section must contain executable product requirements and may include lists, acceptance criteria, or priorities.",
+      "Do not generate social-media topics or image prompts."
     ].join("\n"),
     optionInstructions:
-      "澄清问题和三个答案应该围绕 PRD 决策，例如补背景、收目标、明确非目标、拆需求、补指标、识别风险、列待确认问题或调整面向决策者的结构。"
+      "Clarifying questions and the three answers should focus on PRD decisions, such as adding background, tightening goals, clarifying non-goals, breaking down requirements, adding metrics, identifying risks, listing open questions, or adjusting the structure for decision makers."
   }
 ] satisfies ArtifactType[];
 

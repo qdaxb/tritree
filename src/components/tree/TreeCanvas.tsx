@@ -1666,7 +1666,7 @@ function BranchOptionComposer({
           aria-label={`补充想法 ${choiceLabel}`}
           disabled={isBusy}
           onChange={(event) => onNoteChange(event.target.value)}
-          placeholder="例如：写得更犀利一点、少用术语、保留热搜名"
+          placeholder="例如：写得更犀利一点、少用术语、保留关键词"
           rows={2}
           value={note}
         />

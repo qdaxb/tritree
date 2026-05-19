@@ -22,8 +22,8 @@ export function withFinalSubmitToolSummary(
       ...context,
       toolSummaries: [
         ...(context.toolSummaries ?? []),
-        `${SUBMIT_TREE_ARTIFACT_TOOL_NAME}：最终提交工具，用于提交 artifact 卡片或 artifact=null 的收束结果。完成必要的工具调用和结果检查后，如果本轮已经可以形成、更新或收束作品，必须调用此工具；调用后必须立即停止，不要继续输出 thinking、解释、总结、Markdown、JSON 文本或普通自然语言，也不要再调用其他工具。${artifactOutputShapeSummary()}`,
-        `${SUBMIT_TREE_OPTIONS_TOOL_NAME}：最终提交工具，用于提交需要用户选择的 3 选 1。完成必要的工具调用和结果检查后，如果本轮需要用户决定方向，必须调用此工具；调用后必须立即停止，不要继续输出 thinking、解释、总结、Markdown、JSON 文本或普通自然语言，也不要再调用其他工具。${optionsOutputShapeSummary()}`
+        `${SUBMIT_TREE_ARTIFACT_TOOL_NAME}: final submit tool for an artifact card or an artifact=null completion result. After necessary tool calls and result inspection, if this turn can form, update, or close the work, you must call this tool. After calling it, stop immediately; do not output more thinking, explanations, summaries, Markdown, JSON text, ordinary natural language, or additional tool calls.${artifactOutputShapeSummary()}`,
+        `${SUBMIT_TREE_OPTIONS_TOOL_NAME}: final submit tool for a three-choice result that needs user selection. After necessary tool calls and result inspection, if this turn needs the user to decide a direction, you must call this tool. After calling it, stop immediately; do not output more thinking, explanations, summaries, Markdown, JSON text, ordinary natural language, or additional tool calls.${optionsOutputShapeSummary()}`
       ]
     };
   }
@@ -39,7 +39,7 @@ export function withFinalSubmitToolSummary(
     ...context,
     toolSummaries: [
       ...(context.toolSummaries ?? []),
-      `${toolName}：最终提交工具，也是本轮任务唯一完成方式。完成必要的工具调用和结果检查后，必须调用此工具提交本轮结构化结果；调用 ${toolName} 后必须立即停止，不要继续输出 thinking、解释、总结、Markdown、JSON 文本或普通自然语言，也不要再调用其他工具。${finalSubmitRoutingGuidance(target)}${finalShape}`
+      `${toolName}: final submit tool, and the only completion path for this turn. After necessary tool calls and result inspection, you must call this tool to submit this turn's structured result. After calling ${toolName}, stop immediately; do not output more thinking, explanations, summaries, Markdown, JSON text, ordinary natural language, or additional tool calls.${finalSubmitRoutingGuidance(target)}${finalShape}`
     ]
   };
 }
@@ -49,7 +49,7 @@ export function withProcessDataDisplayToolSummary(context: SharedAgentContextInp
     ...context,
     toolSummaries: [
       ...(context.toolSummaries ?? []),
-      `${SHOW_PROCESS_DATA_TOOL_NAME}：向用户展示本轮工具调用后值得看见的过程数据。调用其他工具并检查返回值后，如果资料、搜索结果、参考清单或证据摘要会影响用户选择或理解，可在最终提交前调用；只展示本轮新调用工具后整理出的材料，不要重放历史 show_process_data，不要把最终 options 重复或改写成过程材料；如果本轮提交 options，过程材料必须支撑同一个 roundIntent 和三个 options，不能成为另一组 A/B/C 选项、候选题或选择清单；只提交通用展示结构 { title, sourceToolCallIds, items, note }，不要把原始工具输出或业务专用字段直接塞给 UI。`
+      `${SHOW_PROCESS_DATA_TOOL_NAME}: display user-facing process data worth showing after tool calls in this turn. After calling other tools and inspecting their results, call this before final submit when material, search results, reference lists, or evidence summaries affect user choice or understanding. Show only organized material from newly called tools in this turn. Do not replay historical show_process_data, duplicate final options, or rewrite final options as process material. If this turn submits options, process material must support the same roundIntent and three options, not become another A/B/C choice set, candidate topic list, or selection list. Submit only the generic display shape { title, sourceToolCallIds, items, note }; do not put raw tool output or business-specific fields directly into the UI.`
     ]
   };
 }
@@ -115,15 +115,15 @@ function finalSubmitRoutingGuidance(target: RuntimeSubmitTarget) {
   if (target !== "next-step") return "";
 
   return [
-    "\nnext-step action 选择：",
-    "action=options 用于需要用户继续选择的本轮结果，尤其是资料、搜索、参考、素材收集、分析、审稿或比较之后。",
-    "action=artifact 用于下一步已经明确、可以直接生成或更新作品。",
-    "action=complete 用于当前请求已经可以收束，适合用户明确要求结束、发布、交付、停止继续澄清，或当前目标已经没有可行动下一步。"
+    "\nnext-step action choices:",
+    "action=options is for this-turn results where the user should keep choosing, especially after research, search, reference gathering, material collection, analysis, review, or comparison.",
+    "action=artifact is for cases where the next step is already clear and the work can be generated or updated directly.",
+    "action=complete is for cases where the current request can be closed, such as when the user explicitly asks to finish, publish, deliver, stop clarifying, or when the current goal has no further actionable next step."
   ].join("\n");
 }
 
 export function finalSubmitToolName(target: RuntimeSubmitTarget) {
-  if (target === "turn") return `${SUBMIT_TREE_ARTIFACT_TOOL_NAME} 或 ${SUBMIT_TREE_OPTIONS_TOOL_NAME}`;
+  if (target === "turn") return `${SUBMIT_TREE_ARTIFACT_TOOL_NAME} or ${SUBMIT_TREE_OPTIONS_TOOL_NAME}`;
   return target === "artifact"
     ? SUBMIT_TREE_ARTIFACT_TOOL_NAME
     : target === "next-step"
@@ -136,43 +136,43 @@ export function finalSubmitToolRequiredError(target: RuntimeSubmitTarget) {
     {
       code: "custom",
       path: [],
-      message: `必须调用 ${finalSubmitToolName(target)} 工具提交最终结果，不能把最终 JSON、Markdown 或正文写成普通文本。`
+      message: `You must call the ${finalSubmitToolName(target)} tool to submit the final result; do not write the final JSON, Markdown, or body text as ordinary text.`
     }
   ]);
 }
 
 export function artifactOutputShapeSummary() {
   return [
-    "必须返回对象：{ roundIntent, artifact }。",
-    "artifact 可以是 null；如果产生产物，必须包含 { type, payload }，payload 结构由对应产物插件决定。"
+    "Must return an object: { roundIntent, artifact }.",
+    "artifact may be null. If an artifact is produced, it must include { type, payload }; the payload structure is defined by the corresponding artifact plugin."
   ].join("\n");
 }
 
 export function optionsOutputShapeSummary() {
   return [
-    "必须返回对象：{ roundIntent, options }。",
-    "options 必须正好 3 项，id 必须分别是 a、b、c 且只出现一次。",
-    "每个 option 必须包含 { id, label, description, impact, kind }；kind 只能是 explore、deepen、reframe 或 finish。"
+    "Must return an object: { roundIntent, options }.",
+    "options must contain exactly 3 items; ids must be a, b, and c, each appearing exactly once.",
+    "Each option must include { id, label, description, impact, kind }; kind must be only explore, deepen, reframe, or finish."
   ].join("\n");
 }
 
 export function nextStepOutputShapeSummary() {
   return [
-    "必须返回对象：{ action, roundIntent }。",
-    "action 只能是 artifact、options 或 complete。",
-    "资料、搜索、参考、素材收集、分析、审稿或比较之后，通常用 action=options 让用户决定如何继续，或用 action=artifact 直接生成已明确的作品更新。",
-    "action=complete 表示当前请求已经可以收束，适合用户明确要求结束、发布、交付、停止继续澄清，或当前目标已经没有可行动下一步。",
-    "当 action=artifact 时只返回 action 和 roundIntent，后续 artifact 阶段负责生成作品内容。",
-    "当 action=complete 时不要返回 options；如果包含 artifact，只能是 null。",
-    "当 action=options 时必须返回 options 正好 3 项；每项只需要包含 { label, description, impact }，系统会自动补 id 和 kind。"
+    "Must return an object: { action, roundIntent }.",
+    "action must be only artifact, options, or complete.",
+    "After research, search, reference gathering, material collection, analysis, review, or comparison, usually use action=options so the user can decide how to continue, or action=artifact to directly generate a clearly defined work update.",
+    "action=complete means the current request can be closed, such as when the user explicitly asks to finish, publish, deliver, stop clarifying, or when the current goal has no further actionable next step.",
+    "When action=artifact, return only action and roundIntent; the later artifact phase is responsible for generating work content.",
+    "When action=complete, do not return options; if artifact is included, it can only be null.",
+    "When action=options, return exactly 3 options; each item only needs { label, description, impact }, and the system will add id and kind automatically."
   ].join("\n");
 }
 
 export function turnOutputShapeSummary() {
   return [
-    "必须调用一个最终提交工具：submit_tree_artifact 或 submit_tree_options。",
-    "submit_tree_artifact 参数必须是 { roundIntent, artifact }；artifact 可以是 null；如果产生产物，artifact 必须包含 { type, payload }。",
-    "submit_tree_options 参数必须是 { roundIntent, options }；options 必须正好 3 项，id 必须分别是 a、b、c 且只出现一次。"
+    "Must call one final submit tool: submit_tree_artifact or submit_tree_options.",
+    "submit_tree_artifact arguments must be { roundIntent, artifact }; artifact may be null. If an artifact is produced, artifact must include { type, payload }.",
+    "submit_tree_options arguments must be { roundIntent, options }; options must contain exactly 3 items, and ids must be a, b, and c, each appearing exactly once."
   ].join("\n");
 }
 

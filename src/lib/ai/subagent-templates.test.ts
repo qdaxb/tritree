@@ -26,7 +26,17 @@ describe("subagent templates", () => {
 
     expect(summary).toContain("material-search");
     expect(summary).toContain("搜索资料");
+    expect(summary).toContain("Expected output:");
     expect(summary).not.toContain("platform-rewrite");
     expect(summary).not.toContain("undefined");
+  });
+
+  it("keeps template instruction text in English while preserving the Chinese display title", () => {
+    const template = DEFAULT_SUBAGENT_TEMPLATES[0];
+
+    expect(template.title).toBe("搜索资料");
+    expect([template.description, template.expectedOutput, template.prompt].join("\n")).not.toMatch(/\p{Script=Han}/u);
+    expect(template.prompt).toContain("You are the material-search subagent");
+    expect(template.prompt).toContain("Leave decisions about whether to continue");
   });
 });

@@ -94,10 +94,10 @@ export function summarizeDirectorMessageContent(content: unknown): string {
   if (content === null || content === undefined) return "";
 
   if (Array.isArray(content)) {
-    return content.map(summarizeStructuredMessagePart).filter(Boolean).join("\n") || "历史结构化消息已省略。";
+    return content.map(summarizeStructuredMessagePart).filter(Boolean).join("\n") || "Historical structured message was omitted.";
   }
 
-  return summarizeStructuredMessagePart(content) || "历史结构化消息已省略。";
+  return summarizeStructuredMessagePart(content) || "Historical structured message was omitted.";
 }
 
 function summarizeMessage<TMessage extends DirectorModelMessage>(message: TMessage): DirectorModelMessage {
@@ -138,17 +138,17 @@ function summarizeStructuredMessagePart(value: unknown): string {
   const toolName = stringField(value, "toolName") ?? stringField(value, "name") ?? stringField(value, "tool");
 
   if (type?.includes("tool-result") || "output" in value || "result" in value) {
-    return `工具结果：${toolName || "未命名工具"} 已返回，原始工具输出已省略。`;
+    return `Tool result: ${toolName || "unnamed tool"} returned; raw tool output was omitted.`;
   }
 
   if (type?.includes("tool-call") || "toolCallId" in value || "input" in value) {
-    return `工具调用：${toolName || "未命名工具"}。`;
+    return `Tool call: ${toolName || "unnamed tool"}.`;
   }
 
   const text = stringField(value, "text") ?? stringField(value, "content");
   if (text) return text;
 
-  return "历史结构化消息已省略。";
+  return "Historical structured message was omitted.";
 }
 
 function truncateMessage(message: DirectorModelMessage, maxTokens: number): DirectorModelMessage {
@@ -158,7 +158,7 @@ function truncateMessage(message: DirectorModelMessage, maxTokens: number): Dire
 
   return {
     ...message,
-    content: `${content.slice(0, maxChars).trimEnd()}\n[内容已按当前模型上下文窗口截断。]`
+    content: `${content.slice(0, maxChars).trimEnd()}\n[Content was truncated to fit the current model context window.]`
   };
 }
 
@@ -187,7 +187,7 @@ function messageContentForTokenEstimate(content: unknown) {
 }
 
 function contextOmissionNotice(omittedCount: number) {
-  return `系统提示：为适配当前模型上下文窗口，已省略 ${omittedCount} 条较早历史消息和原始工具输出；保留了初始内容、最近上下文和本轮请求。`;
+  return `System note: To fit the current model context window, ${omittedCount} older history message(s) and raw tool output were omitted; the initial content, recent context, and current request were preserved.`;
 }
 
 function positiveIntegerEnv(env: Record<string, string | undefined>, ...names: string[]) {

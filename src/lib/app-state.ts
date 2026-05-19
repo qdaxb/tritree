@@ -49,11 +49,11 @@ export function summarizeSessionForDirector(
 
 function formatOptionsDirectionRangeHint(optionMode: OptionGenerationMode) {
   if (optionMode === "divergent") {
-    return "方向范围：发散。选项要更有脑洞，可以给更大胆的切入、结构、表达形式或读者场景。";
+    return "Direction range: divergent. Options should be more imaginative and may offer bolder angles, structures, expression forms, or reader scenarios.";
   }
 
   if (optionMode === "focused") {
-    return "方向范围：专注。沿当前产物已经成立的思路继续推进，优先补清楚、写顺、写实。";
+    return "Direction range: focused. Continue along the already-working logic of the current artifact; prioritize making it clearer, smoother, and more concrete.";
   }
 
   return "";
@@ -61,11 +61,11 @@ function formatOptionsDirectionRangeHint(optionMode: OptionGenerationMode) {
 
 function formatArtifactDirectionRangeHint(optionMode: OptionGenerationMode) {
   if (optionMode === "divergent") {
-    return "方向范围：发散。可以更大胆地重组角度、结构或表达方式，让内容有更强的新鲜感。";
+    return "Direction range: divergent. You may reorganize angle, structure, or expression more boldly so the content feels fresher.";
   }
 
   if (optionMode === "focused") {
-    return "方向范围：专注。沿当前产物已经成立的思路继续推进，优先补清楚、写顺、写实。";
+    return "Direction range: focused. Continue along the already-working logic of the current artifact; prioritize making it clearer, smoother, and more concrete.";
   }
 
   return "";
@@ -80,7 +80,7 @@ function formatWritingIntentLabel(
   if (isSelectionReferenceOption(selectedOption)) {
     return [
       selectedOption.description,
-      selectedOptionNote ? `补充要求：${selectedOptionNote}` : ""
+      selectedOptionNote ? `Additional requirement: ${selectedOptionNote}` : ""
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -186,11 +186,11 @@ function activePathFor(nodes: SessionState["selectedPath"], currentNode: Session
 
 function formatPathForDirector(state: SessionState) {
   if (state.selectedPath.length === 0) {
-    return "暂无修改历程。";
+    return "No revision history yet.";
   }
 
   return state.selectedPath
-    .map((node) => `第 ${node.roundIndex} 版：${node.roundIntent}`)
+    .map((node) => `Version ${node.roundIndex}: ${node.roundIntent}`)
     .join("\n");
 }
 
@@ -200,8 +200,7 @@ function buildArtifactConversationMessages(state: SessionState, finalUserRequest
       role: "user",
       content: [
         artifactContextForState(state),
-        `初始内容：\n${state.rootMemory.summary}`,
-        `已学习偏好：\n${state.rootMemory.learnedSummary || "暂无已学习偏好。"}`
+        `Initial content:\n${state.rootMemory.summary}`
       ]
         .filter(Boolean)
         .join("\n\n")
@@ -239,8 +238,7 @@ function buildEditorMessages(state: SessionState, currentArtifact: Artifact | nu
       role: "user",
       content: [
         artifactContextForState(state),
-        `初始内容：\n${state.rootMemory.summary}`,
-        `已学习偏好：\n${state.rootMemory.learnedSummary || "暂无已学习偏好。"}`
+        `Initial content:\n${state.rootMemory.summary}`
       ]
         .filter(Boolean)
         .join("\n\n")
@@ -307,7 +305,7 @@ function formatArtifactHistoryRoundForWriter(
   const artifact = artifactForNode(state, node);
   if (artifact && includeFullArtifact) {
     return [
-      `第 ${node.roundIndex} 版已形成产物`,
+      `Version ${node.roundIndex} produced an artifact`,
       formatArtifactForDirector(artifact)
     ]
       .filter(Boolean)
@@ -315,15 +313,15 @@ function formatArtifactHistoryRoundForWriter(
   }
 
   return [
-    `第 ${node.roundIndex} 版已形成产物摘要`,
-    `形成产物：${artifact ? formatArtifactVersionSummary(artifact) : "本轮未形成产物，仅保留本轮意图。"}`
+    `Version ${node.roundIndex} artifact summary`,
+    `Artifact formed: ${artifact ? formatArtifactVersionSummary(artifact) : "No artifact was formed in this turn; only the turn intent was preserved."}`
   ]
     .filter(Boolean)
     .join("\n");
 }
 
 function formatCurrentArtifactForWriter(artifact: Artifact) {
-  return ["当前已形成产物", formatArtifactForDirector(artifact)].join("\n");
+  return ["Current formed artifact", formatArtifactForDirector(artifact)].join("\n");
 }
 
 function formatArtifactUserRequest({
@@ -338,7 +336,7 @@ function formatArtifactUserRequest({
   if (selectedOption && isSelectionReferenceOption(selectedOption)) {
     return [
       selectedOption.description,
-      selectedOptionNote ? `补充要求：${selectedOptionNote}` : ""
+      selectedOptionNote ? `Additional requirement: ${selectedOptionNote}` : ""
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -352,7 +350,7 @@ function formatArtifactUserRequest({
           selectedOptionNote
         })
       ]
-    : ["基于初始内容和上一版产物生成新的内容版本。"];
+    : ["Generate a new content version from the initial content and the previous artifact."];
 
   return [
     ...selectedLines
@@ -371,15 +369,15 @@ function formatSelectedDirectionRoutingRequest({
   selectedOptionNote?: string;
 }) {
   return [
-    "用户刚刚选择了以下方向：",
+    "The user just selected this direction:",
     formatSuggestionForDirector(selectedOption),
-    selectedOptionNote ? `用户补充要求：${selectedOptionNote}` : "",
+    selectedOptionNote ? `User's additional requirement: ${selectedOptionNote}` : "",
     modeHint,
-    "这表示用户确认了当前推进方向，但不自动等于要求立即提交产物。",
-    "请基于上下文、当前可见产物、用户补充要求和已启用 Skills，决定下一轮最合适的推进方式：",
-    "- 如果仍需要用户做判断，请提交三个可选方向。",
-    "- 如果用户选择和上下文已经足够明确，且继续询问只会拖慢推进，可以提交产物。",
-    "- 不要把“用户选择了一个方向”默认理解为“马上执行用户指令”。"
+    "This means the user confirmed the current direction, but it does not automatically mean they want an artifact submitted immediately.",
+    "Based on the context, current visible artifact, user supplement, and enabled Skills, decide the best next move for the next round:",
+    "- If the user still needs to make a judgment, submit three optional directions.",
+    "- If the user's selection and context are clear enough and asking another question would only slow progress, submit an artifact.",
+    "- Do not default to interpreting \"the user selected a direction\" as \"execute the user's instruction immediately.\""
   ]
     .filter(Boolean)
     .join("\n");
@@ -403,10 +401,10 @@ function shouldRepeatArtifactContextForFinalRequest(state: SessionState) {
 
 function formatFollowUpOptionsRequest(currentArtifact: Artifact | null, reviewInstruction: string) {
   return [
-    reviewInstruction ? `本轮要求：\n${reviewInstruction}` : "",
+    reviewInstruction ? `This turn's request:\n${reviewInstruction}` : "",
     currentArtifact
-      ? "请基于以上 AI 结果继续给出下一步三个可选推进方向。"
-      : "请基于初始内容和已有上下文给出下一步三个可选推进方向。"
+      ? "Based on the AI result above, continue by giving three optional next directions."
+      : "Based on the initial content and existing context, give three optional next directions."
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -414,8 +412,8 @@ function formatFollowUpOptionsRequest(currentArtifact: Artifact | null, reviewIn
 
 function formatEditorBranchChoice(node: SessionState["selectedPath"][number], writingIntent: BranchOption | null) {
   return writingIntent
-    ? `用户选择：${formatSuggestionForDirector(writingIntent)}`
-    : `用户继续推进：${node.roundIntent}`;
+    ? `User selection: ${formatSuggestionForDirector(writingIntent)}`
+    : `User continued: ${node.roundIntent}`;
 }
 
 function formatEditorCompletedArtifact(
@@ -425,14 +423,14 @@ function formatEditorCompletedArtifact(
 ) {
   if (includeFullArtifact) {
     return [
-      `第 ${node.roundIndex} 轮已形成产物`,
+      `Round ${node.roundIndex} produced an artifact`,
       formatArtifactForDirector(artifact)
     ].join("\n");
   }
 
   return [
-    `第 ${node.roundIndex} 轮已形成产物`,
-    `形成产物：${formatArtifactVersionSummary(artifact)}`
+    `Round ${node.roundIndex} produced an artifact`,
+    `Artifact formed: ${formatArtifactVersionSummary(artifact)}`
   ].join("\n");
 }
 

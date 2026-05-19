@@ -65,13 +65,13 @@ export function formatProjectedAgentContext(snapshot: ProjectedAgentContext) {
       : "",
     snapshot.currentArtifact
       ? ["## Current Artifact", `type: ${snapshot.currentArtifact.type}`, snapshot.currentArtifact.value].join("\n")
-      : "## Current Artifact\n暂无。",
+      : "## Current Artifact\nNone yet.",
     snapshot.enabledSkills.length > 0
       ? ["## Enabled Skills", snapshot.enabledSkills.map(formatSkill).join("\n\n")].join("\n")
-      : "## Enabled Skills\n暂无。",
+      : "## Enabled Skills\nNone.",
     snapshot.recentUserFeedback.length > 0
       ? ["## Recent User Feedback", snapshot.recentUserFeedback.join("\n\n")].join("\n")
-      : "## Recent User Feedback\n暂无。"
+      : "## Recent User Feedback\nNone."
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -88,10 +88,14 @@ function recentUserMessages(messages: DirectorMessage[]) {
 function formatSkill(skill: Skill) {
   return [
     `Skill: ${skill.title}`,
-    `说明：${skill.description || "无补充说明。"}`,
-    `加载状态：${skill.defaultLoaded === false ? "按需加载" : "默认加载"}`,
-    skill.parentSkillId ? `父级 Skill：${skill.parentSkillId}` : "",
-    skill.defaultLoaded === false ? "要求：未展开，按需加载后再使用具体规则。" : skill.prompt.trim() ? `要求：${skill.prompt.trim()}` : ""
+    `Description: ${skill.description || "No extra description."}`,
+    `Load state: ${skill.defaultLoaded === false ? "load on demand" : "loaded by default"}`,
+    skill.parentSkillId ? `Parent Skill: ${skill.parentSkillId}` : "",
+    skill.defaultLoaded === false
+      ? "Requirements: not expanded. Load it on demand before using concrete rules."
+      : skill.prompt.trim()
+        ? `Requirements: ${skill.prompt.trim()}`
+        : ""
   ]
     .filter(Boolean)
     .join("\n");

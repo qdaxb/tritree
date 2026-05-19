@@ -493,7 +493,7 @@ describe("TreeCanvas", () => {
   it("selects an option before showing the shared writing controls", () => {
     const onChoose = vi.fn();
     const longDescription =
-      "把当前内容重构为面向计划去青岛的读者的实用攻略，保留行程骨架，但增加交通建议、预算参考、排队避坑技巧、餐厅具体位置等实用信息。";
+      "把当前内容重构为面向第一次接触该主题的读者的实用内容，保留原有骨架，但增加背景解释、判断标准、行动建议和风险提醒。";
     render(
       <BranchOptionTray
         isBusy={false}

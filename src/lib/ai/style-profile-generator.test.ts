@@ -50,17 +50,17 @@ describe("generateStyleFromSamples", () => {
       expect.objectContaining({
         id: "tritree-style-profile-agent",
         name: "Tritree Style Profile Agent",
-        instructions: expect.stringContaining("归纳用户写作风格")
+        instructions: expect.stringContaining("inferring the user's writing style")
       })
     );
     expect(mocks.agentConstructor).toHaveBeenCalledWith(
       expect.objectContaining({
-        instructions: expect.stringContaining("人设")
+        instructions: expect.stringContaining("persona")
       })
     );
     const agentInstance = mocks.agentConstructor.mock.results[0].value as { generate: ReturnType<typeof vi.fn> };
     expect(agentInstance.generate).toHaveBeenCalledWith(
-      [expect.objectContaining({ role: "user", content: expect.stringContaining("样本 1") })],
+      [expect.objectContaining({ role: "user", content: expect.stringContaining("Sample 1") })],
       expect.objectContaining({
         structuredOutput: expect.objectContaining({ jsonPromptInjection: true })
       })
@@ -95,7 +95,7 @@ describe("generateStyleFromSamples", () => {
     expect(mocks.agentConstructor).not.toHaveBeenCalled();
     expect(mocks.createAnthropic).not.toHaveBeenCalled();
     expect(styleAgent.generate).toHaveBeenCalledWith(
-      [expect.objectContaining({ role: "user", content: expect.stringContaining("样本 1") })],
+      [expect.objectContaining({ role: "user", content: expect.stringContaining("Sample 1") })],
       expect.objectContaining({
         structuredOutput: expect.objectContaining({ jsonPromptInjection: true })
       })

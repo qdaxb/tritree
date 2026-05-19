@@ -247,8 +247,8 @@ function formatStoredSkillPrompt({
     ...(subSkills.length
       ? [
           "",
-          "# 可渐进加载的 Skill 文档",
-          ...subSkills.map((skill) => `- ${skill.name}（${skill.sourcePath}）：${skill.description}`)
+          "# Loadable Skill Documents",
+          ...subSkills.map((skill) => `- ${skill.name} (${skill.sourcePath}): ${skill.description}`)
         ]
       : [])
   ].join("\n");
@@ -258,13 +258,22 @@ function isStoredRuntimeMetadataLine(line: string) {
   const trimmed = line.trim();
   return (
     trimmed.startsWith("此 Skill 已安装在：") ||
+    trimmed.startsWith("This Skill is installed at:") ||
     trimmed.startsWith("来源：") ||
+    trimmed.startsWith("Source:") ||
     trimmed === "Tritree 是当前 agent runtime。生成选项或草稿时，请按以下 SKILL.md 指令判断是否需要调用可用工具。" ||
     trimmed === "Tritree 是当前 agent runtime。请按以下 SKILL.md 指令判断是否需要调用可用工具。" ||
+    trimmed === "Tritree is the current agent runtime. Use the SKILL.md instructions below to decide whether available tools are needed." ||
     trimmed === "子 Skill 文档不会预先展开；需要更具体的平台流程、命令说明或风格规则时，先调用 load_skill_document 渐进加载对应 SKILL.md。" ||
+    trimmed ===
+      "Child Skill documents are not expanded in advance. When you need more specific platform workflows, command instructions, or style rules, call load_skill_document to progressively load the relevant SKILL.md." ||
     trimmed === "如果需要外部平台参考资料、账号状态或登录流程，可以调用 run_skill_command；命令会由 Tritree runtime 按当前 Skill execution mode 隔离运行。" ||
+    trimmed ===
+      "When external platform references, account status, or login flow are needed, you may call run_skill_command; Tritree runs commands under the current Skill execution mode." ||
     trimmed === "生成草稿或选项时，只调用与当前任务直接相关的命令；除非用户明确要求发布或互动，不要主动执行发布、评论、点赞、收藏等平台动作。" ||
-    trimmed === "只调用与当前任务直接相关的命令；除非用户明确要求执行外部动作，否则只做读取、检查或整理类操作。"
+    trimmed === "只调用与当前任务直接相关的命令；除非用户明确要求执行外部动作，否则只做读取、检查或整理类操作。" ||
+    trimmed ===
+      "Call only commands directly relevant to the current task. Unless the user explicitly asks for an external action, limit tool use to reading, checking, or organizing."
   );
 }
 
@@ -340,7 +349,7 @@ function stripQuotes(value: string) {
 
 function inferSkillCategory(text: string): SkillCategory {
   const normalized = text.toLowerCase();
-  if (/小红书|xhs|发布|发帖|登录|搜索|评论|点赞|收藏|平台|社交/.test(normalized)) return "平台";
+  if (/发布|发帖|登录|搜索|评论|点赞|收藏|平台|社交/.test(normalized)) return "平台";
   if (/风格|语气|口语|短句|标题|style|tone/.test(normalized)) return "风格";
   if (/检查|审查|校对|风险|review|audit|check/.test(normalized)) return "检查";
   if (/约束|必须|禁止|规则|constraint|rule/.test(normalized)) return "约束";

@@ -121,20 +121,21 @@ export async function fetchExternalStyleProfile({
 }
 
 export function buildStyleProfileUserPrompt(samples: string[]) {
-  const sampleText = samples.map((sample, index) => `样本 ${index + 1}：\n${sample}`).join("\n\n");
+  const sampleText = samples.map((sample, index) => `Sample ${index + 1}:\n${sample}`).join("\n\n");
 
   return `
-请从以下代表作中归纳作者可复用的写作风格，并生成一个 Tritree Skill 草稿。
+Infer the author's reusable writing style from the following representative works, then generate a Tritree Skill draft.
 
-要求：
-- 只归纳表达习惯，不把样本主题当成作者长期兴趣。
-- 关注作者人设、表达站位、读者关系、句子节奏、细节密度、语气温度、结构习惯和需要避免的表达。
-- prompt 字段必须包含可执行的人设指令：作者像什么样的人、以什么身份/经验说话、和读者保持什么关系。
-- 不要复制样本中的长句或隐私信息。
-- 如果样本明显不足以归纳风格，返回 prompt 字段说明需要更多样本。
-- 返回 title、description、prompt 三个字段。
+Requirements:
+- All visible fields must be written in Simplified Chinese.
+- Infer expression habits only; do not treat sample topics as the author's long-term interests.
+- Focus on author persona, expressive stance, reader relationship, sentence rhythm, detail density, tone temperature, structural habits, and wording to avoid.
+- The prompt field must include executable persona instructions: what kind of person the author sounds like, what identity or experience they speak from, and what relationship they maintain with readers.
+- Do not copy long sentences or private information from the samples.
+- If the samples are clearly insufficient to infer style, use the prompt field to explain that more samples are needed.
+- Return exactly three fields: title, description, and prompt.
 
-代表作：
+Representative works:
 ${sampleText}
 `.trim();
 }

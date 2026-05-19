@@ -18,9 +18,10 @@ export const socialPostPlugin: ArtifactPluginServer<SocialPostPayload> = {
   },
   promptInstructions() {
     return [
-      "作品类型：社媒内容。",
-      "输出 JSON payload，字段为 title、body、hashtags、imagePrompt。",
-      "hashtags 必须是字符串数组，imagePrompt 没有时返回空字符串。"
+      "Artifact type: social-post content.",
+      "Output a JSON payload with title, body, hashtags, and imagePrompt fields.",
+      "User-facing text must be Simplified Chinese by default.",
+      "hashtags must be a string array, and imagePrompt must be an empty string when there is no image prompt."
     ].join("\n");
   },
   normalizeAiOutput(output) {
@@ -48,10 +49,10 @@ export const socialPostPlugin: ArtifactPluginServer<SocialPostPayload> = {
   },
   summarizeForDirector(payload) {
     return [
-      `标题：${payload.title || "未命名"}`,
-      `正文：${payload.body}`,
-      `话题：${payload.hashtags.join("、") || "暂无"}`,
-      `配图提示：${payload.imagePrompt || "暂无"}`
+      `Title: ${payload.title || "Untitled"}`,
+      `Body: ${payload.body}`,
+      `Hashtags: ${payload.hashtags.join(", ") || "None"}`,
+      `Image prompt: ${payload.imagePrompt || "None"}`
     ].join("\n");
   },
   summarizeForTree(payload) {

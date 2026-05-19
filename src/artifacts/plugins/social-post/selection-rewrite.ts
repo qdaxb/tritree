@@ -71,42 +71,44 @@ export function buildSocialPostSelectionRewritePrompt(input: SocialPostSelection
   const enabledSkills = skillsForTarget(input.enabledSkills as Skill[], "writer");
 
   return `
-# 本轮任务
-根据当前 social-post 产物上下文和用户修改要求，改写选中的局部片段。
-只返回替换选区的新片段，不要返回完整产物。
+# Task
+Rewrite only the selected local passage according to the current social-post artifact context and the user's rewrite request.
+Only return the replacement for the selected passage. Do not return the full artifact.
+User-facing text must be written in Simplified Chinese unless the selected text or user request requires otherwise.
 
-# 创作状态
-创作 seed：
+# Creation State
+Creation seed:
 ${input.rootSummary}
 
-已学习偏好：
-${input.learnedSummary || "暂无已学习偏好。"}
+Current social-post artifact:
+Title:
+${input.currentPayload.title}
+Body:
+${input.currentPayload.body}
+Hashtags:
+${input.currentPayload.hashtags.join(" ")}
+Image prompt:
+${input.currentPayload.imagePrompt}
 
-当前 social-post artifact：
-标题：${input.currentPayload.title}
-正文：${input.currentPayload.body}
-话题：${input.currentPayload.hashtags.join(" ")}
-配图提示：${input.currentPayload.imagePrompt}
-
-# 已选技能
+# Enabled Skills
 ${formatEnabledSkills(enabledSkills)}
 
-# 选区
-字段：${input.field}
-选中的原文：
+# Selection
+Field: ${input.field}
+Selected original text:
 ${input.selectedText}
 
-# 修改要求
-修改要求：
+# Rewrite Request
+Rewrite request:
 ${input.instruction}
 
-# 返回格式
+# Return Format
 Return only one valid JSON object. Do not wrap it in Markdown.
 The JSON object must match this shape:
 {
-  "replacementText": "只返回替换选区的新片段"
+  "replacementText": "Only return the replacement for the selected passage"
 }
-replacementText 不能为空。
+replacementText must be non-empty.
 `.trim();
 }
 

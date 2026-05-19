@@ -165,7 +165,7 @@ describe("POST /api/sessions/:sessionId/options", () => {
             {
               type: "tool-call",
               toolCallId: "call-1",
-              toolName: "statusServer_getUserTimeline",
+              toolName: "records_listItems",
               input: { screenName: "来去之间" }
             }
           ]
@@ -176,8 +176,8 @@ describe("POST /api/sessions/:sessionId/options", () => {
             {
               type: "tool-result",
               toolCallId: "call-1",
-              toolName: "statusServer_getUserTimeline",
-              output: { type: "json", value: { statuses: [{ text: "转发微博内容" }] } }
+              toolName: "records_listItems",
+              output: { type: "json", value: { statuses: [{ text: "转发内容样例" }] } }
             }
           ]
         }
@@ -261,8 +261,8 @@ describe("POST /api/sessions/:sessionId/options", () => {
     await response.text();
 
     expect(streamDirectorOptionsMock).toHaveBeenCalled();
-    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("方向范围：发散");
-    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("选项要更有脑洞");
+    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("Direction range: divergent");
+    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("more imaginative");
   });
 
   it("regenerates an existing option set when forced with a direction range", async () => {
@@ -296,7 +296,7 @@ describe("POST /api/sessions/:sessionId/options", () => {
 
     expect(text).toContain('"type":"done"');
     expect(streamDirectorOptionsMock).toHaveBeenCalled();
-    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("方向范围：专注");
+    expect(streamDirectorOptionsMock.mock.calls[0][0].selectedOptionLabel).toContain("Direction range: focused");
     expect(updateNodeOptions).toHaveBeenCalledWith({ userId: "user-1", sessionId: "session-1", nodeId: "node-1", output });
   });
 });

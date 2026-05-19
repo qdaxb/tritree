@@ -12,16 +12,17 @@ export const prdPlugin: ArtifactPluginServer<PrdPayload> = {
   },
   promptInstructions() {
     return [
-      "作品类型：PRD 文档。",
-      "输出 JSON payload，字段为 title 和 markdown。",
-      "markdown 必须用 Markdown 章节组织，优先包含背景、目标、非目标、用户、需求、指标、风险、待确认。"
+      "Artifact type: PRD document.",
+      "Output a JSON payload with title and markdown fields.",
+      "User-facing text must be Simplified Chinese by default.",
+      "markdown must use Markdown sections and should prioritize background, goals, non-goals, users, requirements, metrics, risks, and open questions."
     ].join("\n");
   },
   normalizeAiOutput(output) {
     return PrdPayloadSchema.parse(output);
   },
   summarizeForDirector(payload) {
-    return [`文档标题：${payload.title || "未命名"}`, `PRD Markdown：${payload.markdown}`].join("\n");
+    return [`Document title: ${payload.title || "Untitled"}`, `PRD Markdown: ${payload.markdown}`].join("\n");
   },
   summarizeForTree(payload) {
     return payload.title.trim() || "PRD 文档";

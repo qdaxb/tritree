@@ -21,7 +21,7 @@ describe("socialPostPlugin", () => {
     });
 
     expect(payload.body).toBe("正文");
-    expect(socialPostPlugin.summarizeForDirector(payload)).toContain("正文：正文");
+    expect(socialPostPlugin.summarizeForDirector(payload)).toContain("Body: 正文");
   });
 
   it("rewrites a selected body passage into a new social post payload", async () => {

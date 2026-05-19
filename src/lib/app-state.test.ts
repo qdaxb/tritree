@@ -112,12 +112,12 @@ describe("summarizeSessionForDirector", () => {
     const workMessages = (workSummary as any).messages as Array<{ role: string; content: string }>;
     const optionMessages = (optionSummary as any).messages as Array<{ role: string; content: string }>;
 
-    expect(workSummary.artifactContext).toContain("作品类型：PRD 文档");
+    expect(workSummary.artifactContext).toContain("Artifact type: PRD document");
     expect(workSummary.artifactContext).toContain("artifact.type=\"prd\"");
     expect(workSummary.artifactContext).toContain("artifact.payload.markdown");
-    expect(optionSummary.artifactContext).toContain("澄清问题和三个答案应该围绕 PRD 决策");
-    expect(workMessages.at(-1)?.content).toContain("作品类型：PRD 文档");
-    expect(JSON.stringify(optionMessages)).toContain("作品类型：PRD 文档");
+    expect(optionSummary.artifactContext).toContain("Clarifying questions and the three answers should focus on PRD decisions");
+    expect(workMessages.at(-1)?.content).toContain("Artifact type: PRD document");
+    expect(JSON.stringify(optionMessages)).toContain("Artifact type: PRD document");
   });
 
   it("keeps seed-only sessions from inventing a current artifact", () => {
@@ -151,7 +151,9 @@ describe("summarizeSessionForDirector", () => {
     expect(artifactSummary.currentArtifact).toBe("");
     expect(optionSummary.currentArtifact).toBe("");
     expect(artifactMessages[0].content).toContain("Seed：我想写 AI 产品经理的真实困境");
-    expect(optionMessages.at(-1)?.content ?? optionMessages[0].content).toContain("请基于初始内容和已有上下文");
+    expect(optionMessages.at(-1)?.content ?? optionMessages[0].content).toContain(
+      "Based on the initial content and existing context"
+    );
     expect(optionMessages.at(-1)?.content ?? optionMessages[0].content).not.toContain("当前内容：\n标题：");
   });
 
@@ -204,9 +206,9 @@ describe("summarizeSessionForDirector", () => {
     );
 
     expect(summary.selectedOptionLabel).toContain("职场黑话");
-    expect(summary.selectedOptionLabel).toContain("用户补充要求：请保留一点讽刺感。");
-    expect(summary.selectedOptionLabel).toContain("方向范围：专注");
-    expect(summary.selectedOptionLabel).toContain("沿当前产物已经成立的思路继续推进");
+    expect(summary.selectedOptionLabel).toContain("User's additional requirement: 请保留一点讽刺感。");
+    expect(summary.selectedOptionLabel).toContain("Direction range: focused");
+    expect(summary.selectedOptionLabel).toContain("Continue along the already-working logic");
     expect(summary.selectedOptionLabel).not.toContain("硬约束");
     expect(summary.selectedOptionLabel).not.toContain("不主动改换主题、读者、前提或基本结构");
     expect(summary.selectedOptionLabel).not.toContain("三个答案");
@@ -235,10 +237,10 @@ describe("summarizeSessionForDirector", () => {
     const summary = summarizeCurrentArtifactOptionsForDirector(state, "divergent");
 
     expect(summary.selectedOptionLabel).not.toContain("避免重复已有方向");
-    expect(summary.selectedOptionLabel).toContain("方向范围：发散");
-    expect(summary.selectedOptionLabel).toContain("选项要更有脑洞");
+    expect(summary.selectedOptionLabel).toContain("Direction range: divergent");
+    expect(summary.selectedOptionLabel).toContain("more imaginative");
     expect(summary.selectedOptionLabel).not.toContain("硬约束");
-    expect(summary.selectedOptionLabel).toContain("更大胆的切入、结构、表达形式或读者场景");
+    expect(summary.selectedOptionLabel).toContain("bolder angles, structures, expression forms, or reader scenarios");
     expect(summary.selectedOptionLabel).not.toContain("不要只是常规编辑动作");
     expect(summary.selectedOptionLabel).not.toContain("作品改动幅度由所选方向决定");
     expect(summary.selectedOptionLabel).not.toContain("明显不同的创作维度");
@@ -287,7 +289,7 @@ describe("summarizeSessionForDirector", () => {
                 type: "tool-call",
                 toolCallId: "tool-1",
                 toolName: "run_skill_command",
-                input: { query: "青岛攻略" }
+                input: { query: "sample topic" }
               }
             ]
           },
@@ -298,7 +300,7 @@ describe("summarizeSessionForDirector", () => {
                 type: "tool-result",
                 toolCallId: "tool-1",
                 toolName: "run_skill_command",
-                output: { type: "json", value: { feeds: [{ displayTitle: "青岛三天两晚攻略" }] } }
+                output: { type: "json", value: { feeds: [{ displayTitle: "sample reference" }] } }
               }
             ]
           }
@@ -312,10 +314,10 @@ describe("summarizeSessionForDirector", () => {
     const optionMessages = (optionSummary as any).messages as Array<{ role: string; content: unknown }>;
 
     expect(workMessages).toContainEqual(expect.objectContaining({ role: "tool", content: expect.any(Array) }));
-    expect(JSON.stringify(workMessages)).toContain("青岛三天两晚攻略");
-    expect(JSON.stringify(workMessages)).toContain("第 1 版已形成产物");
+    expect(JSON.stringify(workMessages)).toContain("sample reference");
+    expect(JSON.stringify(workMessages)).toContain("Version 1 produced an artifact");
     expect(optionMessages).toContainEqual(expect.objectContaining({ role: "tool", content: expect.any(Array) }));
-    expect(JSON.stringify(optionMessages)).toContain("青岛三天两晚攻略");
+    expect(JSON.stringify(optionMessages)).toContain("sample reference");
     expect(JSON.stringify(optionMessages)).not.toContain("第 1 次澄清问题摘要");
     expect(JSON.stringify(optionMessages)).not.toContain("答案标题：");
   });
@@ -339,13 +341,13 @@ describe("summarizeSessionForDirector", () => {
     const messages = (summary as any).messages as Array<{ role: string; content: string }>;
     const finalMessage = messages.at(-1)?.content ?? "";
 
-    expect(finalMessage).toContain("本轮要求：");
-    expect(finalMessage).toContain("方向范围：专注");
-    expect(finalMessage).toContain("沿当前产物已经成立的思路继续推进");
+    expect(finalMessage).toContain("This turn's request:");
+    expect(finalMessage).toContain("Direction range: focused");
+    expect(finalMessage).toContain("Continue along the already-working logic");
     expect(finalMessage).not.toContain("不要主动改换主题、读者、前提或基本结构");
     expect(finalMessage).not.toContain("近距离的三种处理办法");
     expect(finalMessage).not.toContain("当前内容：");
-    expect(finalMessage).toContain("请基于以上 AI 结果继续给出下一步三个可选推进方向。");
+    expect(finalMessage).toContain("Based on the AI result above, continue by giving three optional next directions.");
   });
 
   it("includes previous and current option labels so the director can avoid repeats", () => {
@@ -432,18 +434,18 @@ describe("summarizeSessionForDirector", () => {
     const messages = (summary as any).messages as Array<{ role: string; content: string }>;
 
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
-    expect(messages[1].content).toContain("第 1 版已形成产物摘要");
+    expect(messages[1].content).toContain("Version 1 artifact summary");
     expect(messages[1].content).not.toContain("采用的写作意图");
     expect(messages[1].content).toContain("旧版标题");
-    expect(messages[1].content).not.toContain("正文：这是一段旧版正文，应该只作为摘要来源，而不应该完整进入 artifact 历史消息。");
+    expect(messages[1].content).not.toContain("Body: 这是一段旧版正文，应该只作为摘要来源，而不应该完整进入 artifact 历史消息。");
     expect(messages[1].content).not.toContain("选项：");
     expect(messages[2].content).toBe("确定写给谁看: 确定写给谁看的说明。");
     expect(messages[2].content).not.toContain("历史已选方向");
     expect(messages[2].content).not.toContain("下一步写作意图");
     expect(messages[2].content).not.toContain("用户选择");
-    expect(messages[3].content).toContain("第 2 版已形成产物");
+    expect(messages[3].content).toContain("Version 2 produced an artifact");
     expect(messages[3].content).not.toContain("采用的写作意图");
-    expect(messages[3].content).toContain("配图提示");
+    expect(messages[3].content).toContain("Image prompt");
     expect(messages[3].content).not.toContain("选项：");
     expect(messages[4].content).toContain("分析做这个的动机");
     expect(messages[4].content).not.toContain("用户想要完成的写作意图");
@@ -455,11 +457,11 @@ describe("summarizeSessionForDirector", () => {
     expect(messages[4].content).not.toContain("实质变化");
     expect(messages[4].content).not.toContain("会怎么改");
     expect(messages[4].content).not.toContain("当前内容：");
-    expect(messages[4].content).not.toContain("配图提示");
-    expect(messages[4].content).toContain("用户刚刚选择了以下方向：");
-    expect(messages[4].content).toContain("不自动等于要求立即提交产物");
-    expect(messages[4].content).toContain("如果仍需要用户做判断，请提交三个可选方向。");
-    expect(messages[4].content).toContain("不要把“用户选择了一个方向”默认理解为“马上提交产物”。");
+    expect(messages[4].content).not.toContain("Image prompt");
+    expect(messages[4].content).toContain("The user just selected this direction:");
+    expect(messages[4].content).toContain("does not automatically mean they want an artifact submitted immediately");
+    expect(messages[4].content).toContain("If the user still needs to make a judgment, submit three optional directions.");
+    expect(messages[4].content).toContain("Do not default to interpreting");
     expect(messages[4].content).not.toContain("三选一");
   });
 
@@ -488,16 +490,16 @@ describe("summarizeSessionForDirector", () => {
     expect(finalMessage).not.toContain("先按已选技能判断当前内容状态和改动幅度");
     expect(finalMessage).not.toContain("保留当前内容中已经成立的部分");
     expect(finalMessage).not.toContain("实质变化");
-    expect(finalMessage).toContain("用户补充要求：写给独立开发者");
+    expect(finalMessage).toContain("User's additional requirement: 写给独立开发者");
     expect(finalMessage).not.toContain("提出三选一建议");
     expect(finalMessage).not.toContain("生成下一步三个创作方向");
-    expect(finalMessage).toContain("用户刚刚选择了以下方向：");
+    expect(finalMessage).toContain("The user just selected this direction:");
     expect(finalMessage).toContain("选择读者视角");
-    expect(finalMessage).toContain("这表示用户确认了当前推进方向，但不自动等于要求立即提交产物。");
-    expect(finalMessage).toContain("请基于上下文、当前可见产物、用户补充要求和已启用 Skills，决定下一轮最合适的推进方式：");
-    expect(finalMessage).toContain("如果仍需要用户做判断，请提交三个可选方向。");
-    expect(finalMessage).toContain("如果用户选择和上下文已经足够明确，且继续询问只会拖慢推进，可以提交产物。");
-    expect(finalMessage).toContain("不要把“用户选择了一个方向”默认理解为“马上提交产物”。");
+    expect(finalMessage).toContain("This means the user confirmed the current direction");
+    expect(finalMessage).toContain("Based on the context, current visible artifact");
+    expect(finalMessage).toContain("If the user still needs to make a judgment, submit three optional directions.");
+    expect(finalMessage).toContain("If the user's selection and context are clear enough");
+    expect(finalMessage).toContain("Do not default to interpreting");
   });
 
   it("keeps short custom directions as the original user wording in work generation", () => {
@@ -521,8 +523,8 @@ describe("summarizeSessionForDirector", () => {
     const messages = (summary as any).messages as Array<{ role: string; content: string }>;
     const finalUserRequest = messages.at(-1)?.content ?? "";
 
-    expect(finalUserRequest).toContain("用户刚刚选择了以下方向：\n确认内容正确性");
-    expect(finalUserRequest).toContain("不自动等于要求立即提交产物");
+    expect(finalUserRequest).toContain("The user just selected this direction:\n确认内容正确性");
+    expect(finalUserRequest).toContain("does not automatically mean they want an artifact submitted immediately");
     expect(finalUserRequest).not.toContain("\n\n确认内容正确性");
     expect(finalUserRequest).not.toContain("确认内容正确性: 确认内容正确性");
   });
@@ -562,12 +564,12 @@ describe("summarizeSessionForDirector", () => {
     const finalUserRequest = messages.at(-1)?.content ?? "";
 
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user"]);
-    expect(assistantHistory).toContain("第 3 版已形成产物");
+    expect(assistantHistory).toContain("Version 3 produced an artifact");
     expect(assistantHistory).not.toContain("采用的写作意图");
-    expect(assistantHistory).toContain("正文：比如我知道要做啥——不是“帮我写个登录功能”这种。");
+    expect(assistantHistory).toContain("Body: 比如我知道要做啥——不是“帮我写个登录功能”这种。");
     expect(finalUserRequest).toContain("换成行业观察");
     expect(finalUserRequest).not.toContain("用户想要完成的写作意图");
-    expect(finalUserRequest).toContain("用户补充要求：知道要做啥指的是我知道用户需求，而不是被动接受任务。");
+    expect(finalUserRequest).toContain("User's additional requirement: 知道要做啥指的是我知道用户需求，而不是被动接受任务。");
     expect(finalUserRequest).not.toContain("当前内容：");
     expect(finalUserRequest).not.toContain("帮我写个登录功能");
   });
@@ -633,10 +635,10 @@ describe("summarizeSessionForDirector", () => {
     const messages = (summary as any).messages as Array<{ role: string; content: string }>;
 
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user"]);
-    expect(messages[0].content).toContain("初始内容：");
-    expect(messages[1].content).toContain("第 1 轮已形成产物");
-    expect(messages[1].content).toContain("标题：Work");
-    expect(messages[2].content).toContain("请基于以上 AI 结果继续给出下一步三个可选推进方向。");
+    expect(messages[0].content).toContain("Initial content:");
+    expect(messages[1].content).toContain("Round 1 produced an artifact");
+    expect(messages[1].content).toContain("Title: Work");
+    expect(messages[2].content).toContain("Based on the AI result above, continue by giving three optional next directions.");
     expect(messages[2].content).not.toContain("当前内容：");
     expect(messages[2].content).not.toContain("本轮审稿材料：");
     expect(messages[0].content).not.toContain("请作为责任编辑");
@@ -676,20 +678,20 @@ describe("summarizeSessionForDirector", () => {
     const finalMessage = messages.at(-1)?.content ?? "";
 
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
-    expect(messages[0].content).toContain("初始内容：");
-    expect(messages[1].content).toContain("第 1 轮已形成产物");
-    expect(messages[1].content).toContain("形成产物：");
+    expect(messages[0].content).toContain("Initial content:");
+    expect(messages[1].content).toContain("Round 1 produced an artifact");
+    expect(messages[1].content).toContain("Artifact formed:");
     expect(messages[1].content).not.toContain("第 1 次澄清问题摘要");
     expect(messages[1].content).not.toContain("答案标题：扩写完整经历；分析为什么写；确定写给谁看");
-    expect(messages[2].content).toContain("用户选择：确定写给谁看");
+    expect(messages[2].content).toContain("User selection: 确定写给谁看");
     expect(messages[2].content).toContain("确定写给谁看的说明");
-    expect(messages[3].content).toContain("第 2 轮已形成产物");
-    expect(messages[3].content).toContain("正文：Body");
+    expect(messages[3].content).toContain("Round 2 produced an artifact");
+    expect(messages[3].content).toContain("Body: Body");
     expect(finalMessage).not.toContain("最近一次修改：确定写给谁看");
     expect(finalMessage).not.toContain("确定写给谁看的说明");
     expect(finalMessage).not.toContain("当前内容：");
     expect(finalMessage).not.toContain("本轮审稿材料：");
-    expect(finalMessage).toContain("请基于以上 AI 结果继续给出下一步三个可选推进方向。");
+    expect(finalMessage).toContain("Based on the AI result above, continue by giving three optional next directions.");
     expect(finalMessage).not.toContain("暂未采纳");
     expect(finalMessage).not.toContain("已出现过的建议");
     expect(finalMessage).not.toContain("扩写完整经历；分析为什么写");
@@ -744,7 +746,7 @@ describe("summarizeSessionForDirector", () => {
       (message) =>
         message.role === "user" &&
         typeof message.content === "string" &&
-        message.content.includes("用户选择：DeepSeek <think> 幻觉事件")
+        message.content.includes("User selection: DeepSeek <think> 幻觉事件")
     );
     const chosenTurnToolIndex = messages.findIndex((message) => JSON.stringify(message.content).includes("load_skill"));
 
@@ -799,9 +801,9 @@ describe("summarizeSessionForDirector", () => {
     const finalUserMessage = messages.at(-1);
 
     expect(currentArtifactMessage).toBeTruthy();
-    expect(currentArtifactMessage?.content).toContain("第 2 轮已形成产物");
+    expect(currentArtifactMessage?.content).toContain("Round 2 produced an artifact");
     expect(finalUserMessage?.role).toBe("user");
-    expect(finalUserMessage?.content).toContain("方向范围：专注");
+    expect(finalUserMessage?.content).toContain("Direction range: focused");
     expect(finalUserMessage?.content).not.toContain("本轮审稿材料");
     expect(finalUserMessage?.content).not.toContain("当前内容：");
     expect(finalUserMessage?.content).not.toContain("先截图再思考");
@@ -857,9 +859,9 @@ describe("summarizeSessionForDirector", () => {
     const finalMessage = messages.at(-1)?.content ?? "";
     const assistantMessages = messages.filter((message) => message.role === "assistant").map((message) => message.content).join("\n\n");
 
-    expect(assistantMessages).toContain("标题：Edited");
-    expect(assistantMessages).toContain("正文：Edited body");
-    expect(finalMessage).toContain("请基于以上 AI 结果继续给出下一步三个可选推进方向。");
+    expect(assistantMessages).toContain("Title: Edited");
+    expect(assistantMessages).toContain("Body: Edited body");
+    expect(finalMessage).toContain("Based on the AI result above, continue by giving three optional next directions.");
     expect(finalMessage).not.toContain("审稿材料：");
     expect(finalMessage).not.toContain("当前内容：");
     expect(finalMessage).not.toContain("请作为责任编辑");
@@ -1036,13 +1038,13 @@ function createStateWithPath(selectedPath: TreeNode[]): SessionState {
       preferences: {
         artifactTypeId: "social-post",
         creationRequest: "",
-        seed: "值班时写了个微博内容生成器",
+        seed: "值班时写了个内容生成器",
         domains: ["work"],
         tones: ["sharp"],
         styles: ["opinion-driven"],
         personas: ["observer"]
       },
-      summary: "Seed：值班时写了个微博内容生成器",
+      summary: "Seed：值班时写了个内容生成器",
       learnedSummary: "",
       createdAt: "2026-04-24T00:00:00.000Z",
       updatedAt: "2026-04-24T00:00:00.000Z"

@@ -1,9 +1,9 @@
 import type { Skill } from "@/lib/domain";
 
-const WEEKDAY_NAMES_ZH = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export function formatCurrentDateTime(now: Date = new Date()): string {
-  const weekday = WEEKDAY_NAMES_ZH[now.getDay()];
+  const weekday = WEEKDAY_NAMES[now.getDay()];
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
@@ -28,16 +28,16 @@ const SUBMIT_TREE_OPTIONS_TOOL_NAME = "submit_tree_options";
 
 export function buildSharedAgentContext(input: SharedAgentContextInput) {
   return [
-    "# 可用 Skills",
+    "# Available Skills",
     formatSkillUsageInstructions(),
-    input.enabledSkills.length > 0 ? formatEnabledSkills(input.enabledSkills) : "暂无已启用 Skills。",
+    input.enabledSkills.length > 0 ? formatEnabledSkills(input.enabledSkills) : "No enabled Skills.",
     input.availableSkillSummaries?.length
-      ? ["# 可加载 Skill 摘要", input.availableSkillSummaries.join("\n")].join("\n")
+      ? ["# Loadable Skill Summaries", input.availableSkillSummaries.join("\n")].join("\n")
       : "",
     input.subagentTemplateSummaries?.length
-      ? ["# 可用 Subagent 模板", input.subagentTemplateSummaries.join("\n")].join("\n")
+      ? ["# Available Subagent Templates", input.subagentTemplateSummaries.join("\n")].join("\n")
       : "",
-    input.toolSummaries?.length ? ["# 可用工具和 MCP 能力", input.toolSummaries.join("\n")].join("\n") : ""
+    input.toolSummaries?.length ? ["# Available Tools And MCP Capabilities", input.toolSummaries.join("\n")].join("\n") : ""
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -49,19 +49,19 @@ export function buildTreeArtifactInstructions(input: SharedAgentContextInput) {
     formatGenericReactAgentRole(),
     buildSharedAgentContext(input),
     actualWorkExecutionProtocol(input),
-    "# 本轮固定目标",
-    "本轮固定目标：提交 artifact 结果。",
-    "根据输入上下文、已启用 Skills 和可用工具完成目标；具体领域判断由 Skills 提供。",
+    "# Fixed Goal For This Turn",
+    "Fixed goal for this turn: submit an artifact result.",
+    "Complete the goal from the input context, enabled Skills, and available tools; domain-specific judgment comes from Skills.",
     ...finalSubmitExecutionRules(input, "artifact"),
-    "# 输出契约",
-    "这里的输出要求指结构化结果或最终提交工具参数里的字段，不是额外自然语言消息。",
-    "本轮用户可见字段包括：roundIntent、artifact.type、artifact.payload 和 artifact.sourceArtifactIds。",
-    "artifact.type 必须是本轮作品类型对应的产物类型；artifact.payload 必须遵守作品类型与输出结构里的字段、格式和交付要求。",
-    "如果 Skill 要求固定文本、格式、语气或其他可观察结果，最终返回字段里必须能直接看见对应结果。",
-    "最终结构化结果必须包含完整 artifact 对象。",
-    "所有面向用户的字段默认使用简体中文；用户原文、专有名词、代码、品牌名和已启用 Skills 明确要求的非中文文本除外。",
-    "# 提交前检查",
-    "确认每个已启用 Skill 的要求已落实到本任务产出的用户可见字段；不要因为结构化输出字段而忽略 Skill 要求。"
+    "# Output Contract",
+    "These output requirements refer to fields in the structured result or final-submit tool arguments, not to extra natural-language messages.",
+    "User-facing fields for this turn include roundIntent, artifact.type, artifact.payload, and artifact.sourceArtifactIds.",
+    "artifact.type must match the artifact type for this work; artifact.payload must follow the fields, format, and delivery requirements of that artifact type.",
+    "If a Skill requires fixed text, format, tone, or another observable result, that result must be directly visible in the final returned fields.",
+    "The final structured result must include a complete artifact object.",
+    "User-facing fields must be written in Simplified Chinese by default; preserve user-authored text, proper nouns, code, brand names, and non-Chinese text explicitly required by active Skills.",
+    "# Pre-Submit Check",
+    "Confirm that every enabled Skill requirement is reflected in the user-facing fields produced for this task; do not ignore Skill requirements because the output is structured."
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -74,18 +74,18 @@ export function buildTreeOptionsInstructions(input: SharedAgentContextInput) {
     buildSharedAgentContext(input),
     actualWorkExecutionProtocol(input),
     threeChoiceProtocol(),
-    "# 本轮固定目标",
-    "本轮固定目标：提交 options 结果。",
-    "根据输入上下文、已启用 Skills 和可用工具完成目标；具体领域判断由 Skills 提供。",
+    "# Fixed Goal For This Turn",
+    "Fixed goal for this turn: submit an options result.",
+    "Complete the goal from the input context, enabled Skills, and available tools; domain-specific judgment comes from Skills.",
     ...finalSubmitExecutionRules(input, "options"),
-    "# 输出契约",
-    "这里的输出要求指结构化结果或最终提交工具参数里的字段，不是额外自然语言消息。",
-    "本轮用户可见字段包括：roundIntent、options[].label、options[].description 和 options[].impact。",
-    "如果 Skill 要求固定文本、格式、语气或其他可观察结果，最终返回字段里必须能直接看见对应结果。",
-    "最终结构化结果必须包含一个 roundIntent 和正好三个 options。",
-    "所有面向用户的字段默认使用简体中文；用户原文、专有名词、代码、品牌名和已启用 Skills 明确要求的非中文文本除外。",
-    "# 提交前检查",
-    "确认每个已启用 Skill 的要求已落实到本任务产出的用户可见字段；不要因为结构化输出字段而忽略 Skill 要求。"
+    "# Output Contract",
+    "These output requirements refer to fields in the structured result or final-submit tool arguments, not to extra natural-language messages.",
+    "User-facing fields for this turn include roundIntent, options[].label, options[].description, and options[].impact.",
+    "If a Skill requires fixed text, format, tone, or another observable result, that result must be directly visible in the final returned fields.",
+    "The final structured result must include one roundIntent and exactly three options.",
+    "User-facing fields must be written in Simplified Chinese by default; preserve user-authored text, proper nouns, code, brand names, and non-Chinese text explicitly required by active Skills.",
+    "# Pre-Submit Check",
+    "Confirm that every enabled Skill requirement is reflected in the user-facing fields produced for this task; do not ignore Skill requirements because the output is structured."
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -98,24 +98,24 @@ export function buildTreeNextStepInstructions(input: SharedAgentContextInput) {
     buildSharedAgentContext(input),
     actualWorkExecutionProtocol(input),
     threeChoiceProtocol(),
-    "# 本轮固定目标",
-    "本轮固定目标：提交 next-step 路由结果。",
-    "根据输入上下文、已启用 Skills 和可用工具决定 action；具体领域判断由 Skills 提供。",
-    "# next-step 路由准则",
-    "流程和阶段标签用于帮助理解本轮任务所处位置；它们是交互提示，不是单向状态机。用户可以在任意时刻回到任一已启用 Skill 能处理的任务。",
-    "先判断本轮任务产出了什么、用户接下来是否需要选择，再选择 action。",
-    "action=options 表示需要用户在同一个新问题下选择下一步方向；适合资料、搜索、参考、素材收集、分析、审稿或比较之后，把结果转成可执行取舍。",
-    "action=artifact 表示下一步已经明确，可以直接生成或更新作品。",
-    "action=complete 表示当前请求已经可以收束，适合用户明确要求结束、发布、交付、停止继续澄清，或当前目标已经没有可行动下一步。",
-    "当工具结果会影响用户选择或理解，且本轮可用过程数据展示工具时，先展示整理后的材料摘要，再提交 next-step 结果。",
+    "# Fixed Goal For This Turn",
+    "Fixed goal for this turn: submit a next-step routing result.",
+    "Decide the action from the input context, enabled Skills, and available tools; domain-specific judgment comes from Skills.",
+    "# Next-Step Routing Criteria",
+    "Flow and stage labels help interpret where this turn sits; they are interaction hints, not a one-way state machine. The user can return at any time to any task that an enabled Skill can handle.",
+    "First decide what this turn produced and whether the user needs to choose next, then choose the action.",
+    "action=options means the user should choose the next direction under one new question; it fits after research, search, reference gathering, material collection, analysis, review, or comparison when the result should become an executable tradeoff.",
+    "action=artifact means the next step is already clear and the work can be generated or updated directly.",
+    "action=complete means the current request can be closed, such as when the user explicitly asks to finish, publish, deliver, stop clarifying, or when the current goal has no further actionable next step.",
+    "When tool results affect user choice or understanding and the process-data display tool is available this turn, first show the organized material summary, then submit the next-step result.",
     ...finalSubmitExecutionRules(input, "next-step"),
-    "# 输出契约",
-    "只返回结构化结果。",
-    "action 只能是 options、artifact 或 complete。",
-    "当 action=options 时，roundIntent 必须是一个新问题，并必须返回 options[].label、options[].description 和 options[].impact；不需要输出 id 或 kind，系统会自动把三个答案映射为 a、b、c。",
-    "当 action=artifact 时，只返回 action 和 roundIntent；后续 artifact 阶段负责生成作品内容。",
-    "当 action=complete 时，不返回 options；只返回 roundIntent，可以返回 artifact=null。",
-    "所有面向用户的字段默认使用简体中文；用户原文、专有名词、代码、品牌名和已启用 Skills 明确要求的非中文文本除外。"
+    "# Output Contract",
+    "Return only the structured result.",
+    "action must be only options, artifact, or complete.",
+    "When action=options, roundIntent must be a new question and options[].label, options[].description, and options[].impact must be returned; do not output id or kind because the system maps the three answers to a, b, and c automatically.",
+    "When action=artifact, return only action and roundIntent; the later artifact phase is responsible for generating work content.",
+    "When action=complete, do not return options; return only roundIntent, and artifact may be null.",
+    "User-facing fields must be written in Simplified Chinese by default; preserve user-authored text, proper nouns, code, brand names, and non-Chinese text explicitly required by active Skills."
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -128,17 +128,17 @@ export function buildTreeTurnInstructions(input: SharedAgentContextInput) {
     buildSharedAgentContext(input),
     actualWorkExecutionProtocol(input),
     threeChoiceProtocol(),
-    "# 本轮固定目标",
-    "本轮固定目标：在一次主 agent ReAct 循环中推进当前用户请求，并通过一个最终提交工具结束。",
-    "如果本轮已经可以形成或更新作品，调用 submit_tree_artifact 提交 artifact 卡片；如果用户需要先从三个可执行答案中选择，调用 submit_tree_options 提交 3 选 1；如果本轮只需要收束且没有新作品，调用 submit_tree_artifact 并让 artifact=null。",
-    "如果本轮用户请求已经指向当前作品的具体推进任务（例如补充论据、核查事实、找案例、压缩结构、改标题），不要把 submit_tree_options 用成重新选题或重新发散主题。只有在完成本轮实际资料/分析工作后，才可以围绕“这些新材料或判断如何作用于当前作品”提交三选一。",
-    "不要先提交路由判断再开启另一个主 agent 循环；工具调用、subagent 调用、thinking、过程材料、options 和 artifact 都属于同一个主 agent turn。",
+    "# Fixed Goal For This Turn",
+    "Fixed goal for this turn: advance the current user request in one main-agent ReAct loop and end through one final submit tool.",
+    "If this turn can form or update the work, call submit_tree_artifact to submit an artifact card; if the user must first choose among three executable answers, call submit_tree_options to submit the three-choice result; if this turn only needs closure and has no new work, call submit_tree_artifact with artifact=null.",
+    "If this turn's user request already points to a concrete task for the current work, such as adding support, checking facts, finding examples, compressing structure, or revising the title, do not use submit_tree_options to restart the topic or diverge from the theme. Only after completing the actual research or analysis for this turn may you submit three options about how the new material or judgment should affect the current work.",
+    "Do not submit a routing decision first and then start another main-agent loop; tool calls, subagent calls, thinking, process material, options, and artifact all belong to the same main-agent turn.",
     ...finalSubmitExecutionRules(input, "turn"),
-    "# 输出契约",
-    "这里的输出要求指最终提交工具参数里的字段，不是额外自然语言消息。",
-    "submit_tree_artifact 的用户可见字段包括：roundIntent、artifact.type、artifact.payload 和 artifact.sourceArtifactIds；artifact 可以是 null。",
-    "submit_tree_options 的用户可见字段包括：roundIntent、options[].label、options[].description 和 options[].impact，并必须正好三个 options。",
-    "所有面向用户的字段默认使用简体中文；用户原文、专有名词、代码、品牌名和已启用 Skills 明确要求的非中文文本除外。"
+    "# Output Contract",
+    "These output requirements refer to fields in final-submit tool arguments, not to extra natural-language messages.",
+    "User-facing fields for submit_tree_artifact include roundIntent, artifact.type, artifact.payload, and artifact.sourceArtifactIds; artifact may be null.",
+    "User-facing fields for submit_tree_options include roundIntent, options[].label, options[].description, and options[].impact, and there must be exactly three options.",
+    "User-facing fields must be written in Simplified Chinese by default; preserve user-authored text, proper nouns, code, brand names, and non-Chinese text explicitly required by active Skills."
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -146,9 +146,9 @@ export function buildTreeTurnInstructions(input: SharedAgentContextInput) {
 
 function formatGenericReactAgentRole() {
   return [
-    "你是通用 ReAct agent。",
-    "系统提示词只定义执行边界、工具协议和最终提交契约；领域策略、内容判断和表达取舍来自输入上下文与已启用 Skills。",
-    "先理解本轮目标，再按需思考、调用工具、检查工具返回值，并用最终提交工具交付结果。"
+    "You are a general-purpose ReAct agent.",
+    "The system prompt only defines execution boundaries, tool protocols, and final submit contracts; domain strategy, content judgment, and expression choices come from input context and enabled Skills.",
+    "Understand this turn's goal first, then think as needed, call tools, inspect tool results, and deliver through the final submit tool."
   ].join("\n");
 }
 
@@ -157,27 +157,27 @@ function actualWorkExecutionProtocol(input: SharedAgentContextInput) {
     (summary) => summary.includes("run_subagent_template") || summary.includes("run_custom_subagent")
   );
   const lines = [
-    "# ReAct 执行协议",
-    "开始实际工作前，先判断本轮应加载哪些 Skill；选择后按被选中 Skill 的职责和标准执行。",
-    "当本轮目标明确要求查找、核查、补充证据、找来源或确认外部信息时，优先使用可用工具获取或核验材料；只有输入上下文已经提供足够具体且可追溯的材料时，才直接整理。",
-    "先判断本轮最有价值的实际工作，并优先由主 agent 负责推进；能直接完成判断、整理、改写或提交时，直接完成。"
+    "# ReAct Execution Protocol",
+    "Before doing the actual work, decide which Skills this turn should load; after selection, execute according to the responsibilities and standards of the selected Skills.",
+    "When this turn explicitly requires finding, checking, or adding evidence, locating sources, or confirming external information, prefer available tools to obtain or verify material; directly organize only when the input context already provides material that is sufficiently specific and traceable.",
+    "Prefer to advance the highest-value work in the main agent; complete judgment, organization, rewriting, or submission directly when the main agent can do so."
   ];
 
   if (hasSubagentTools) {
     lines.push(
-      "确实需要独立上下文、并且任务适合委托时，优先使用 run_subagent_template；只有没有匹配的预创建模板，且任务边界很窄、期望输出很明确时，才使用 run_custom_subagent。",
-      "subagent 作为工具使用，其返回值不是最终判断。调用任何工具或 subagent 后，必须检查工具返回值是否具体、相关、可信、足以支持本轮目标。"
+      "When independent context is truly useful and the task is suitable for delegation, prefer run_subagent_template; use run_custom_subagent only when no precreated template matches and the task boundary is narrow with a clear expected output.",
+      "A subagent is a tool, and its return value is not the final judgment. After calling any tool or subagent, you must inspect whether the tool result is specific, relevant, credible, and sufficient to support this turn's goal."
     );
   } else {
-    lines.push("调用任何工具后，必须检查工具返回值是否具体、相关、可信、足以支持本轮目标。");
+    lines.push("After calling any tool, you must inspect whether the tool result is specific, relevant, credible, and sufficient to support this turn's goal.");
   }
 
   lines.push(
-    "如果工具返回值空泛、偏题、缺少依据或不足以推进，主 agent 要自己补足、改写任务后重试合适工具，或提交需要用户选择的 options。",
+    "If a tool result is vague, off-topic, unsupported, or insufficient to advance, the main agent must fill the gap itself, retry a suitable tool with a better task, or submit options that require user choice.",
     hasSubagentTools
-      ? "完成工具结果检查后，由主 agent 把可用信息整合成目标要求的最终结构化结果；不要把“已调用工具或 subagent”当作本轮完成。"
-      : "完成工具结果检查后，由主 agent 把可用信息整合成目标要求的最终结构化结果。",
-    ...(hasSubagentTools ? ["调用 subagent 时给出短任务、期望输出和必要约束；运行时会为 subagent 提供当前上下文视图。"] : [])
+      ? "After inspecting tool results, the main agent must integrate usable information into the final structured result required by the target. Do not treat a tool or subagent call as completion for this turn."
+      : "After inspecting tool results, the main agent must integrate usable information into the final structured result required by the target.",
+    ...(hasSubagentTools ? ["When calling a subagent, provide a short task, expected output, and required constraints; the runtime provides the current context view to the subagent."] : [])
   );
 
   return lines.join("\n");
@@ -185,13 +185,13 @@ function actualWorkExecutionProtocol(input: SharedAgentContextInput) {
 
 function threeChoiceProtocol() {
   return [
-    "# 三选一交互协议",
-    "三选一是用户交互和显示协议：当本轮需要用户从三个可执行答案中选择时，先形成 decisionRationale，再把需要用户决定的问题写成 roundIntent。",
-    "三个 option 都必须回答同一个 roundIntent，不能变成三个彼此无关的新问题。",
-    "如果本轮已经有明确的当前作品、已选方向或用户补充要求，roundIntent 和三个 option 必须承接这些上下文；不要回到更早的初始输入、候选方向列表或泛泛的下一步。",
-    "如果本轮调用了搜索、资料、subagent 或过程展示工具，提交 options 时必须体现工具结果已经被检查和吸收：三个 option 应该是基于新增材料的处理方式，而不是把用户重新带回资料收集前的问题。",
-    "三个 option 要足够具体，让用户能直接比较选择后的影响。",
-    "如果同时展示过程材料，过程材料只能支撑同一个 roundIntent 和三个 options；不要把过程材料写成另一组 A/B/C 选项、候选题或选择清单。"
+    "# Three-Choice Interaction Protocol",
+    "Three-choice is the user interaction and display protocol: when this turn requires the user to choose among three executable answers, first form decisionRationale, then write the question the user must decide as roundIntent.",
+    "All three options must answer the same roundIntent; they must not become three unrelated new questions.",
+    "If this turn already has a clear current work, selected direction, or user supplement, roundIntent and the three options must carry that context forward; do not return to earlier initial input, candidate direction lists, or a generic next step.",
+    "If this turn called search, material, subagent, or process-display tools, submitted options must show that tool results have been inspected and absorbed: the three options should be ways to use the new material, not a reset to the pre-research question.",
+    "Each option must be concrete enough for the user to compare the impact of choosing it.",
+    "Process material may only support the same roundIntent and the same three options when it is displayed at the same time. Do not write process material as another A/B/C set, candidate topic list, or selection list."
   ].join("\n");
 }
 
@@ -205,8 +205,8 @@ function finalSubmitExecutionRules(input: SharedAgentContextInput, target: "arti
     );
     if (!hasArtifactSubmitTool && !hasOptionsSubmitTool) return [];
     return [
-      `本轮可用工具里包含 ${SUBMIT_TREE_ARTIFACT_TOOL_NAME} 或 ${SUBMIT_TREE_OPTIONS_TOOL_NAME} 时，最终目标就是调用其中一个工具完成本轮任务；不要把最终结果写成普通文本。`,
-      `调用最终提交工具前可以按需调用其他工具收集信息；一旦结果足够，直接把结构化字段作为最终提交工具参数提交。`
+      `When the available tools for this turn include ${SUBMIT_TREE_ARTIFACT_TOOL_NAME} or ${SUBMIT_TREE_OPTIONS_TOOL_NAME}, the final goal is to call one of those tools to complete this turn; do not write the final result as plain text.`,
+      "Before calling the final submit tool, call other tools as needed to gather information; once the result is sufficient, submit the structured fields directly as final-submit tool arguments."
     ];
   }
 
@@ -221,21 +221,21 @@ function finalSubmitExecutionRules(input: SharedAgentContextInput, target: "arti
   );
   if (!hasFinalSubmitTool) return [];
 
-  const taskName = target === "artifact" ? "产物生成" : target === "next-step" ? "路由决策" : "澄清选项";
+  const taskName = target === "artifact" ? "artifact-generation" : target === "next-step" ? "routing-decision" : "clarifying-options";
   return [
-    `本轮可用工具里包含 ${toolName} 时，最终目标就是调用 ${toolName} 完成本轮${taskName}任务；不要把最终结果写成普通文本。`,
-    `调用 ${toolName} 前可以按需调用其他工具收集信息；一旦结果足够，直接把结构化字段作为 ${toolName} 的参数提交。`
+    `When the available tools for this turn include ${toolName}, the final goal is to call ${toolName} to complete this turn's ${taskName} task; do not write the final result as plain text.`,
+    `Before calling ${toolName}, call other tools as needed to gather information; once the result is sufficient, submit the structured fields directly as ${toolName} arguments.`
   ];
 }
 
 function formatSkillUsageInstructions() {
   return [
-    "以下 Skills 是本作品可用能力库，不代表本轮全部同时执行。",
-    "主 agent 每轮先判断本轮目标应加载哪个或哪些 Skill：通常选择一个主要角色或步骤 Skill，再按需叠加约束、风格或平台类 Skill。",
-    "被本轮选中的 Skill 的要求作为 active instructions；未选中的 Skill 只作为可选能力提示。",
-    "如果选中的是按需加载 Skill，必须先使用 load_skill 加载全文，再按全文要求执行。",
-    "不要只凭 Skill 名称、说明、摘要或未展开占位文本模拟该 Skill 的具体规则；如果需要已安装 Skill 的未展开子文档细节，先使用 load_skill_document 加载对应文档。",
-    "如果 Skill 之间出现冲突，优先遵守用户本轮明确要求；仍冲突时，选择对当前任务更具体、更直接的要求。"
+    "The following Skills are the available capability library for this work; they are not all executed at once every turn.",
+    "The main agent must first decide which Skill or Skills this turn should load: usually select one primary role or step Skill, then add constraint, style, or platform Skills only as needed.",
+    "The requirements of Skills selected for this turn become active instructions; unselected Skills are only optional capability hints.",
+    "If the selected Skill is load-on-demand, first use load_skill to load the full text, then follow the full requirements.",
+    "Do not simulate a Skill's concrete rules from only its name, description, summary, or unloaded placeholder text; if details from an installed Skill's unloaded subdocument are needed, first use load_skill_document to load that document.",
+    "If Skills conflict, follow the user's explicit request for this turn first; if conflict remains, choose the requirement that is more specific and direct for the current task."
   ].join("\n");
 }
 
@@ -246,16 +246,16 @@ function formatEnabledSkills(skills: Skill[]) {
     .map((skill) => {
       const lines = [
         `## Skill: ${skill.title}`,
-        `适用目标：${skillScopeLabel(skill.appliesTo)}`,
-        `说明：${skill.description || "无补充说明。"}`,
-        `加载状态：${skill.defaultLoaded === false ? "按需加载" : "默认加载"}`,
-        skill.parentSkillId ? `父级 Skill：${skill.parentSkillId}` : ""
+        `Applies to: ${skillScopeLabel(skill.appliesTo)}`,
+        `Description: ${skill.description || "No extra description."}`,
+        `Load state: ${skill.defaultLoaded === false ? "load on demand" : "loaded by default"}`,
+        skill.parentSkillId ? `Parent Skill: ${skill.parentSkillId}` : ""
       ];
       const prompt = skill.prompt.trim();
       if (prompt && skill.defaultLoaded !== false) {
-        lines.push(`要求：${prompt}`);
+        lines.push(`Requirements: ${prompt}`);
       } else if (skill.defaultLoaded === false) {
-        lines.push("要求：未展开。需要使用这个 Skill 的具体规则时，先调用 load_skill。");
+        lines.push("Requirements: not expanded. When this Skill's concrete rules are needed, call load_skill first.");
       }
       return lines.filter(Boolean).join("\n");
     })
@@ -265,5 +265,5 @@ function formatEnabledSkills(skills: Skill[]) {
 function skillScopeLabel(appliesTo: Skill["appliesTo"]) {
   if (appliesTo === "writer") return "artifact";
   if (appliesTo === "editor") return "options/next-step";
-  return "全程";
+  return "whole flow";
 }

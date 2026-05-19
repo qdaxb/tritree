@@ -517,7 +517,7 @@ export async function createMcpRuntimeTools(options: McpRuntimeOptions = {}): Pr
       const listed = await client.listToolsetsWithErrors();
       toolsets = listed.toolsets;
       for (const [serverName, listError] of Object.entries(listed.errors)) {
-        logDiagnostic(`MCP ${serverName} unavailable：${redactMcpDiagnostic(listError)}`);
+        logDiagnostic(`MCP ${serverName} unavailable: ${redactMcpDiagnostic(listError)}`);
       }
     } else if (client.listTools) {
       toolsets = { mcp: await client.listTools() };
@@ -532,7 +532,7 @@ export async function createMcpRuntimeTools(options: McpRuntimeOptions = {}): Pr
       };
     }
   } catch (error) {
-    const diagnostic = redactMcpDiagnostic(`MCP tools unavailable：${errorMessage(error)}`);
+    const diagnostic = redactMcpDiagnostic(`MCP tools unavailable: ${errorMessage(error)}`);
     logDiagnostic(diagnostic);
     await disconnectMcpClient(client, logDiagnostic);
     return emptyMcpRuntimeTools(diagnostics);
@@ -542,14 +542,14 @@ export async function createMcpRuntimeTools(options: McpRuntimeOptions = {}): Pr
   const toolLabels: Record<string, string> = {};
   const toolSummaries = [...diagnostics];
   const existingTools = options.existingTools ?? {};
+  let loadedToolCount = 0;
 
   for (const [serverName, serverTools] of Object.entries(toolsets)) {
     const serverLabel = loaded.serverLabels[serverName] ?? serverName;
-    const loadedToolSummaries: string[] = [];
     for (const [toolName, tool] of Object.entries(serverTools)) {
       const namespacedName = `${serverName}_${toolName}`;
       if (namespacedName in existingTools || namespacedName in tools) {
-        const diagnostic = `MCP ${serverLabel} skipped ${namespacedName} because a tool with that name already exists.`;
+        const diagnostic = "MCP tool skipped because a tool with the same runtime name already exists.";
         diagnostics.push(diagnostic);
         toolSummaries.push(diagnostic);
         options.log?.(`[tritree:mcp] ${diagnostic}`);
@@ -558,14 +558,14 @@ export async function createMcpRuntimeTools(options: McpRuntimeOptions = {}): Pr
 
       tools[namespacedName] = tool;
       if (serverLabel !== serverName) toolLabels[namespacedName] = serverLabel;
-      loadedToolSummaries.push(formatMcpToolSummary(namespacedName, tool));
+      loadedToolCount += 1;
     }
+  }
 
-    if (loadedToolSummaries.length > 0) {
-      toolSummaries.push(
-        `MCP ${serverLabel}：可用工具 ${loadedToolSummaries.join("、")}。仅当本轮任务需要该 MCP 服务能力时调用。`
-      );
-    }
+  if (loadedToolCount > 0) {
+    toolSummaries.push(
+      `MCP runtime tools are available through the model tool schema. Call MCP tools only when this turn's task needs their capability.`
+    );
   }
 
   return {
@@ -581,8 +581,8 @@ function createDefaultMcpClient(options: {
   id: string;
   servers: Record<string, MastraMCPServerDefinition>;
 }): McpClientLike {
-  // 每次请求使用唯一 id，避免并发请求共享同一个 MCPClient 单例实例，
-  // 防止一个请求的 disconnect() 中断另一个并发请求正在使用的连接。
+  // Use a unique id per request so concurrent calls do not share one MCPClient singleton
+  // and one request's disconnect() cannot interrupt another request's active connection.
   return new MCPClient({ ...options, id: `${options.id}-${randomUUID()}` });
 }
 
@@ -600,21 +600,8 @@ async function disconnectMcpClient(client: McpClientLike, logDiagnostic?: (messa
   try {
     await client.disconnect?.();
   } catch (error) {
-    const diagnostic = redactMcpDiagnostic(`MCP disconnect failed：${errorMessage(error)}`);
+    const diagnostic = redactMcpDiagnostic(`MCP disconnect failed: ${errorMessage(error)}`);
     if (!logDiagnostic) throw new Error(diagnostic);
     logDiagnostic(diagnostic);
   }
-}
-
-function formatMcpToolSummary(toolName: string, tool: ToolsInput[string]) {
-  const description = isRecord(tool) && typeof tool.description === "string" ? sanitizeToolDescription(tool.description) : "";
-  return `${toolName}${description}`;
-}
-
-function sanitizeToolDescription(description: string) {
-  const sanitized = redactMcpDiagnostic(description).replace(/\s+/g, " ").trim();
-  if (!sanitized) return "";
-  const maxLength = 120;
-  const bounded = sanitized.length > maxLength ? `${sanitized.slice(0, maxLength).trimEnd()}...` : sanitized;
-  return `（${bounded}）`;
 }

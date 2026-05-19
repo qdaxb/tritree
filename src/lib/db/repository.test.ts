@@ -52,11 +52,12 @@ const defaultSystemSkillIds = [
   "system-reviewer",
   "system-publisher"
 ];
+const defaultLoadedSystemSkillIds = ["system-creator", "system-planner"];
 
 const repositoryCreationRequestOptions: ConfiguredDefaults["creationRequestOptions"] = [
   { id: "default-preserve-my-meaning", label: "保留我的原意" },
   { id: "default-dont-expand-much", label: "不要扩写太多" },
-  { id: "default-moments", label: "适合发微博" },
+  { id: "default-moments", label: "适合短动态" },
   { id: "default-short-version", label: "先给短版" },
   { id: "default-first-time-reader", label: "写给新手" },
   { id: "default-no-ad-tone", label: "别太像广告" },
@@ -111,7 +112,7 @@ async function createArtifactSessionHarness() {
   const harness = await createRepositoryHarness();
   const root = harness.repo.saveRootMemory(harness.user.id, {
     artifactTypeId: "social-post",
-    seed: "写一条关于 AI 协作的微博",
+    seed: "写一条关于 AI 协作的短内容",
     creationRequest: "",
     domains: ["Creation"],
     tones: ["Sincere"],
@@ -125,7 +126,7 @@ async function createArtifactSessionHarness() {
 async function createSessionWithOptions(repo: Repository, userId: string, enabledSkillIds?: string[]) {
   const root = repo.saveRootMemory(userId, {
     artifactTypeId: "social-post",
-    seed: "写一条关于 AI 协作的微博",
+    seed: "写一条关于 AI 协作的短内容",
     creationRequest: "",
     domains: ["Creation"],
     tones: ["Sincere"],
@@ -250,7 +251,7 @@ describe("Treeable repository", () => {
     const { repo, user } = await createRepositoryHarness();
     const root = repo.saveRootMemory(user.id, {
       artifactTypeId: "social-post",
-      seed: "写一条关于 AI 协作的微博",
+      seed: "写一条关于 AI 协作的短内容",
       creationRequest: "",
       domains: ["Creation"],
       tones: ["Sincere"],
@@ -263,7 +264,7 @@ describe("Treeable repository", () => {
     expect(state.currentArtifact?.type).toBe("social-post");
     expect(state.currentArtifact?.payload).toEqual({
       title: "种子念头",
-      body: "写一条关于 AI 协作的微博",
+      body: "写一条关于 AI 协作的短内容",
       hashtags: [],
       imagePrompt: ""
     });
@@ -317,13 +318,13 @@ describe("Treeable repository", () => {
       userId: user.id,
       sessionId: state.session.id,
       nodeId: state.currentNode!.id,
-      agentMessages: [{ role: "assistant", content: [{ type: "tool-call", toolName: "statusServer_getUserTimeline" }] }],
+      agentMessages: [{ role: "assistant", content: [{ type: "tool-call", toolName: "records_listItems" }] }],
       output: { roundIntent: "选择差异化角度", options: nextOptions }
     });
 
     expect(updated.currentNode?.roundIntent).toBe("选择差异化角度");
     expect(updated.currentNode?.options).toEqual(nextOptions);
-    expect(JSON.stringify(updated.currentNode?.agentMessages)).toContain("statusServer_getUserTimeline");
+    expect(JSON.stringify(updated.currentNode?.agentMessages)).toContain("records_listItems");
     expect(updated.currentArtifact).toEqual(state.currentArtifact);
   });
 
@@ -733,7 +734,9 @@ describe("Treeable repository", () => {
     expect(state.enabledSkillIds).toEqual(defaultSystemSkillIds);
     expect(state.enabledSkills.find((skill) => skill.id === "system-creator")?.defaultLoaded).toBe(true);
     expect(state.enabledSkills.find((skill) => skill.id === "system-creator")?.parentSkillId).toBeNull();
-    for (const skillId of defaultSystemSkillIds.filter((id) => id !== "system-creator")) {
+    expect(state.enabledSkills.find((skill) => skill.id === "system-planner")?.defaultLoaded).toBe(true);
+    expect(state.enabledSkills.find((skill) => skill.id === "system-planner")?.parentSkillId).toBe("system-creator");
+    for (const skillId of defaultSystemSkillIds.filter((id) => !defaultLoadedSystemSkillIds.includes(id))) {
       expect(state.enabledSkills.find((skill) => skill.id === skillId)?.defaultLoaded).toBe(false);
       expect(state.enabledSkills.find((skill) => skill.id === skillId)?.parentSkillId).toBe("system-creator");
     }
@@ -801,13 +804,13 @@ describe("Treeable repository", () => {
     const installRoot = path.join(rootDir, ".tritree", "skills");
     const skillDir = path.join(installRoot, "local-travel");
     mkdirSync(path.join(skillDir, "skills", "research"), { recursive: true });
-    writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: local-travel\ndescription: 本地旅游写作 Skill。\n---\n\n# Local Travel");
+    writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: local-travel\ndescription: 本地主题写作 Skill。\n---\n\n# Local Travel");
     writeFileSync(path.join(skillDir, "skills", "research", "SKILL.md"), "---\nname: research\ndescription: 查询目的地参考资料。\n---\n\n# Research");
     const repo = createTreeableRepository(testDbPath(), { skillInstallRoot: installRoot });
     const user = await createTestUser(repo, "writer");
 
     const discovered = repo.listSkills(user.id).find((skill) => skill.id === "local-travel");
-    expect(discovered).toMatchObject({ description: "本地旅游写作 Skill。", isSystem: false, title: "local-travel" });
+    expect(discovered).toMatchObject({ description: "本地主题写作 Skill。", isSystem: false, title: "local-travel" });
     expect(discovered?.prompt).toContain("skills/research/SKILL.md");
     expect(discovered?.prompt).not.toContain(installRoot);
     expect(repo.resolveSkillsByIds(["local-travel"], user.id).map((skill) => skill.id)).toEqual(["local-travel"]);

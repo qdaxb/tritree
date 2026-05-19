@@ -151,10 +151,10 @@ describe("createTreeOptionsAgent", () => {
 
     createTreeOptionsAgent(
       {
-        rootSummary: "Seed：青岛旅游攻略",
+        rootSummary: "Seed：sample topic",
         learnedSummary: "",
         enabledSkills: [enabledSkills[2]],
-        toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"]
+        toolSummaries: ["run_skill_command: run an installed Skill command."]
       },
       { KIMI_API_KEY: "token" },
       { run_skill_command: runSkillCommand }
@@ -339,7 +339,7 @@ describe("tree director compatibility generators", () => {
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
       "[treeable:mastra-prompt:next-step]",
-      expect.stringContaining("本轮固定目标：提交 next-step 路由结果")
+      expect.stringContaining("Fixed goal for this turn: submit a next-step routing result")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
       "[treeable:mastra-prompt:next-step]",
@@ -362,7 +362,7 @@ describe("tree director compatibility generators", () => {
     };
     const compactSkill = {
       ...enabledSkills[2],
-      prompt: "root skill only\n# 可渐进加载的 Skill 文档\n- xhs-explore（skills/xhs-explore/SKILL.md）：搜索参考内容。"
+      prompt: "root skill only\n# Loadable Skill Documents\n- sample-research (skills/sample-research/SKILL.md): 搜索参考内容。"
     };
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
       return {
@@ -374,9 +374,9 @@ describe("tree director compatibility generators", () => {
       };
     });
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      availableSkillSummaries: ["- shared-skill/xhs-explore（skills/xhs-explore/SKILL.md）：搜索参考内容。"],
+      availableSkillSummaries: ["- shared-skill/sample-research (skills/sample-research/SKILL.md): 搜索参考内容。"],
       enabledSkills: [enabledSkills[1], compactSkill],
-      toolSummaries: ["load_skill_document：渐进加载已安装 Skill 文档。"],
+      toolSummaries: ["load_skill_document: progressively load installed Skill documents."],
       tools: {}
     });
 
@@ -390,7 +390,7 @@ describe("tree director compatibility generators", () => {
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
       "[treeable:mastra-prompt:options]",
-      expect.stringContaining("skills/xhs-explore/SKILL.md")
+      expect.stringContaining("skills/sample-research/SKILL.md")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
       "[treeable:mastra-prompt:options]",
@@ -422,13 +422,13 @@ describe("tree director compatibility generators", () => {
       availableSkillSummaries: [],
       enabledSkills,
       toolLabels: { run_skill_command: "Skill 命令" },
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.createMcpRuntimeTools.mockResolvedValueOnce({
       disconnect: vi.fn(),
       toolLabels: { filesystem_read_file: "读取文件" },
-      toolSummaries: ["MCP filesystem：可用工具 filesystem_read_file。"],
+      toolSummaries: ["MCP runtime tools are available."],
       tools: { filesystem_read_file: readFile }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -473,7 +473,11 @@ describe("tree director compatibility generators", () => {
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
       "[treeable:mastra-prompt:options]",
-      expect.stringContaining("MCP filesystem")
+      expect.stringContaining("MCP runtime tools are available")
+    );
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[treeable:mastra-prompt:options]",
+      expect.not.stringContaining("filesystem_read_file")
     );
   });
 
@@ -486,7 +490,7 @@ describe("tree director compatibility generators", () => {
 
     mocks.createMcpRuntimeTools.mockResolvedValueOnce({
       disconnect,
-      toolSummaries: ["MCP filesystem：可用工具 filesystem_read_file。"],
+      toolSummaries: ["MCP runtime tools are available."],
       tools: {
         filesystem_read_file: { id: "filesystem_read_file", description: "Read file", execute: vi.fn() }
       }
@@ -511,7 +515,7 @@ describe("tree director compatibility generators", () => {
     const disconnect = vi.fn(async () => undefined);
     mocks.createMcpRuntimeTools.mockResolvedValueOnce({
       disconnect,
-      toolSummaries: ["MCP filesystem：可用工具 filesystem_read_file。"],
+      toolSummaries: ["MCP runtime tools are available."],
       tools: {
         filesystem_read_file: { id: "filesystem_read_file", description: "Read file", execute: vi.fn() }
       }
@@ -549,7 +553,7 @@ describe("tree director compatibility generators", () => {
 
     mocks.createMcpRuntimeTools.mockResolvedValueOnce({
       disconnect,
-      toolSummaries: ["MCP filesystem：可用工具 filesystem_read_file。"],
+      toolSummaries: ["MCP runtime tools are available."],
       tools: {
         filesystem_read_file: { id: "filesystem_read_file", description: "Read file", execute: vi.fn() }
       }
@@ -695,7 +699,7 @@ describe("tree director compatibility generators", () => {
           content: [
             {
               type: "tool-result",
-              toolName: "statusServer_getTimeline",
+              toolName: "records_listItems",
               output: {
                 type: "json",
                 value: {
@@ -726,7 +730,7 @@ describe("tree director compatibility generators", () => {
     const serialized = JSON.stringify(sentMessages);
     expect(sentMessages[0]?.content).toContain("初始内容");
     expect(sentMessages.at(-1)?.content).toContain("最终请求");
-    expect(serialized).toContain("已省略");
+    expect(serialized).toContain("omitted");
     expect(serialized).not.toContain("RAW_TIMELINE_SHOULD_NOT_BE_REPLAYED");
   });
 
@@ -932,7 +936,7 @@ describe("tree director compatibility generators", () => {
     expect(retryMessages.at(-1)).toEqual(
       expect.objectContaining({
         role: "user",
-        content: expect.stringContaining("结构问题")
+        content: expect.stringContaining("Structure issue")
       })
     );
     expect(retryMessages.at(-1)?.content).toContain("options");
@@ -971,9 +975,9 @@ describe("tree director compatibility generators", () => {
     expect(fakeAgent.stream).toHaveBeenCalledTimes(3);
     const secondAttemptMessages = fakeAgent.stream.mock.calls[1]?.[0] as Array<{ content: string; role: string }>;
     const thirdAttemptMessages = fakeAgent.stream.mock.calls[2]?.[0] as Array<{ content: string; role: string }>;
-    expect(secondAttemptMessages.at(-1)?.content).toContain("结构修复重试 1/2");
-    expect(thirdAttemptMessages.at(-1)?.content).toContain("结构修复重试 2/2");
-    expect(thirdAttemptMessages.at(-1)?.content).toContain("root: 结构化输出值无效，收到 undefined");
+    expect(secondAttemptMessages.at(-1)?.content).toContain("Structured repair retry 1/2");
+    expect(thirdAttemptMessages.at(-1)?.content).toContain("Structured repair retry 2/2");
+    expect(thirdAttemptMessages.at(-1)?.content).toContain("root: invalid structured output value, received undefined");
   });
 
   it("streams partial old UI option objects before returning the final object", async () => {
@@ -1089,8 +1093,8 @@ describe("tree director compatibility generators", () => {
               toolCallId: "tool-1",
               toolName: "run_skill_command",
               args: {
-                args: ["--keyword", "青岛旅游攻略"],
-                skillName: "xiaohongshu-skills",
+                args: ["--keyword", "sample topic"],
+                skillName: "sample-platform-skills",
                 subcommand: "search-feeds"
               }
             }
@@ -1103,7 +1107,7 @@ describe("tree director compatibility generators", () => {
               result: {
                 exitCode: 0,
                 ok: true,
-                stdout: "找到 3 篇青岛旅行攻略。"
+                stdout: "found 3 sample references."
               }
             }
           };
@@ -1135,9 +1139,9 @@ describe("tree director compatibility generators", () => {
       }
     ]);
     const visibleProgress = progressEvents.map((event) => event.accumulatedText).join("\n");
-    expect(visibleProgress).not.toContain("青岛旅游攻略");
+    expect(visibleProgress).not.toContain("sample topic");
     expect(visibleProgress).not.toContain("找到 3 篇");
-    expect(visibleProgress).not.toContain("xiaohongshu-skills");
+    expect(visibleProgress).not.toContain("sample-platform-skills");
   });
 
   it("keeps subagent thinking and tool progress in the main accumulated thinking stream", async () => {
@@ -1247,8 +1251,8 @@ describe("tree director compatibility generators", () => {
     };
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
       enabledSkills,
-      toolLabels: { "load_skill:weibo-hot-search": "检索微博热搜" },
-      toolSummaries: ["load_skill：按需加载技能。"],
+      toolLabels: { "load_skill:trend-research": "加载趋势资料" },
+      toolSummaries: ["load_skill: load an enabled Skill on demand."],
       tools: { load_skill: loadSkillTool }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -1261,7 +1265,7 @@ describe("tree director compatibility generators", () => {
               payload: {
                 toolCallId: "skill-1",
                 toolName: "load_skill",
-                args: { skillId: "weibo-hot-search" }
+                args: { skillId: "trend-research" }
               }
             };
             yield {
@@ -1269,7 +1273,7 @@ describe("tree director compatibility generators", () => {
               payload: {
                 toolCallId: "skill-1",
                 toolName: "load_skill",
-                result: { id: "weibo-hot-search", ok: true, title: "检索微博热搜" }
+                result: { id: "trend-research", ok: true, title: "加载趋势资料" }
               }
             };
             yield { type: "object-result", object: finalObject };
@@ -1290,12 +1294,12 @@ describe("tree director compatibility generators", () => {
 
     expect(progressEvents).toEqual([
       {
-        delta: "\n[工具] 调用 加载技能：检索微博热搜",
-        accumulatedText: "\n[工具] 调用 加载技能：检索微博热搜"
+        delta: "\n[工具] 调用 加载技能：加载趋势资料",
+        accumulatedText: "\n[工具] 调用 加载技能：加载趋势资料"
       },
       {
-        delta: "\n[工具] 加载技能：检索微博热搜 完成",
-        accumulatedText: "\n[工具] 调用 加载技能：检索微博热搜\n[工具] 加载技能：检索微博热搜 完成"
+        delta: "\n[工具] 加载技能：加载趋势资料 完成",
+        accumulatedText: "\n[工具] 调用 加载技能：加载趋势资料\n[工具] 加载技能：加载趋势资料 完成"
       }
     ]);
   });
@@ -1321,7 +1325,7 @@ describe("tree director compatibility generators", () => {
           type: "tool-call-delta",
           toolCallId: "tool-1",
           toolName: "run_skill_command",
-          argsTextDelta: '{"skillName":"xiaohongshu-skills",'
+          argsTextDelta: '{"skillName":"sample-platform-skills",'
         };
         yield {
           type: "tool-call-delta",
@@ -1334,8 +1338,8 @@ describe("tree director compatibility generators", () => {
           toolCallId: "tool-1",
           toolName: "run_skill_command",
           args: {
-            args: ["--keyword", "青岛旅游攻略"],
-            skillName: "xiaohongshu-skills",
+            args: ["--keyword", "sample topic"],
+            skillName: "sample-platform-skills",
             subcommand: "search-feeds"
           }
         };
@@ -1344,7 +1348,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(finalObject)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -1368,9 +1372,9 @@ describe("tree director compatibility generators", () => {
       "\n[工具] 调用 run_skill_command"
     ]);
     const visibleProgress = progressEvents.map((event) => event.accumulatedText).join("\n");
-    expect(visibleProgress).not.toContain("xiaohongshu-skills");
+    expect(visibleProgress).not.toContain("sample-platform-skills");
     expect(visibleProgress).not.toContain("search-feeds");
-    expect(visibleProgress).not.toContain("青岛旅游攻略");
+    expect(visibleProgress).not.toContain("sample topic");
   });
 
   it("hides tool-phase text deltas while keeping reasoning and tool progress", async () => {
@@ -1397,8 +1401,8 @@ describe("tree director compatibility generators", () => {
             toolCallId: "tool-1",
             toolName: "run_skill_command",
             args: {
-              args: ["--keyword", "青岛旅游攻略"],
-              skillName: "xiaohongshu-skills",
+              args: ["--keyword", "sample topic"],
+              skillName: "sample-platform-skills",
               subcommand: "search-feeds"
             }
           }
@@ -1410,7 +1414,7 @@ describe("tree director compatibility generators", () => {
     }));
     const generate = vi.fn(async () => ({ object: finalObject }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -1443,7 +1447,7 @@ describe("tree director compatibility generators", () => {
     const visibleProgress = progressEvents.map((event) => event.accumulatedText).join("\n");
     expect(visibleProgress).not.toContain("先看已有搜索结果是否够用。");
     expect(visibleProgress).not.toContain("搜索后开始避开常见角度。");
-    expect(visibleProgress).not.toContain("青岛旅游攻略");
+    expect(visibleProgress).not.toContain("sample topic");
     expect(stream).toHaveBeenCalledTimes(1);
     expect(generate).not.toHaveBeenCalled();
   });
@@ -1475,7 +1479,7 @@ describe("tree director compatibility generators", () => {
               result: {
                 exitCode: 0,
                 ok: true,
-                stdout: JSON.stringify({ feeds: [{ displayTitle: "青岛三天两晚攻略" }] })
+                stdout: JSON.stringify({ feeds: [{ displayTitle: "sample reference" }] })
               }
             }
           };
@@ -1498,7 +1502,7 @@ describe("tree director compatibility generators", () => {
       });
     const generate = vi.fn(async () => ({ object: finalObject }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -1523,7 +1527,7 @@ describe("tree director compatibility generators", () => {
 
     expect(stream).toHaveBeenCalledTimes(2);
     const retryMessages = stream.mock.calls[1]?.[0] as Array<{ content: string; role: string }>;
-    expect(retryMessages.at(-1)?.content).toContain("必须调用 submit_tree_options");
+    expect(retryMessages.at(-1)?.content).toContain("You must call the submit_tree_options tool");
     expect(generate).not.toHaveBeenCalled();
     expect(progressEvents.map((event) => event.accumulatedText).join("\n")).toContain("先判断工具结果。");
     expect(progressEvents.map((event) => event.accumulatedText).join("\n")).toContain("[工具]");
@@ -1542,10 +1546,10 @@ describe("tree director compatibility generators", () => {
       artifact: {
         type: "social-post",
         payload: {
-          title: "青岛反攻略",
+          title: "样例草稿",
           body: "第一段继续写完整。",
-          hashtags: ["#青岛"],
-          imagePrompt: "青岛老城街道"
+          hashtags: ["#样例"],
+          imagePrompt: "样例场景"
         }
       },
     };
@@ -1561,7 +1565,7 @@ describe("tree director compatibility generators", () => {
               result: {
                 exitCode: 0,
                 ok: true,
-                stdout: JSON.stringify({ feeds: [{ displayTitle: "青岛三天两晚攻略" }] })
+                stdout: JSON.stringify({ feeds: [{ displayTitle: "sample reference" }] })
               }
             }
           };
@@ -1584,7 +1588,7 @@ describe("tree director compatibility generators", () => {
       });
     const generate = vi.fn();
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -1609,11 +1613,11 @@ describe("tree director compatibility generators", () => {
 
     expect(stream).toHaveBeenCalledTimes(2);
     const retryMessages = stream.mock.calls[1]?.[0] as Array<{ content: string; role: string }>;
-    expect(retryMessages.at(-1)?.content).toContain("必须调用 submit_tree_artifact");
+    expect(retryMessages.at(-1)?.content).toContain("You must call the submit_tree_artifact tool");
     expect(generate).not.toHaveBeenCalled();
     const visibleProgress = progressEvents.map((event) => event.accumulatedText).join("\n");
     expect(visibleProgress).not.toContain("roundIntent");
-    expect(visibleProgress).not.toContain("青岛反攻略");
+    expect(visibleProgress).not.toContain("样例草稿");
     expect(visibleProgress).not.toContain("```json");
   });
 
@@ -1624,18 +1628,18 @@ describe("tree director compatibility generators", () => {
       execute: vi.fn()
     };
     const markdownOutput = [
-      "根据小红书搜索结果，我发现当前青岛旅游攻略的热门方向包括：手绘地图、保姆级攻略、亲子游。",
+      "根据示例平台搜索结果，我发现当前sample topic的热门方向包括：结构化清单、常规内容、细分人群。",
       "",
-      "**roundIntent**：基于小红书热门内容调研，帮助用户找到差异化的青岛攻略切入角度。",
+      "**roundIntent**：基于示例平台内容调研，帮助用户找到差异化的sample topic切入角度。",
       "",
       "**选项A（近——贴近当前稿）**",
-      "- **id**：a- **label**：锚定一个具体差异切口- **description**：当前只有想写青岛攻略和要不一样两个信息，缺乏具体的差异化锚点。建议先选定一个具体切口。- **impact**：让攻略从又一个青岛攻略变成专门解决某类问题的攻略。- **kind**：explore",
+      "- **id**：a- **label**：锚定一个具体差异切口- **description**：当前只有想写sample topic和要不一样两个信息，缺乏具体的差异化锚点。建议先选定一个具体切口。- **impact**：让内容从又一个sample topic变成专门解决某类问题的内容。- **kind**：explore",
       "",
       "**选项B（中——适度展开）**",
-      "- **id**：b- **label**：用反攻略结构组织全文- **description**：小红书上保姆级超详细攻略已经饱和，建议采用反攻略叙事结构。- **impact**：利用平台已有的反焦虑情绪，更容易获得共鸣。- **kind**：reframe",
+      "- **id**：b- **label**：用反内容结构组织全文- **description**：示例平台上的常规内容已经饱和，建议采用反内容叙事结构。- **impact**：利用平台已有的反焦虑情绪，更容易获得共鸣。- **kind**：reframe",
       "",
       "**选项C（远——换维度竞争）**",
-      "- **id**：c- **label**：切换内容形态- **description**：建议做一份青岛行程决策表或景点匹配测试。- **impact**：从信息提供者变成工具提供者，差异化壁垒更高。- **kind**：reframe",
+      "- **id**：c- **label**：切换内容形态- **description**：建议做一份内容决策表或匹配测试。- **impact**：从信息提供者变成工具提供者，差异化壁垒更高。- **kind**：reframe",
       "",
     ].join("\n");
     const stream = vi.fn(async () => ({
@@ -1648,7 +1652,7 @@ describe("tree director compatibility generators", () => {
             result: {
               exitCode: 0,
               ok: true,
-              stdout: JSON.stringify({ feeds: [{ displayTitle: "青岛三天两晚攻略" }] })
+              stdout: JSON.stringify({ feeds: [{ displayTitle: "sample reference" }] })
             }
           }
         };
@@ -1658,7 +1662,7 @@ describe("tree director compatibility generators", () => {
     }));
     const generate = vi.fn();
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -1691,7 +1695,7 @@ describe("tree director compatibility generators", () => {
       execute: vi.fn()
     };
     const markdownOutput = [
-      "roundIntent：当前稿件已形成清晰的反攻略结构和差异化角度，本轮需要给出中规中矩、稳妥可执行的编辑建议。",
+      "roundIntent：当前稿件已形成清晰的反内容结构和差异化角度，本轮需要给出中规中矩、稳妥可执行的编辑建议。",
       "",
       "**编辑判断**：正文约1002字，结构完整，但缺少让读者产生收藏冲动的钩子。",
       "",
@@ -1702,14 +1706,14 @@ describe("tree director compatibility generators", () => {
       "impact：提升中段完读率和收藏转化，让叙事感不被浪费。",
       "kind：deepenmode：balanced",
       "",
-      "**选项 b：在结尾前插入一个反攻略自查清单小模块**",
+      "**选项 b：在结尾前插入一个反内容自查清单小模块**",
       "",
       "当前问题：结尾自然，但缺少值得存下来的硬价值。",
       "description：在最后想说之前，增加一个5-6行的极简清单。",
-      "impact：把反攻略从观点升级为可执行的决策辅助。",
+      "impact：把反内容从观点升级为可执行的决策辅助。",
       "kind：deepenmode：balanced",
       "",
-      "**选项 c：把天气/季节部分改写成青岛出行红绿灯日历**",
+      "**选项 c：把天气/季节部分改写成内容决策表**",
       "",
       "当前问题：第二部分信息准确但形态传统。",
       "description：将季节和天气提示改写成按月或按场景的红绿灯可视化表达。",
@@ -1725,7 +1729,7 @@ describe("tree director compatibility generators", () => {
     }));
     const generate = vi.fn();
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -1943,7 +1947,7 @@ describe("tree director compatibility generators", () => {
       }
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -1988,7 +1992,7 @@ describe("tree director compatibility generators", () => {
             result: {
               exitCode: 0,
               ok: true,
-              stdout: JSON.stringify({ feeds: [{ displayTitle: "青岛三天两晚攻略" }] })
+              stdout: JSON.stringify({ feeds: [{ displayTitle: "sample reference" }] })
             }
           }
         };
@@ -1998,7 +2002,7 @@ describe("tree director compatibility generators", () => {
     }));
     const generate = vi.fn(async () => ({ object: finalObject }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2028,7 +2032,7 @@ describe("tree director compatibility generators", () => {
               toolName: "run_skill_command",
               output: expect.objectContaining({
                 value: expect.objectContaining({
-                  stdout: expect.stringContaining("青岛三天两晚攻略")
+                  stdout: expect.stringContaining("sample reference")
                 })
               })
             })
@@ -2064,8 +2068,8 @@ describe("tree director compatibility generators", () => {
     const finalObject = {
       roundIntent: "选择差异化角度",
       options: [
-        { id: "a", label: "面向低幼家庭", description: "避开泛泛攻略，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
-        { id: "b", label: "做反攻略", description: "把热门打卡点改成避坑判断。", impact: "和保姆级攻略拉开距离。", kind: "reframe" },
+        { id: "a", label: "面向低幼家庭", description: "避开泛泛内容，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
+        { id: "b", label: "做反内容", description: "把常见表达改成避坑判断。", impact: "和常规表达拉开距离。", kind: "reframe" },
         { id: "c", label: "做实时决策表", description: "根据天气和拥挤度组织内容。", impact: "更像工具而不是普通长文。", kind: "deepen" }
       ],
     };
@@ -2079,7 +2083,7 @@ describe("tree director compatibility generators", () => {
             result: {
               exitCode: 0,
               ok: true,
-              stdout: JSON.stringify({ feeds: [{ displayTitle: "青岛三天两晚攻略" }] })
+              stdout: JSON.stringify({ feeds: [{ displayTitle: "sample reference" }] })
             }
           }
         };
@@ -2096,7 +2100,7 @@ describe("tree director compatibility generators", () => {
     }));
     const generate = vi.fn();
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2130,12 +2134,12 @@ describe("tree director compatibility generators", () => {
     );
     expect(mocks.agentConstructor).toHaveBeenCalledWith(
       expect.objectContaining({
-        instructions: expect.stringContaining("调用 submit_tree_options 后必须立即停止")
+        instructions: expect.stringContaining("After calling submit_tree_options, stop immediately")
       })
     );
     expect(mocks.agentConstructor).toHaveBeenCalledWith(
       expect.objectContaining({
-        instructions: expect.stringContaining("最终目标就是调用 submit_tree_options 完成本轮澄清选项任务")
+        instructions: expect.stringContaining("the final goal is to call submit_tree_options")
       })
     );
     const streamOptions = (stream.mock.calls as unknown as Array<[unknown, Record<string, unknown>]>)[0]?.[1];
@@ -2197,7 +2201,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2230,8 +2234,8 @@ describe("tree director compatibility generators", () => {
       })
     );
     expect(constructedOptions.instructions).toContain("show_process_data");
-    expect(constructedOptions.instructions).toContain("只展示本轮新调用工具后整理出的材料");
-    expect(constructedOptions.instructions).toContain("不要把最终 options 重复或改写成过程材料");
+    expect(constructedOptions.instructions).toContain("Show only organized material from newly called tools in this turn");
+    expect(constructedOptions.instructions).toContain("Do not replay historical show_process_data, duplicate final options");
     expect(processDataEvents).toEqual([displayedData]);
     expect(progressEvents.map((event) => event.accumulatedText).join("\n")).not.toContain("show_process_data");
     expect(output.agentMessages).toContainEqual({
@@ -2317,7 +2321,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2349,8 +2353,8 @@ describe("tree director compatibility generators", () => {
     const finalObject = {
       roundIntent: "选择差异化角度",
       options: [
-        { id: "a", label: "面向低幼家庭", description: "避开泛泛攻略，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
-        { id: "b", label: "做反攻略", description: "把热门打卡点改成避坑判断。", impact: "和保姆级攻略拉开距离。", kind: "reframe" },
+        { id: "a", label: "面向低幼家庭", description: "避开泛泛内容，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
+        { id: "b", label: "做反内容", description: "把常见表达改成避坑判断。", impact: "和常规表达拉开距离。", kind: "reframe" },
         { id: "c", label: "做实时决策表", description: "根据天气和拥挤度组织内容。", impact: "更像工具而不是普通长文。", kind: "deepen" }
       ]
     };
@@ -2368,7 +2372,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: { id: "run_skill_command", description: "Run command.", execute: vi.fn() } }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2397,7 +2401,7 @@ describe("tree director compatibility generators", () => {
     };
     const finalObject = {
       action: "options",
-      roundIntent: "你想从哪个角度评价这几条微博？",
+      roundIntent: "你想从哪个角度评价这几条内容？",
       options: [
         { label: "平台视角", description: "分析转发策略背后的平台表达边界。", impact: "后续判断更有结构。" },
         { label: "用户视角", description: "写成一个普通用户刷到后的观察。", impact: "更轻、更像随手发。" },
@@ -2414,7 +2418,7 @@ describe("tree director compatibility generators", () => {
             result: {
               exitCode: 0,
               ok: true,
-              stdout: JSON.stringify({ statuses: [{ text: "转发微博内容" }] })
+              stdout: JSON.stringify({ statuses: [{ text: "转发内容样例" }] })
             }
           }
         };
@@ -2431,7 +2435,7 @@ describe("tree director compatibility generators", () => {
             toolCallId: "submit-delta-1",
             toolName: "submit_tree_next_step",
             argsTextDelta:
-              '{"action":"options","roundIntent":"你想从哪个角度评价这几条微博？","options":[{"label":"平台视角"'
+              '{"action":"options","roundIntent":"你想从哪个角度评价这几条内容？","options":[{"label":"平台视角"'
           }
         };
         yield {
@@ -2447,7 +2451,7 @@ describe("tree director compatibility generators", () => {
     }));
     const generate = vi.fn();
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2492,7 +2496,7 @@ describe("tree director compatibility generators", () => {
     );
     expect(partials[0]).toMatchObject({
       action: "options",
-      roundIntent: "你想从哪个角度评价这几条微博？",
+      roundIntent: "你想从哪个角度评价这几条内容？",
       options: [{ id: "a", label: "平台视角" }]
     });
     expect(partials).toContainEqual(finalObject);
@@ -2533,7 +2537,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.createSubagentRuntimeTools.mockReturnValueOnce({
@@ -2596,7 +2600,7 @@ describe("tree director compatibility generators", () => {
             result: {
               exitCode: 0,
               ok: true,
-              stdout: JSON.stringify({ statuses: [{ text: "转发微博内容" }] })
+              stdout: JSON.stringify({ statuses: [{ text: "转发内容样例" }] })
             }
           }
         };
@@ -2605,7 +2609,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2683,7 +2687,7 @@ describe("tree director compatibility generators", () => {
       objectStream: async function* () {}
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2722,8 +2726,8 @@ describe("tree director compatibility generators", () => {
     const finalObject = {
       roundIntent: "选择差异化角度",
       options: [
-        { id: "a", label: "面向低幼家庭", description: "避开泛泛攻略，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
-        { id: "b", label: "做反攻略", description: "把热门打卡点改成避坑判断。", impact: "和保姆级攻略拉开距离。", kind: "reframe" },
+        { id: "a", label: "面向低幼家庭", description: "避开泛泛内容，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
+        { id: "b", label: "做反内容", description: "把常见表达改成避坑判断。", impact: "和常规表达拉开距离。", kind: "reframe" },
         { id: "c", label: "做实时决策表", description: "根据天气和拥挤度组织内容。", impact: "更像工具而不是普通长文。", kind: "deepen" }
       ],
     };
@@ -2744,7 +2748,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2781,8 +2785,8 @@ describe("tree director compatibility generators", () => {
     const finalObject = {
       roundIntent: "选择差异化角度",
       options: [
-        { id: "a", label: "面向低幼家庭", description: "避开泛泛攻略，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
-        { id: "b", label: "做反攻略", description: "把热门打卡点改成避坑判断。", impact: "和保姆级攻略拉开距离。", kind: "reframe" },
+        { id: "a", label: "面向低幼家庭", description: "避开泛泛内容，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
+        { id: "b", label: "做反内容", description: "把常见表达改成避坑判断。", impact: "和常规表达拉开距离。", kind: "reframe" },
         { id: "c", label: "做实时决策表", description: "根据天气和拥挤度组织内容。", impact: "更像工具而不是普通长文。", kind: "deepen" }
       ],
     };
@@ -2809,7 +2813,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2844,8 +2848,8 @@ describe("tree director compatibility generators", () => {
     const finalObject = {
       roundIntent: "选择差异化角度",
       options: [
-        { id: "a", label: "面向低幼家庭", description: "避开泛泛攻略，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
-        { id: "b", label: "做反攻略", description: "把热门打卡点改成避坑判断。", impact: "和保姆级攻略拉开距离。", kind: "reframe" },
+        { id: "a", label: "面向低幼家庭", description: "避开泛泛内容，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
+        { id: "b", label: "做反内容", description: "把常见表达改成避坑判断。", impact: "和常规表达拉开距离。", kind: "reframe" },
         { id: "c", label: "做实时决策表", description: "根据天气和拥挤度组织内容。", impact: "更像工具而不是普通长文。", kind: "deepen" }
       ],
     };
@@ -2866,7 +2870,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2902,8 +2906,8 @@ describe("tree director compatibility generators", () => {
     const finalObject = {
       roundIntent: "选择差异化角度",
       options: [
-        { id: "a", label: "面向低幼家庭", description: "避开泛泛攻略，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
-        { id: "b", label: "做反攻略", description: "把热门打卡点改成避坑判断。", impact: "和保姆级攻略拉开距离。", kind: "reframe" },
+        { id: "a", label: "面向低幼家庭", description: "避开泛泛内容，聚焦低幼家庭。", impact: "目标读者更明确。", kind: "explore" },
+        { id: "b", label: "做反内容", description: "把常见表达改成避坑判断。", impact: "和常规表达拉开距离。", kind: "reframe" },
         { id: "c", label: "做实时决策表", description: "根据天气和拥挤度组织内容。", impact: "更像工具而不是普通长文。", kind: "deepen" }
       ],
     };
@@ -2929,7 +2933,7 @@ describe("tree director compatibility generators", () => {
           payload: {
             toolCallId: "submit-1",
             toolName: "submit_tree_options",
-            argsTextDelta: ',"description":"避开泛泛攻略","impact":"目标读者更明确","kind":"explore"}]'
+            argsTextDelta: ',"description":"避开泛泛内容","impact":"目标读者更明确","kind":"explore"}]'
           }
         };
         yield {
@@ -2944,7 +2948,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -2988,10 +2992,10 @@ describe("tree director compatibility generators", () => {
       artifact: {
         type: "social-post",
         payload: {
-          title: "青岛反攻略",
+          title: "样例草稿",
           body: "第一段继续写完整。",
-          hashtags: ["#青岛"],
-          imagePrompt: "青岛老城街道"
+          hashtags: ["#样例"],
+          imagePrompt: "样例场景"
         }
       },
     };
@@ -3009,7 +3013,7 @@ describe("tree director compatibility generators", () => {
           payload: {
             toolCallId: "submit-1",
             toolName: "submit_tree_artifact",
-            argsTextDelta: '{"roundIntent":"继续成稿","artifact":{"type":"social-post","payload":{"title":"青岛反攻略","body":"第一段'
+            argsTextDelta: '{"roundIntent":"继续成稿","artifact":{"type":"social-post","payload":{"title":"样例草稿","body":"第一段'
           }
         };
         yield {
@@ -3017,7 +3021,7 @@ describe("tree director compatibility generators", () => {
           payload: {
             toolCallId: "submit-1",
             toolName: "submit_tree_artifact",
-            argsTextDelta: '继续写完整。","hashtags":["#青岛"],"imagePrompt":"青岛老城街道"}}'
+            argsTextDelta: '继续写完整。","hashtags":["#样例"],"imagePrompt":"样例场景"}}'
           }
         };
         yield {
@@ -3032,7 +3036,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -3065,7 +3069,7 @@ describe("tree director compatibility generators", () => {
     );
     expect(partials[0]).toMatchObject({
       roundIntent: "继续成稿",
-      artifact: { type: "social-post", payload: { title: "青岛反攻略", body: "第一段" } }
+      artifact: { type: "social-post", payload: { title: "样例草稿", body: "第一段" } }
     });
     expect(partials).toContainEqual(finalObject);
   });
@@ -3081,10 +3085,10 @@ describe("tree director compatibility generators", () => {
       artifact: {
         type: "social-post",
         payload: {
-          title: "青岛反攻略",
+          title: "样例草稿",
           body: "第一段。\n\n第二段。",
-          hashtags: ["#青岛"],
-          imagePrompt: "青岛老城街道"
+          hashtags: ["#样例"],
+          imagePrompt: "样例场景"
         }
       },
     };
@@ -3102,7 +3106,7 @@ describe("tree director compatibility generators", () => {
           payload: {
             toolCallId: "submit-1",
             toolName: "submit_tree_artifact",
-            argsTextDelta: '{"roundIntent":"继续成稿","artifact":{"type":"social-post","payload":{"title":"青岛反攻略","body":"第一段。\\'
+            argsTextDelta: '{"roundIntent":"继续成稿","artifact":{"type":"social-post","payload":{"title":"样例草稿","body":"第一段。\\'
           }
         };
         yield {
@@ -3110,7 +3114,7 @@ describe("tree director compatibility generators", () => {
           payload: {
             toolCallId: "submit-1",
             toolName: "submit_tree_artifact",
-            argsTextDelta: 'n\\n第二段。","hashtags":["#青岛"],"imagePrompt":"青岛老城街道"}}'
+            argsTextDelta: 'n\\n第二段。","hashtags":["#样例"],"imagePrompt":"样例场景"}}'
           }
         };
         yield {
@@ -3125,7 +3129,7 @@ describe("tree director compatibility generators", () => {
       object: Promise.resolve(undefined)
     }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
@@ -3150,7 +3154,7 @@ describe("tree director compatibility generators", () => {
 
     expect(partials[0]).toMatchObject({
       roundIntent: "继续成稿",
-      artifact: { type: "social-post", payload: { title: "青岛反攻略", body: "第一段。" } }
+      artifact: { type: "social-post", payload: { title: "样例草稿", body: "第一段。" } }
     });
     expect(partials[0]).not.toMatchObject({
       artifact: { payload: { body: expect.stringContaining("\\") } }
@@ -3186,7 +3190,7 @@ describe("tree director compatibility generators", () => {
             result: {
               exitCode: 0,
               ok: true,
-              stdout: JSON.stringify({ feeds: [{ displayTitle: "青岛三天两晚攻略" }] })
+              stdout: JSON.stringify({ feeds: [{ displayTitle: "sample reference" }] })
             }
           }
         };
@@ -3197,7 +3201,7 @@ describe("tree director compatibility generators", () => {
     }));
     const generate = vi.fn(async () => ({ object: finalObject }));
     mocks.createSkillRuntimeTools.mockResolvedValueOnce({
-      toolSummaries: ["run_skill_command：调用已安装 skill 的脚本命令。"],
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
       tools: { run_skill_command: runSkillCommand }
     });
     mocks.agentConstructor.mockImplementationOnce(function Agent(options) {

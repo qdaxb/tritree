@@ -2750,10 +2750,10 @@ describe("TreeableApp", () => {
 
   it("lets the user create a global skill from the library", async () => {
     const createdSkill: Skill = {
-      id: "user-xhs",
-      title: "小红书风格",
+      id: "user-sample-style",
+      title: "示例平台风格",
       category: "平台",
-      description: "适合小红书。",
+      description: "适合示例平台。",
       prompt: "标题口语一点。",
       appliesTo: "both",
       isSystem: false,
@@ -2778,8 +2778,8 @@ describe("TreeableApp", () => {
     const skillPanel = screen.getByRole("complementary", { name: "本作品技能" });
     await userEvent.click(within(skillPanel).getByRole("button", { name: "管理技能库" }));
     await userEvent.click(screen.getByRole("button", { name: "新建技能" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "技能名称" }), "小红书风格");
-    await userEvent.type(screen.getByRole("textbox", { name: "说明" }), "适合小红书。");
+    await userEvent.type(screen.getByRole("textbox", { name: "技能名称" }), "示例平台风格");
+    await userEvent.type(screen.getByRole("textbox", { name: "说明" }), "适合示例平台。");
     await userEvent.type(screen.getByRole("textbox", { name: "提示词" }), "标题口语一点。");
     await userEvent.click(screen.getByRole("button", { name: "保存技能" }));
 
@@ -2789,12 +2789,12 @@ describe("TreeableApp", () => {
         "/api/skills",
         expect.objectContaining({
           method: "POST",
-          body: expect.stringContaining("小红书风格")
+          body: expect.stringContaining("示例平台风格")
         })
       );
     });
     expect(JSON.parse(fetchMock.mock.calls[3][1].body as string).appliesTo).toBe("both");
-    expect(screen.getByRole("article", { name: "小红书风格" })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "示例平台风格" })).toBeInTheDocument();
   });
 
   it("hides skill repository import controls from member users", async () => {

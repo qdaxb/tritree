@@ -47,7 +47,7 @@ beforeEach(() => {
 
 describe("extractPartialDirectorArtifact", () => {
   it("extracts partial artifact payload fields from streaming JSON", () => {
-    const partial = extractPartialDirectorArtifact('{"roundIntent":"写微博","artifact":{"type":"social-post","payload":{"title":"新标题","body":"开头');
+    const partial = extractPartialDirectorArtifact('{"roundIntent":"写短内容","artifact":{"type":"social-post","payload":{"title":"新标题","body":"开头');
 
     expect(partial?.type).toBe("social-post");
     expect(partial?.payload).toMatchObject({ title: "新标题" });

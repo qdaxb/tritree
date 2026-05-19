@@ -570,9 +570,9 @@ describe("SkillSchema", () => {
 
   it("accepts long generic SKILL.md prompts", () => {
     const parsed = SkillUpsertSchema.parse({
-      title: "xhs-publish",
+      title: "sample-publish",
       category: "平台",
-      description: "导入的小红书发布技能。",
+      description: "导入的示例发布技能。",
       prompt: "发布前确认。\n".repeat(3000),
       appliesTo: "both"
     });

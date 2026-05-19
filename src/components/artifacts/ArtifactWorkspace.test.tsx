@@ -350,7 +350,7 @@ describe("ArtifactWorkspace", () => {
               {
                 type: "tool-call",
                 toolCallId: "tool-1",
-                toolName: "weiboHot_getHotSearch",
+                toolName: "trendServer_listSignals",
                 input: { category: "realtime" }
               }
             ]
@@ -361,7 +361,7 @@ describe("ArtifactWorkspace", () => {
               {
                 type: "tool-result",
                 toolCallId: "tool-1",
-                toolName: "weiboHot_getHotSearch",
+                toolName: "trendServer_listSignals",
                 output: {
                   type: "json",
                   value: {
@@ -380,7 +380,7 @@ describe("ArtifactWorkspace", () => {
     });
 
     expect(screen.queryByRole("heading", { name: "过程材料" })).not.toBeInTheDocument();
-    expect(screen.queryByText("weiboHot_getHotSearch")).not.toBeInTheDocument();
+    expect(screen.queryByText("trendServer_listSignals")).not.toBeInTheDocument();
     expect(screen.queryByText("参考条目 A")).not.toBeInTheDocument();
   });
 

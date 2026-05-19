@@ -50,16 +50,16 @@ function structuredOutputRepairMessage({
 }): MastraConversationMessage {
   const submitToolName = finalSubmitToolName(target);
   const runtimeReminder = runtimeTools
-    ? `\n必须调用 ${submitToolName} 工具提交最终结果，不要直接输出 JSON 或 Markdown 文本。`
+    ? `\nYou must call the ${submitToolName} tool to submit the final result. Do not directly output JSON or Markdown text.`
     : "";
   return {
     role: "user",
     content: [
-      `上一轮最终输出没有通过 Tritree 固定结构校验。请根据原始任务、已启用 Skills 和已经获得的工具结果，重新生成一个完整合法的最终结果。`,
-      `结构修复重试 ${retryNumber}/${MAX_STRUCTURED_OUTPUT_RETRIES}。不要解释错误原因，不要输出诊断报告。${runtimeReminder}`,
-      "结构问题：",
+      "The previous final output did not pass Tritree's fixed structure validation. Regenerate a complete valid final result from the original task, enabled Skills, and already obtained tool results.",
+      `Structured repair retry ${retryNumber}/${MAX_STRUCTURED_OUTPUT_RETRIES}. Do not explain the error cause and do not output a diagnostic report.${runtimeReminder}`,
+      "Structure issue:",
       structuredOutputIssueSummary(error),
-      "最终结构要求：",
+      "Final structure requirements:",
       target === "turn"
         ? turnOutputShapeSummary()
         : target === "artifact"
@@ -89,7 +89,7 @@ export function structuredOutputIssueSummary(error: unknown) {
 
   const value = findMastraStructuredOutputValidationValue(error);
   if (value !== undefined) {
-    return `root: 结构化输出值无效，收到 ${summarizeInvalidStructuredValue(value)}`;
+    return `root: invalid structured output value, received ${summarizeInvalidStructuredValue(value)}`;
   }
 
   if (error instanceof Error) return error.message;

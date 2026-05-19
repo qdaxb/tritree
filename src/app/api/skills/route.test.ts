@@ -196,10 +196,10 @@ describe("/api/skills", () => {
 
   it("installs an executable skill repository and imports all discovered skills", async () => {
     const rootInput = {
-      id: "xiaohongshu-skills",
-      title: "xiaohongshu-skills",
+      id: "sample-platform-skills",
+      title: "sample-platform-skills",
       category: "平台",
-      description: "小红书自动化技能集合。",
+      description: "示例平台技能集合。",
       prompt: "Root SKILL.md + 子技能内容。",
       appliesTo: "both",
       defaultEnabled: false,
@@ -207,14 +207,14 @@ describe("/api/skills", () => {
     };
     const childInput = {
       ...rootInput,
-      id: "xhs-title",
-      title: "xhs-title",
-      description: "小红书标题技能。"
+      id: "sample-title",
+      title: "sample-title",
+      description: "示例标题技能。"
     };
     const importSkills = vi.fn().mockReturnValue([{ ...rootInput, isSystem: false }, { ...childInput, isSystem: false }]);
     mocks.installSkillFromGitHub.mockResolvedValue({
-      installPath: "/repo/.tritree/skills/xiaohongshu-skills",
-      installPaths: ["/repo/.tritree/skills/xiaohongshu-skills", "/repo/.tritree/skills/xhs-title"],
+      installPath: "/repo/.tritree/skills/sample-platform-skills",
+      installPaths: ["/repo/.tritree/skills/sample-platform-skills", "/repo/.tritree/skills/sample-title"],
       skill: rootInput,
       skills: [rootInput, childInput]
     });
@@ -223,18 +223,18 @@ describe("/api/skills", () => {
     const response = await IMPORT_POST(
       new Request("http://test.local/api/skills/import", {
         method: "POST",
-        body: JSON.stringify({ sourceUrl: "https://github.com/autoclaw-cc/xiaohongshu-skills" })
+        body: JSON.stringify({ sourceUrl: "https://github.com/example/sample-platform-skills" })
       })
     );
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.installSkillFromGitHub).toHaveBeenCalledWith("https://github.com/autoclaw-cc/xiaohongshu-skills");
+    expect(mocks.installSkillFromGitHub).toHaveBeenCalledWith("https://github.com/example/sample-platform-skills");
     expect(importSkills).toHaveBeenCalledWith([rootInput, childInput]);
     expect(data.skills).toHaveLength(2);
-    expect(data.skills[0].title).toBe("xiaohongshu-skills");
-    expect(data.installPath).toBe("/repo/.tritree/skills/xiaohongshu-skills");
-    expect(data.installPaths).toEqual(["/repo/.tritree/skills/xiaohongshu-skills", "/repo/.tritree/skills/xhs-title"]);
+    expect(data.skills[0].title).toBe("sample-platform-skills");
+    expect(data.installPath).toBe("/repo/.tritree/skills/sample-platform-skills");
+    expect(data.installPaths).toEqual(["/repo/.tritree/skills/sample-platform-skills", "/repo/.tritree/skills/sample-title"]);
   });
 
   it("requires an administrator to import skill repositories", async () => {
@@ -243,7 +243,7 @@ describe("/api/skills", () => {
     const response = await IMPORT_POST(
       new Request("http://test.local/api/skills/import", {
         method: "POST",
-        body: JSON.stringify({ sourceUrl: "https://github.com/autoclaw-cc/xiaohongshu-skills" })
+        body: JSON.stringify({ sourceUrl: "https://github.com/example/sample-platform-skills" })
       })
     );
 

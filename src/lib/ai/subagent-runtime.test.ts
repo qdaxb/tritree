@@ -58,7 +58,7 @@ describe("subagent runtime tools", () => {
     expect(runtime.subagentTemplateSummaries).toHaveLength(1);
     expect(runtime.toolSummaries.join("\n")).toContain("run_subagent_template");
     expect(runtime.toolSummaries.join("\n")).toContain("run_custom_subagent");
-    expect(runtime.toolSummaries.join("\n")).toContain("运行时会提供当前上下文视图");
+    expect(runtime.toolSummaries.join("\n")).toContain("the runtime supplies the current context view");
     expect(runtime.toolSummaries.join("\n")).not.toContain("临时");
     expect(runtime.toolSummaries.join("\n")).not.toContain("temporary");
   });
@@ -103,7 +103,8 @@ describe("subagent runtime tools", () => {
     expect(calls[0]).toMatchObject({
       context: expect.stringContaining("最新正文"),
       env: { KIMI_API_KEY: "test-token" },
-      expectedOutput: "资料清单：每条包含来源、要点、可用角度、可信度提示，以及建议如何转交给主 agent 使用。",
+      expectedOutput:
+        "A material list. Each item should include source, key point, usable angle, credibility note, and advice on how the main agent can use it.",
       task: "找三条资料",
       template: expect.objectContaining({ id: "material-search", title: "搜索资料" }),
       title: "搜索资料",

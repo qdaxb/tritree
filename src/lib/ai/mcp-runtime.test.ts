@@ -157,11 +157,11 @@ describe("MCP runtime config parsing", () => {
     const dir = makeTempDir();
     const configPath = writeJsonConfig(dir, {
       mcpServers: {
-        statusServer: {
+        httpServer: {
           type: "http",
           url: "https://mcp.example.com/mcp",
           headers: {
-            Authorization: "Bearer ${STATUS_MCP_TOKEN}"
+            Authorization: "Bearer ${MCP_API_TOKEN}"
           }
         }
       }
@@ -170,20 +170,20 @@ describe("MCP runtime config parsing", () => {
     const result = loadMcpServerDefinitions({
       configPath,
       env: {
-        STATUS_MCP_TOKEN: "status-secret"
+        MCP_API_TOKEN: "api-secret"
       }
     });
 
     expect(result.diagnostics).toEqual([]);
-    expect(result.servers.statusServer).toMatchObject({
+    expect(result.servers.httpServer).toMatchObject({
       type: "http",
       requestInit: {
         headers: {
-          Authorization: "Bearer status-secret"
+          Authorization: "Bearer api-secret"
         }
       }
     });
-    expect(result.servers.statusServer && "url" in result.servers.statusServer ? result.servers.statusServer.url : null)
+    expect(result.servers.httpServer && "url" in result.servers.httpServer ? result.servers.httpServer.url : null)
       .toBeInstanceOf(URL);
   });
 
@@ -371,7 +371,7 @@ describe("MCP runtime config parsing", () => {
 });
 
 describe("MCP runtime tool loading", () => {
-  it("loads toolsets, namespaces tools by server, and summarizes safe tool names", async () => {
+  it("loads toolsets, namespaces tools by server, and uses a generic prompt summary", async () => {
     const dir = makeTempDir();
     const configPath = writeJsonConfig(dir, {
       mcpServers: {
@@ -417,12 +417,47 @@ describe("MCP runtime tool loading", () => {
       filesystem_read_file: readFile,
       search_search_web: searchWeb
     });
-    expect(result.toolSummaries.join("\n")).toContain("MCP filesystem");
-    expect(result.toolSummaries.join("\n")).toContain("filesystem_read_file");
-    expect(result.toolSummaries.join("\n")).toContain("MCP search");
-    expect(result.toolSummaries.join("\n")).toContain("search_search_web");
+    expect(result.toolSummaries.join("\n")).toContain("MCP runtime tools are available");
+    expect(result.toolSummaries.join("\n")).not.toContain("filesystem_read_file");
+    expect(result.toolSummaries.join("\n")).not.toContain("search_search_web");
     await result.disconnect();
     expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps non-English MCP labels and descriptions out of prompt summaries", async () => {
+    const dir = makeTempDir();
+    const hanLabel = String.fromCodePoint(0x6d4b, 0x8bd5);
+    const hanDescription = String.fromCodePoint(0x63cf, 0x8ff0);
+    const configPath = writeJsonConfig(dir, {
+      mcpServers: {
+        sampleServer: {
+          command: "node",
+          args: ["server.js"],
+          label: hanLabel
+        }
+      }
+    });
+    const listRecords = { id: "listRecords", description: hanDescription, execute: async () => ({}) };
+    const result = await createMcpRuntimeTools({
+      configPath,
+      createClient: () => ({
+        disconnect: async () => undefined,
+        listToolsetsWithErrors: async () => ({
+          errors: {},
+          toolsets: { sampleServer: { listRecords } }
+        })
+      }),
+      env: {}
+    });
+
+    const summary = result.toolSummaries.join("\n");
+    expect(summary).toContain("MCP runtime tools are available");
+    expect(summary).not.toContain("sampleServer");
+    expect(summary).not.toContain("sampleServer_listRecords");
+    expect(summary).not.toContain("listRecords");
+    expect(summary).not.toContain(hanLabel);
+    expect(summary).not.toContain(hanDescription);
+    expect(result.toolLabels.sampleServer_listRecords).toBe(hanLabel);
   });
 
   it("keeps existing tools when a namespaced MCP tool collides", async () => {
@@ -451,7 +486,8 @@ describe("MCP runtime tool loading", () => {
     });
 
     expect(result.tools).toEqual({});
-    expect(result.toolSummaries.join("\n")).toContain("skipped filesystem_read_file");
+    expect(result.toolSummaries.join("\n")).toContain("MCP tool skipped");
+    expect(result.toolSummaries.join("\n")).not.toContain("filesystem_read_file");
   });
 
   it("reports per-server list errors without exposing configured secrets", async () => {
@@ -522,7 +558,7 @@ describe("MCP runtime tool loading", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("[tritree:mcp] MCP disconnect failed"));
   });
 
-  it("sanitizes and bounds MCP tool descriptions in summaries", async () => {
+  it("keeps MCP tool descriptions out of prompt summaries", async () => {
     const dir = makeTempDir();
     const configPath = writeJsonConfig(dir, {
       mcpServers: {
@@ -550,8 +586,13 @@ describe("MCP runtime tool loading", () => {
     });
 
     const summary = result.toolSummaries.join("\n");
-    expect(summary).toContain("Lookup Authorization: Bearer [redacted] with extra whitespace");
-    expect(summary).toContain("...");
+    expect(summary).toContain("MCP runtime tools are available");
+    expect(summary).not.toContain("lookup");
+    expect(summary).not.toContain("Lookup");
+    expect(summary).not.toContain("Authorization");
+    expect(summary).not.toContain("Bearer");
+    expect(summary).not.toContain("extra whitespace");
+    expect(summary).not.toContain("...");
     expect(summary).not.toContain("\n\n");
     expect(summary).not.toContain("summary-secret");
     expect(summary).not.toContain(repeatedTail.trim());
@@ -578,7 +619,8 @@ describe("MCP runtime tool loading", () => {
     });
 
     expect(result.tools).toEqual({ mcp_lookup: lookup });
-    expect(result.toolSummaries.join("\n")).toContain("mcp_lookup");
+    expect(result.toolSummaries.join("\n")).toContain("MCP runtime tools are available");
+    expect(result.toolSummaries.join("\n")).not.toContain("mcp_lookup");
   });
 
   it("returns no tools when config path is relative or config is invalid", async () => {

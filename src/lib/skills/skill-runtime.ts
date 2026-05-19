@@ -122,7 +122,9 @@ export function loadInstalledSkillDocument({
   const entry = documents.find((item) => item.path === relativePath);
   if (!entry) {
     throw new Error(
-      `Skill document ${document} was not found. 可加载文档：${documents.map((item) => `${item.name}(${item.path})`).join("、") || "无"}。`
+      `Skill document ${document} was not found. Loadable documents: ${
+        documents.map((item) => `${item.name}(${item.path})`).join(", ") || "none"
+      }.`
     );
   }
 
@@ -247,7 +249,7 @@ export async function createSkillRuntimeTools(
     });
     tools.load_skill = loadSkill;
     toolSummaries.push(
-      `load_skill：按需加载本 session 已启用但未默认展开的 Skill 全文。可加载 Skill：${loadableIds.join("、")}。只有任务需要某个子 Skill 的具体规则时才调用；未启用的 Skill 不可加载。`
+      `load_skill: load the full prompt for enabled session Skills that are not expanded by default. Loadable Skill ids: ${loadableIds.join(", ")}. Call this only when the task needs the concrete rules of a child Skill; disabled Skills cannot be loaded.`
     );
   }
 
@@ -262,18 +264,18 @@ export async function createSkillRuntimeTools(
     id: "load_skill_document",
     description:
       "Progressively load an installed Tritree skill document. Use this before relying on child-skill details that were listed but not expanded in the active instructions.",
-    inputSchema: z.object({
-      document: z
-        .string()
-        .min(1)
-        .describe("Document name or path, for example SKILL.md, xhs-explore, skills/xhs-explore, or skills/xhs-explore/SKILL.md."),
-      skillName: z.enum(installedSkillNames as [string, ...string[]]).describe("Installed skill name.")
-    }),
+      inputSchema: z.object({
+        document: z
+          .string()
+          .min(1)
+          .describe("Document name or path, for example SKILL.md, research-notes, skills/research-notes, or skills/research-notes/SKILL.md."),
+        skillName: z.enum(installedSkillNames as [string, ...string[]]).describe("Installed skill name.")
+      }),
     execute: async ({ document, skillName }) => loadInstalledSkillDocument({ document, installRoot, skillName })
   });
   tools.load_skill_document = loadSkillDocument;
   toolSummaries.push(
-    `load_skill_document：渐进加载已安装 Skill 的 root 或子 Skill 文档。可用 Skill：${installedSkillNames.join("、")}。当任务需要子 Skill 的具体流程、命令参数或规则细节时先加载对应文档；未加载前不要假设子文档正文。`
+    `load_skill_document: progressively load the root document or child document for an installed Skill. Available Skills: ${installedSkillNames.join(", ")}. Load the relevant document before relying on child-Skill workflows, command parameters, or detailed rules; do not assume unloaded document content.`
   );
 
   if (executableSkillNames.length > 0) {
@@ -282,7 +284,7 @@ export async function createSkillRuntimeTools(
       description:
         "Run a command from an installed Tritree skill. Use the skill's documented CLI subcommands to inspect, authenticate, or gather external reference material before producing the final structured Tritree output.",
       inputSchema: z.object({
-        args: z.array(z.string()).default([]).describe("CLI arguments for the skill subcommand, for example ['--keyword', '青岛旅游攻略']."),
+        args: z.array(z.string()).default([]).describe("CLI arguments for the skill subcommand, for example ['--query', 'sample topic']."),
         skillName: z.enum(executableSkillNames as [string, ...string[]]).describe("Installed executable skill name."),
         subcommand: z.string().min(1).describe("Skill CLI subcommand, for example search-feeds, check-login, or login.")
       }),
@@ -299,7 +301,7 @@ export async function createSkillRuntimeTools(
     });
     tools.run_skill_command = runSkillCommand;
     toolSummaries.push(
-      `run_skill_command：运行已安装 Skill 的脚本命令。可用 Skill：${executableSkillNames.join("、")}。命令会作为安全 argv 传入，不经过 shell；进程隔离由当前 Skill execution mode 负责。若命令因可选参数失败，先去掉筛选、排序等可选参数，用最小等价命令重试一次。`
+      `run_skill_command: run a script command from an installed Skill. Available Skills: ${executableSkillNames.join(", ")}. Commands are passed as safe argv without a shell, and process isolation is controlled by the current Skill execution mode. If optional filters or sort parameters fail, remove optional parameters and retry once with the smallest equivalent command.`
     );
   }
 
@@ -404,7 +406,7 @@ function skillDocumentSummaryLines(installRoot: string, skillName: string) {
   try {
     return listInstalledSkillDocuments(installRoot, skillName)
       .filter((document) => document.path !== "SKILL.md")
-      .map((document) => `- ${skillName}/${document.name}（${document.path}）：${document.description}`);
+      .map((document) => `- ${skillName}/${document.name} (${document.path}): ${document.description}`);
   } catch {
     return [];
   }
@@ -418,19 +420,19 @@ function compactInstalledSkillPrompt(skill: Skill, installRoot: string): Skill {
     if (!root) return skill;
     const childDocuments = documents.filter((document) => document.path !== "SKILL.md");
     const prompt = [
-      `此 Skill 已安装在：${skillDir}`,
-      "Tritree 是当前 agent runtime。请按以下 SKILL.md 指令判断是否需要调用可用工具。",
-      "子 Skill 文档不会预先展开；需要更具体的平台流程、命令说明或风格规则时，先调用 load_skill_document 渐进加载对应 SKILL.md。",
-      "如果需要外部平台参考资料、账号状态或登录流程，可以调用 run_skill_command；命令会由 Tritree runtime 按当前 Skill execution mode 隔离运行。",
-      "只调用与当前任务直接相关的命令；除非用户明确要求执行外部动作，否则只做读取、检查或整理类操作。",
+      `This Skill is installed at: ${skillDir}`,
+      "Tritree is the current agent runtime. Use the SKILL.md instructions below to decide whether available tools are needed.",
+      "Child Skill documents are not expanded in advance. When you need more specific platform workflows, command instructions, or style rules, call load_skill_document to progressively load the relevant SKILL.md.",
+      "When external platform references, account status, or login flow are needed, you may call run_skill_command; Tritree runs commands under the current Skill execution mode.",
+      "Call only commands directly relevant to the current task. Unless the user explicitly asks for an external action, limit tool use to reading, checking, or organizing.",
       "",
       "# Root Skill",
       root.parsed.body,
       ...(childDocuments.length
         ? [
             "",
-            "# 可渐进加载的 Skill 文档",
-            ...childDocuments.map((document) => `- ${document.name}（${document.path}）：${document.description}`)
+            "# Loadable Skill Documents",
+            ...childDocuments.map((document) => `- ${document.name} (${document.path}): ${document.description}`)
           ]
         : [])
     ]

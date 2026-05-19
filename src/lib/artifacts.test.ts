@@ -46,13 +46,14 @@ describe("artifact type registry", () => {
   it("formats PRD-specific director instructions", () => {
     const instructions = formatArtifactInstructionsForDirector("prd");
 
-    expect(instructions).toContain("作品类型：PRD 文档");
-    expect(instructions).toContain("背景");
-    expect(instructions).toContain("目标");
-    expect(instructions).toContain("非目标");
-    expect(instructions).toContain("需求");
+    expect(instructions).toContain("Artifact type: PRD document");
+    expect(instructions).toContain("background");
+    expect(instructions).toContain("goals");
+    expect(instructions).toContain("non-goals");
+    expect(instructions).toContain("requirements");
     expect(instructions).toContain("artifact.type=\"prd\"");
     expect(instructions).toContain("artifact.payload.markdown");
+    expect(instructions).toContain("User-facing text must be Simplified Chinese");
     expect(instructions).not.toContain("work.");
   });
 

@@ -44,11 +44,12 @@ describe("buildSocialPostSelectionRewritePrompt", () => {
 
     expect(prompt).toContain("social-post artifact");
     expect(prompt).toContain("Seed：写一个产品故事");
-    expect(prompt).toContain("正文：第一句。第二句要更具体。第三句。");
-    expect(prompt).toContain("选中的原文：\n第二句要更具体。");
-    expect(prompt).toContain("修改要求：\n补一个真实工作细节");
-    expect(prompt).toContain("技能 1：轻量润色");
-    expect(prompt).toContain("只返回替换选区的新片段");
+    expect(prompt).toContain("Body:\n第一句。第二句要更具体。第三句。");
+    expect(prompt).toContain("Selected original text:\n第二句要更具体。");
+    expect(prompt).toContain("Rewrite request:\n补一个真实工作细节");
+    expect(prompt).toContain("Skill 1: 轻量润色");
+    expect(prompt).toContain("Only return the replacement for the selected passage");
+    expect(prompt).toContain("replacementText must be non-empty");
   });
 
   it("uses only writer and shared skills in the rewrite prompt", () => {

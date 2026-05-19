@@ -48,18 +48,18 @@ describe("SkillLibraryPanel", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: "新建技能" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "技能名称" }), "小红书风格");
+    await userEvent.type(screen.getByRole("textbox", { name: "技能名称" }), "示例平台风格");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "分类" }), "平台");
     await userEvent.click(screen.getByRole("checkbox", { name: "影响方向判断" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "说明" }), "适合小红书。");
+    await userEvent.type(screen.getByRole("textbox", { name: "说明" }), "适合示例平台。");
     await userEvent.type(screen.getByRole("textbox", { name: "提示词" }), "标题口语一点。");
     await userEvent.click(screen.getByRole("checkbox", { name: "默认启用" }));
     await userEvent.click(screen.getByRole("button", { name: "保存技能" }));
 
     expect(onCreate).toHaveBeenCalledWith({
-      title: "小红书风格",
+      title: "示例平台风格",
       category: "平台",
-      description: "适合小红书。",
+      description: "适合示例平台。",
       prompt: "标题口语一点。",
       appliesTo: "writer",
       defaultEnabled: true,
@@ -229,11 +229,11 @@ describe("SkillLibraryPanel", () => {
 
     await userEvent.type(
       screen.getByRole("textbox", { name: "Skill GitHub URL" }),
-      "https://github.com/autoclaw-cc/xiaohongshu-skills"
+      "https://github.com/example/sample-platform-skills"
     );
     await userEvent.click(screen.getByRole("button", { name: "导入" }));
 
-    expect(onImport).toHaveBeenCalledWith("https://github.com/autoclaw-cc/xiaohongshu-skills");
+    expect(onImport).toHaveBeenCalledWith("https://github.com/example/sample-platform-skills");
   });
 
   it("uses a generic skill repository placeholder", () => {

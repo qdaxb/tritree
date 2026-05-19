@@ -84,8 +84,8 @@ describe("style profile helpers", () => {
   });
 
   it("keeps pasted representative content together as one sample", () => {
-    expect(splitRepresentativeSamples(" 第一段内容。\n\n第二段仍属于同一条微博。\n  \n第三段也属于同一批代表作。 ")).toEqual([
-      "第一段内容。\n\n第二段仍属于同一条微博。\n  \n第三段也属于同一批代表作。"
+    expect(splitRepresentativeSamples(" 第一段内容。\n\n第二段仍属于同一条样例内容。\n  \n第三段也属于同一批代表作。 ")).toEqual([
+      "第一段内容。\n\n第二段仍属于同一条样例内容。\n  \n第三段也属于同一批代表作。"
     ]);
   });
 
@@ -98,13 +98,14 @@ describe("style profile helpers", () => {
   it("builds a style profile prompt with numbered samples and style instructions", () => {
     const prompt = buildStyleProfileUserPrompt(["第一段", "第二段"]);
 
-    expect(prompt).toContain("样本 1");
+    expect(prompt).toContain("Sample 1");
     expect(prompt).toContain("第一段");
-    expect(prompt).toContain("样本 2");
+    expect(prompt).toContain("Sample 2");
     expect(prompt).toContain("第二段");
-    expect(prompt).toContain("不把样本主题当成作者长期兴趣");
-    expect(prompt).toContain("作者人设");
-    expect(prompt).toContain("表达站位");
+    expect(prompt).toContain("do not treat sample topics as the author's long-term interests");
+    expect(prompt).toContain("author persona");
+    expect(prompt).toContain("expressive stance");
+    expect(prompt).toContain("All visible fields must be written in Simplified Chinese");
   });
 });
 

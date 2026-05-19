@@ -18,7 +18,7 @@ import { DIRECTOR_ARTIFACT_SYSTEM_PROMPT, DIRECTOR_OPTIONS_SYSTEM_PROMPT, type D
 describe("director artifact schemas", () => {
   it("parses artifact output and no-artifact output", () => {
     expect(DirectorArtifactOutputSchema.parse({
-      roundIntent: "形成微博",
+      roundIntent: "形成短内容",
       artifact: { type: "social-post", payload: { title: "T", body: "B", hashtags: [], imagePrompt: "" } }
     }).artifact?.type).toBe("social-post");
 
@@ -172,9 +172,9 @@ describe("buildDirectorInput", () => {
     expect(input).not.toContain("Round 1: folded B, C");
     expect(input).not.toContain("已选路径");
     expect(input).not.toContain("未选方向");
-    expect(input).toContain("暂无已选 Skills。");
-    expect(input).toContain("本消息只提供上下文数据，不定义业务策略");
-    expect(input).not.toContain("所有面向用户的字段都必须使用简体中文");
+    expect(input).toContain("No selected Skills.");
+    expect(input).toContain("This message provides context data only");
+    expect(input).toContain("User-facing fields must be written in Simplified Chinese");
     expect(input).not.toContain("根系记忆");
   });
 
@@ -189,10 +189,11 @@ describe("buildDirectorInput", () => {
       enabledSkills: []
     });
 
-    expect(input).toContain("暂无已学习偏好。");
-    expect(input).toContain("暂无已选 Skills。");
-    expect(input).toContain("本轮没有用户已选答案。");
-    expect(input).toContain("暂无。");
+    expect(input).toContain("No selected Skills.");
+    expect(input).toContain("No user-selected answer for this turn.");
+    expect(input).toContain("None yet.");
+    expect(input).not.toContain("Learned Preferences");
+    expect(input).not.toContain("learned preferences");
     expect(input).not.toContain("暂无已选路径。");
     expect(input).not.toContain("暂无未选方向。");
   });
@@ -268,12 +269,12 @@ describe("buildDirectorInput", () => {
     });
 
     expect(input).toContain("# Active Skills");
-    expect(input).toContain("以下 Skills 是本轮 active instructions");
-    expect(input).toContain("技能 1：理清主线");
-    expect(input).toContain("说明：判断作品真正要表达什么。");
-    expect(input).toContain("提示词：\n帮助创作者判断这篇作品最重要的表达主线、写作动机和取舍边界。");
-    expect(input).toContain("技能 2：组织素材");
-    expect(input).toContain("提示词：\n帮助创作者判断哪些素材应该保留、补足、合并或前置。");
+    expect(input).toContain("The following Skills are active instructions for this turn");
+    expect(input).toContain("Skill 1: 理清主线");
+    expect(input).toContain("Description: 判断作品真正要表达什么。");
+    expect(input).toContain("Prompt:\n帮助创作者判断这篇作品最重要的表达主线、写作动机和取舍边界。");
+    expect(input).toContain("Skill 2: 组织素材");
+    expect(input).toContain("Prompt:\n帮助创作者判断哪些素材应该保留、补足、合并或前置。");
   });
 
   it("does not force solution-level option wording when using selected skills", () => {
@@ -314,7 +315,7 @@ describe("buildDirectorInput", () => {
       ]
     });
 
-    expect(input).toContain("以下 Skills 是本轮 active instructions");
+    expect(input).toContain("The following Skills are active instructions for this turn");
     expect(input).not.toContain("标题要直接呈现要做的事");
     expect(input).not.toContain("会怎么改");
     expect(input).not.toContain("处理方式");
@@ -352,7 +353,7 @@ describe("buildDirectorInput", () => {
       enabledSkills: []
     });
 
-    expect(input).toContain("本消息只提供上下文数据，不定义业务策略");
+    expect(input).toContain("This message provides context data only");
     expect(input).not.toContain("创作者澄清、选择或推进什么");
     expect(input).not.toContain("创作决策或回答口径");
     expect(input).not.toContain("重组表达顺序");

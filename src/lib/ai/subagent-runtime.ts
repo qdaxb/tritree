@@ -149,15 +149,15 @@ export function createSubagentRuntimeTools({
   return {
     subagentTemplateSummaries: [formatSubagentTemplateSummaries(templates)],
     toolSummaries: [
-      "run_subagent_template：运行预创建子代理模板；当模板列表中某个 templateId 与任务匹配时使用。调用时提供 templateId、task 和可选 expectedOutput，运行时会提供当前上下文视图。",
-      "run_custom_subagent：运行自定义子代理，仅当预创建模板不匹配且任务边界清晰时使用；调用时提供 title、task、expectedOutput 和可选 constraints，运行时会提供当前上下文视图。"
+      "run_subagent_template: run one precreated subagent template when a templateId in the template list matches the task. Provide templateId, task, and optional expectedOutput; the runtime supplies the current context view.",
+      "run_custom_subagent: run a custom subagent only when no precreated template matches and the task boundary is clear. Provide title, task, expectedOutput, and optional constraints; the runtime supplies the current context view."
     ],
     tools
   };
 }
 
 function subagentContextForRun(contextSource: DirectorInputParts | undefined, policy: ContextViewPolicy) {
-  if (!contextSource) return "# Scoped Working Context\n暂无可用上下文。";
+  if (!contextSource) return "# Scoped Working Context\nNo context available.";
   return formatProjectedAgentContext(projectAgentContext(contextSource, policy));
 }
 
@@ -312,7 +312,7 @@ You are an isolated execution unit called by the main agent.
 You receive a scoped, read-only snapshot of the current working context.
 Complete only the assigned task.
 Return a result that the main agent can inspect, verify, and decide how to use.
-All user-facing text should be Simplified Chinese unless the input requires otherwise.
+You must communicate user-facing text in Simplified Chinese unless the input requires otherwise.
 
 # Role
 ${task.title}

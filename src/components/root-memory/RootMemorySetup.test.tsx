@@ -65,7 +65,7 @@ function requestOption(option: { id: string; label: string }, sortOrder = 0): Cr
 const defaultRequestOptionSeeds = [
   { id: "default-preserve-my-meaning", label: "保留我的原意" },
   { id: "default-dont-expand-much", label: "不要扩写太多" },
-  { id: "default-moments", label: "适合发微博" },
+  { id: "default-moments", label: "适合短动态" },
   { id: "default-short-version", label: "先给短版" },
   { id: "default-first-time-reader", label: "写给新手" },
   { id: "default-no-ad-tone", label: "别太像广告" },
@@ -483,7 +483,7 @@ describe("RootMemorySetup", () => {
     ).toEqual([
       "保留我的原意",
       "不要扩写太多",
-      "适合发微博",
+      "适合短动态",
       "先给短版",
       "写给新手",
       "别太像广告",
@@ -606,14 +606,14 @@ describe("RootMemorySetup", () => {
     const onSubmit = vi.fn();
     renderRootMemorySetup({ onSubmit });
 
-    await userEvent.type(screen.getByRole("textbox", { name: "创作 seed" }), "五一来青岛了");
+    await userEvent.type(screen.getByRole("textbox", { name: "创作 seed" }), "周末想写个观察");
     await userEvent.click(screen.getByRole("button", { name: "展开自定义创作要求" }));
     await userEvent.type(screen.getByRole("textbox", { name: "自定义创作要求" }), "面向海外游客，保留中文地名");
     await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
       preferences: expect.objectContaining({
-        seed: "五一来青岛了",
+        seed: "周末想写个观察",
         creationRequest: "面向海外游客，保留中文地名"
       }),
       enabledSkillIds: ["system-analysis"]
@@ -707,17 +707,17 @@ describe("RootMemorySetup", () => {
     const onSubmit = vi.fn();
     renderRootMemorySetup({ onSubmit });
 
-    await userEvent.type(screen.getByRole("textbox", { name: "创作 seed" }), "五一来青岛了");
+    await userEvent.type(screen.getByRole("textbox", { name: "创作 seed" }), "周末想写个观察");
     await userEvent.click(screen.getByRole("button", { name: "展开更多创作要求" }));
     await userEvent.click(screen.getByRole("button", { name: "改成英文" }));
     await userEvent.click(screen.getByRole("button", { name: "展开自定义创作要求" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "自定义创作要求" }), "，写给第一次来青岛的人");
+    await userEvent.type(screen.getByRole("textbox", { name: "自定义创作要求" }), "，写给第一次接触这个话题的人");
     await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
       preferences: expect.objectContaining({
-        seed: "五一来青岛了",
-        creationRequest: "改成英文，写给第一次来青岛的人"
+        seed: "周末想写个观察",
+        creationRequest: "改成英文，写给第一次接触这个话题的人"
       }),
       enabledSkillIds: ["system-analysis"]
     });
