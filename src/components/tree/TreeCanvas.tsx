@@ -1496,7 +1496,7 @@ function OptionModeControl({
             disabled={disabled}
             key={item.value}
             onClick={() => chooseMode(item.value)}
-            title={`${item.description}；点换一组才会刷新当前选项`}
+            title={`${item.description}；点重新生成当前选项才会刷新这三个选项`}
             type="button"
           >
             <span className="option-mode-control__button-label">{item.label}</span>
@@ -1505,15 +1505,15 @@ function OptionModeControl({
       </div>
       {onRegenerateOptions ? (
         <button
-          aria-label="换一组方向"
+          aria-label="重新生成当前选项"
           className="option-mode-refresh"
           disabled={disabled}
           onClick={() => onRegenerateOptions(mode)}
-          title="换一组方向"
+          title="按当前发散度重新生成这三个选项"
           type="button"
         >
           <RefreshCw aria-hidden="true" size={13} strokeWidth={2.4} />
-          <span>换一组</span>
+          <span>重新生成当前选项</span>
         </button>
       ) : null}
     </div>

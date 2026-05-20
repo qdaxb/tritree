@@ -426,6 +426,54 @@ describe("ArtifactWorkspace", () => {
     expect(screen.getByText("这些材料用于帮助选择下一步参考角度。")).toBeInTheDocument();
   });
 
+  it("keeps process materials after the display tool returns only an acknowledgement", () => {
+    const social = socialPostArtifact();
+
+    renderWorkspace({
+      artifacts: [social],
+      currentNode: artifactNode(social.id, {
+        agentMessages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "display-1",
+                toolName: "show_process_data",
+                input: {
+                  title: "参考材料",
+                  sourceToolCallIds: ["tool-1"],
+                  items: [{ title: "参考条目 A", subtitle: "方向 A" }],
+                  note: "工具结果不回显时也要保留。"
+                }
+              }
+            ]
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "display-1",
+                toolName: "show_process_data",
+                output: {
+                  type: "json",
+                  value: true
+                }
+              }
+            ]
+          }
+        ]
+      }),
+      selectedArtifactId: social.id
+    });
+
+    expect(screen.getByRole("heading", { name: "过程材料" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "参考材料" })).toBeInTheDocument();
+    expect(screen.getByText("参考条目 A")).toBeInTheDocument();
+    expect(screen.getByText("工具结果不回显时也要保留。")).toBeInTheDocument();
+  });
+
   it("shows streaming process materials before agent messages are saved", () => {
     const social = socialPostArtifact();
 

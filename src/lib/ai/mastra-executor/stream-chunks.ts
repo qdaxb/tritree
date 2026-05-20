@@ -15,8 +15,10 @@ export type ToolCallDeltaState = {
 };
 
 export type AgentMessageHistoryState = {
+  argsById: Map<string, string>;
   messages: AgentMessage[];
   toolCallIndexesById: Map<string, number>;
+  toolNamesById: Map<string, string>;
   toolResultIds: Set<string>;
 };
 
@@ -407,9 +409,21 @@ export function collectAgentMessageFromStreamChunk(chunk: unknown, state: AgentM
   if (!chunkType.includes("tool")) return;
 
   const payload = isObjectRecord(chunk.payload) ? chunk.payload : chunk;
-  const toolName = toolNameFromPayload(payload);
+  const { toolCallId, toolName } = streamedAgentMessageToolIdentity(payload, state, chunkType);
   if (!toolName || isFinalSubmitToolName(toolName)) return;
-  const toolCallId = stringFromPayload(payload, "toolCallId", "id") || `${toolName}-${state.messages.length + 1}`;
+
+  if (chunkType === "tool-call-streaming-start") {
+    state.argsById.set(toolCallId, "");
+    return;
+  }
+
+  if (chunkType === "tool-call-delta") {
+    const argsTextDelta = stringFromPayload(payload, "argsTextDelta", "delta", "text");
+    if (!argsTextDelta) return;
+
+    state.argsById.set(toolCallId, `${state.argsById.get(toolCallId) ?? ""}${argsTextDelta}`);
+    return;
+  }
 
   if (chunkType === "tool-call" || chunkType === "tool-execution-start") {
     if (state.toolCallIndexesById.has(toolCallId)) return;
@@ -420,7 +434,7 @@ export function collectAgentMessageFromStreamChunk(chunk: unknown, state: AgentM
           type: "tool-call",
           toolCallId,
           toolName,
-          input: toJsonSerializable(toolInputFromPayload(payload))
+          input: toJsonSerializable(toolInputFromPayload(payload) ?? streamedToolInputFromState(toolCallId, state))
         }
       ]
     };
@@ -442,7 +456,7 @@ export function collectAgentMessageFromStreamChunk(chunk: unknown, state: AgentM
           type: "tool-call",
           toolCallId,
           toolName,
-          input: null
+          input: toJsonSerializable(streamedToolInputFromState(toolCallId, state))
         }
       ]
     });
@@ -463,6 +477,33 @@ export function collectAgentMessageFromStreamChunk(chunk: unknown, state: AgentM
       }
     ]
   });
+}
+
+function streamedAgentMessageToolIdentity(
+  payload: Record<string, unknown>,
+  state: AgentMessageHistoryState,
+  chunkType: string
+) {
+  let toolName = toolNameFromPayload(payload);
+  const explicitToolCallId = stringFromPayload(payload, "toolCallId", "id");
+  const toolCallId =
+    explicitToolCallId ||
+    (chunkType === "tool-call-streaming-start" || chunkType === "tool-call-delta"
+      ? toolName
+      : `${toolName || "tool"}-${state.messages.length + 1}`);
+  if (toolCallId && toolName) {
+    state.toolNamesById.set(toolCallId, toolName);
+  } else if (toolCallId) {
+    toolName = state.toolNamesById.get(toolCallId) ?? "";
+  }
+
+  return { toolCallId, toolName };
+}
+
+function streamedToolInputFromState(toolCallId: string, state: AgentMessageHistoryState) {
+  const argsText = state.argsById.get(toolCallId);
+  if (!argsText) return null;
+  return parseMaybeJson(argsText);
 }
 
 function toJsonSerializable(value: unknown): unknown {

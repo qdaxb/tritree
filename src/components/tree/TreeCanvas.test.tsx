@@ -648,7 +648,7 @@ describe("TreeCanvas", () => {
     expect(onChoose).toHaveBeenCalledWith("a", "", "divergent");
   });
 
-  it("keeps direction range changes for the next interaction until refresh is clicked", () => {
+  it("regenerates the current options with the selected direction range", () => {
     const onRegenerateOptions = vi.fn();
     render(
       <BranchOptionTray
@@ -667,13 +667,13 @@ describe("TreeCanvas", () => {
     expect(within(range).getByRole("button", { name: "专注" })).toBeInTheDocument();
     expect(screen.queryByText("兼顾延展和当前稿推进")).not.toBeInTheDocument();
 
-    fireEvent.click(within(range).getByRole("button", { name: "专注" }));
+    fireEvent.click(within(range).getByRole("button", { name: "发散" }));
 
     expect(onRegenerateOptions).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "换一组方向" }));
+    fireEvent.click(screen.getByRole("button", { name: "重新生成当前选项" }));
 
-    expect(onRegenerateOptions).toHaveBeenCalledWith("focused");
+    expect(onRegenerateOptions).toHaveBeenCalledWith("divergent");
   });
 
   it("does not render per-card mode badges that compete with the tray range control", () => {

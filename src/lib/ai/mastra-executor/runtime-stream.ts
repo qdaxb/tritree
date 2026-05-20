@@ -189,8 +189,10 @@ async function consumeRuntimeReActStream<TPartial>(
   let rawText = "";
   let submittedOutput: unknown = undefined;
   const agentMessageHistoryState: AgentMessageHistoryState = {
+    argsById: new Map(),
     messages: [],
     toolCallIndexesById: new Map(),
+    toolNamesById: new Map(),
     toolResultIds: new Set()
   };
   const toolCallDeltaState: ToolCallDeltaState = {

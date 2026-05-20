@@ -400,38 +400,59 @@ function ArtifactPreview({ artifact, isBusy }: { artifact: Artifact; isBusy: boo
 function processMaterialsForNode(node: TreeNode | null): ProcessMaterial[] {
   if (!node) return [];
 
-  return node.agentMessages
-    .flatMap((message) => {
-      if (message.role !== "tool") return [];
+  const seen = new Set<string>();
+  const materials: ProcessMaterial[] = [];
 
-      return structuredParts(message.content).flatMap((part) => {
-        const result = processDataToolResultFromPart(part);
-        if (!result) return [];
+  for (const message of node.agentMessages) {
+    for (const part of structuredParts(message.content)) {
+      const material = processMaterialFromToolPart(part);
+      if (!material) continue;
 
-        const material = processMaterialFromValue(unwrapToolOutput(result.output));
-        return material ? [material] : [];
-      });
-    })
-    .slice(0, 6);
+      const key = JSON.stringify(material);
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      materials.push(material);
+      if (materials.length >= 6) return materials;
+    }
+  }
+
+  return materials;
+}
+
+function processMaterialFromToolPart(part: unknown): ProcessMaterial | null {
+  const value = processDataToolValueFromPart(part);
+  return value === undefined ? null : processMaterialFromValue(unwrapToolOutput(value));
+}
+
+function processDataToolValueFromPart(part: unknown): unknown {
+  if (!isRecord(part)) return undefined;
+
+  const toolName = stringField(part, "toolName") ?? stringField(part, "name") ?? stringField(part, "tool");
+  if (toolName !== SHOW_PROCESS_DATA_TOOL_NAME) return undefined;
+
+  const type = stringField(part, "type");
+  if (
+    type?.includes("tool-result") ||
+    Object.prototype.hasOwnProperty.call(part, "output") ||
+    Object.prototype.hasOwnProperty.call(part, "result")
+  ) {
+    return Object.prototype.hasOwnProperty.call(part, "output") ? part.output : part.result;
+  }
+
+  if (
+    type?.includes("tool-call") ||
+    Object.prototype.hasOwnProperty.call(part, "input") ||
+    Object.prototype.hasOwnProperty.call(part, "args")
+  ) {
+    return Object.prototype.hasOwnProperty.call(part, "input") ? part.input : part.args;
+  }
+
+  return undefined;
 }
 
 function structuredParts(content: TreeNode["agentMessages"][number]["content"]): unknown[] {
   return Array.isArray(content) ? content : [content];
-}
-
-function processDataToolResultFromPart(part: unknown): { output: unknown } | null {
-  if (!isRecord(part)) return null;
-
-  const type = stringField(part, "type");
-  const toolName = stringField(part, "toolName") ?? stringField(part, "name") ?? stringField(part, "tool");
-  if (toolName !== SHOW_PROCESS_DATA_TOOL_NAME) return null;
-
-  const hasResultShape = type?.includes("tool-result") || Object.prototype.hasOwnProperty.call(part, "output") || Object.prototype.hasOwnProperty.call(part, "result");
-  if (!hasResultShape) return null;
-
-  return {
-    output: Object.prototype.hasOwnProperty.call(part, "output") ? part.output : part.result
-  };
 }
 
 function unwrapToolOutput(output: unknown): unknown {

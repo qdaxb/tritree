@@ -2333,7 +2333,7 @@ describe("tree director compatibility generators", () => {
     });
     const processDataEvents: unknown[] = [];
 
-    await streamTreeOptions({
+    const output = await streamTreeOptions({
       parts: directorParts,
       env: { KIMI_API_KEY: "token" },
       onProcessData: (data) => processDataEvents.push(data)
@@ -2347,6 +2347,17 @@ describe("tree director compatibility generators", () => {
       },
       displayedData
     ]);
+    expect(output.agentMessages).toContainEqual({
+      role: "assistant",
+      content: [
+        {
+          type: "tool-call",
+          toolCallId: "display-1",
+          toolName: "show_process_data",
+          input: displayedData
+        }
+      ]
+    });
   });
 
   it("accepts runtime options when the final submit provides three user-facing choices", async () => {
