@@ -263,13 +263,15 @@ export const DirectorNextStepOutputSchema = z.union([
 
 export const DirectorArtifactOutputSchema = z.object({
   roundIntent: z.string().min(1),
-  artifact: GeneratedArtifactSchema.nullable().optional()
+  artifact: GeneratedArtifactSchema.nullable().optional(),
+  isTerminal: z.boolean().optional()
 }).strict();
 
 const DirectorTurnArtifactSchema = z.object({
   action: z.literal("artifact").optional(),
   roundIntent: z.string().min(1),
-  artifact: GeneratedArtifactSchema.nullable().optional()
+  artifact: GeneratedArtifactSchema.nullable().optional(),
+  isTerminal: z.boolean().optional()
 }).strict().transform((output) => ({
   ...output,
   action: "artifact" as const

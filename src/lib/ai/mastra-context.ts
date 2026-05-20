@@ -49,6 +49,7 @@ export function buildTreeArtifactInstructions(input: SharedAgentContextInput) {
     formatGenericReactAgentRole(),
     buildSharedAgentContext(input),
     actualWorkExecutionProtocol(input),
+    branchCompletionProtocol(),
     "# Fixed Goal For This Turn",
     "Fixed goal for this turn: submit an artifact result.",
     "Complete the goal from the input context, enabled Skills, and available tools; domain-specific judgment comes from Skills.",
@@ -57,6 +58,7 @@ export function buildTreeArtifactInstructions(input: SharedAgentContextInput) {
     "These output requirements refer to fields in the structured result or final-submit tool arguments, not to extra natural-language messages.",
     "User-facing fields for this turn include roundIntent, artifact.type, artifact.payload, and artifact.sourceArtifactIds.",
     "artifact.type must match the artifact type for this work; artifact.payload must follow the fields, format, and delivery requirements of that artifact type.",
+    "Control field isTerminal closes the branch only for explicit closure intent; it is not user-facing text.",
     "If a Skill requires fixed text, format, tone, or another observable result, that result must be directly visible in the final returned fields.",
     "The final structured result must include a complete artifact object.",
     "User-facing fields must be written in Simplified Chinese by default; preserve user-authored text, proper nouns, code, brand names, and non-Chinese text explicitly required by active Skills.",
@@ -127,6 +129,7 @@ export function buildTreeTurnInstructions(input: SharedAgentContextInput) {
     formatGenericReactAgentRole(),
     buildSharedAgentContext(input),
     actualWorkExecutionProtocol(input),
+    branchCompletionProtocol(),
     threeChoiceProtocol(),
     "# Fixed Goal For This Turn",
     "Fixed goal for this turn: advance the current user request in one main-agent ReAct loop and end through one final submit tool.",
@@ -137,6 +140,7 @@ export function buildTreeTurnInstructions(input: SharedAgentContextInput) {
     "# Output Contract",
     "These output requirements refer to fields in final-submit tool arguments, not to extra natural-language messages.",
     "User-facing fields for submit_tree_artifact include roundIntent, artifact.type, artifact.payload, and artifact.sourceArtifactIds; artifact may be null.",
+    "Control field isTerminal on submit_tree_artifact closes the branch only for explicit closure intent; it is not user-facing text.",
     "User-facing fields for submit_tree_options include roundIntent, options[].label, options[].description, and options[].impact, and there must be exactly three options.",
     "User-facing fields must be written in Simplified Chinese by default; preserve user-authored text, proper nouns, code, brand names, and non-Chinese text explicitly required by active Skills."
   ]
@@ -181,6 +185,18 @@ function actualWorkExecutionProtocol(input: SharedAgentContextInput) {
   );
 
   return lines.join("\n");
+}
+
+function branchCompletionProtocol() {
+  return [
+    "# Branch Completion Protocol",
+    "Use isTerminal=true only when there is explicit closure intent: the user asks to finish, close, stop, publish, deliver the final version, or otherwise clearly confirms this branch should end.",
+    "Do not set isTerminal merely because this turn produced a readable, polished, or self-contained artifact, including a first draft, normal rewrite, outline, analysis, or intermediate publishing package.",
+    "Ordinary artifact-generation turns should submit the artifact without isTerminal so the system can offer follow-up directions.",
+    "When the current artifact is already final and the user asks for no new work, close the branch with artifact=null or action=complete, depending on the target contract.",
+    "Do not submit three options merely to keep editing after explicit closure.",
+    "Only submit options when a real user decision is still blocking completion."
+  ].join("\n");
 }
 
 function threeChoiceProtocol() {

@@ -198,6 +198,59 @@ describe("TreeCanvas", () => {
     expect(screen.queryByText("等待中")).not.toBeInTheDocument();
   });
 
+  it("opens a custom follow-up field from terminal nodes", () => {
+    const onAddCustomOption = vi.fn();
+    const terminalNode: TreeNode = {
+      ...currentNode,
+      isTerminal: true,
+      options: [],
+      roundIntent: "最终发布包已经完成。"
+    };
+
+    render(
+      <TreeCanvas
+        currentNode={terminalNode}
+        isBusy={false}
+        onChoose={vi.fn()}
+        onAddCustomOption={onAddCustomOption}
+        pendingChoice={null}
+        selectedPath={[]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "继续追问" }));
+    fireEvent.change(screen.getByLabelText("继续追问内容"), {
+      target: { value: "追问这个判断适用于什么团队边界" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始追问" }));
+
+    expect(screen.getByRole("status", { name: "当前路径已完成" })).toHaveTextContent("最终发布包已经完成。");
+    expect(onAddCustomOption).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "追问这个判断适用于什么团队边界",
+        description: "追问这个判断适用于什么团队边界",
+        impact: "按用户自定义方向继续生成。",
+        kind: "reframe"
+      })
+    );
+  });
+
+  it("shows user-forced options on a terminal node once they exist", () => {
+    const terminalNode: TreeNode = {
+      ...currentNode,
+      isTerminal: true,
+      roundIntent: "已完成内容后，还想继续追问什么？"
+    };
+
+    render(
+      <TreeCanvas currentNode={terminalNode} isBusy={false} onChoose={vi.fn()} pendingChoice={null} selectedPath={[]} />
+    );
+
+    expect(screen.queryByRole("status", { name: "当前路径已完成" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "回答当前问题" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "三个主选项" })).toBeInTheDocument();
+  });
+
   it("shows a default-expanded lower-left tree instruction hint", () => {
     render(<TreeCanvas currentNode={currentNode} isBusy={false} onChoose={vi.fn()} pendingChoice={null} selectedPath={[]} />);
 
@@ -1453,6 +1506,7 @@ describe("TreeCanvas", () => {
     expect(formRule).toContain("max-width: calc(100% - 24px)");
     expect(formRule).toContain("max-height: min(420px, calc(100dvh - 160px))");
     expect(formRule).toContain("overflow: auto");
+    expect(formRule).toContain("background: #ffffff");
   });
 
   it("keeps unselected historical options as grey folded side paths", () => {

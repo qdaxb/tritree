@@ -184,14 +184,25 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         }
 
         const artifact = validateGeneratedArtifact(output.artifact);
-        const nextState = repository.updateNodeArtifact({
-          userId: user.id,
-          sessionId,
-          nodeId: targetNode.id,
-          roundIntent: output.roundIntent,
-          artifact,
-          ...(output.agentMessages?.length ? { agentMessages: output.agentMessages } : {})
-        });
+        const nextState = output.isTerminal
+          ? repository.completeNode({
+              userId: user.id,
+              sessionId,
+              nodeId: targetNode.id,
+              output: {
+                roundIntent: output.roundIntent
+              },
+              artifact,
+              ...(output.agentMessages?.length ? { agentMessages: output.agentMessages } : {})
+            })
+          : repository.updateNodeArtifact({
+              userId: user.id,
+              sessionId,
+              nodeId: targetNode.id,
+              roundIntent: output.roundIntent,
+              artifact,
+              ...(output.agentMessages?.length ? { agentMessages: output.agentMessages } : {})
+            });
         const savedArtifact = artifactForNode(nextState, targetNode.id);
         if (!savedArtifact) {
           throw new Error("Updated artifact was not found in the session state.");

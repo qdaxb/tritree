@@ -143,8 +143,9 @@ export function finalSubmitToolRequiredError(target: RuntimeSubmitTarget) {
 
 export function artifactOutputShapeSummary() {
   return [
-    "Must return an object: { roundIntent, artifact }.",
-    "artifact may be null. If an artifact is produced, it must include { type, payload }; the payload structure is defined by the corresponding artifact plugin."
+    "Must return an object: { roundIntent, artifact, isTerminal? }.",
+    "artifact may be null. If an artifact is produced, it must include { type, payload }; the payload structure is defined by the corresponding artifact plugin.",
+    "Set isTerminal=true only for explicit closure intent, such as when the user asks to finish, stop, publish, or deliver the final version. Do not set it merely because the artifact is readable or complete."
   ].join("\n");
 }
 
@@ -171,7 +172,7 @@ export function nextStepOutputShapeSummary() {
 export function turnOutputShapeSummary() {
   return [
     "Must call one final submit tool: submit_tree_artifact or submit_tree_options.",
-    "submit_tree_artifact arguments must be { roundIntent, artifact }; artifact may be null. If an artifact is produced, artifact must include { type, payload }.",
+    "submit_tree_artifact arguments must be { roundIntent, artifact, isTerminal? }; artifact may be null. If an artifact is produced, artifact must include { type, payload }. Use isTerminal=true only for explicit closure intent, not for ordinary drafts or rewrites.",
     "submit_tree_options arguments must be { roundIntent, options }; options must contain exactly 3 items, and ids must be a, b, and c, each appearing exactly once."
   ].join("\n");
 }

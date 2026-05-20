@@ -4,6 +4,7 @@ import {
   buildTreeArtifactInstructions,
   buildTreeNextStepInstructions,
   buildTreeOptionsInstructions,
+  buildTreeTurnInstructions,
   type SharedAgentContextInput
 } from "./mastra-context";
 
@@ -211,6 +212,7 @@ describe("agent instructions", () => {
     expect(artifactInstructions).toContain("Fixed goal for this turn: submit an artifact result");
     expect(artifactInstructions).toContain("submit_tree_artifact");
     expect(artifactInstructions).toContain("artifact.type, artifact.payload, and artifact.sourceArtifactIds");
+    expect(artifactInstructions).toContain("isTerminal");
     expect(artifactInstructions).not.toContain("# Three-Choice Interaction Protocol");
 
     expect(optionsInstructions.startsWith("# ReAct Agent")).toBe(true);
@@ -236,6 +238,16 @@ describe("agent instructions", () => {
     expect(artifactInstructions.indexOf("# ReAct Execution Protocol")).toBeGreaterThan(artifactInstructions.indexOf("# Available Skills"));
     expect(artifactInstructions.indexOf("# Fixed Goal For This Turn")).toBeGreaterThan(artifactInstructions.indexOf("# ReAct Execution Protocol"));
     expect(artifactInstructions.indexOf("# Output Contract")).toBeGreaterThan(artifactInstructions.indexOf("# Fixed Goal For This Turn"));
+  });
+
+  it("tells the main turn to close a branch only on explicit closure intent", () => {
+    const instructions = buildTreeTurnInstructions(shellInput);
+
+    expect(instructions).toContain("Branch Completion Protocol");
+    expect(instructions).toContain("explicit closure intent");
+    expect(instructions).toContain("isTerminal=true");
+    expect(instructions).toContain("Do not set isTerminal merely because");
+    expect(instructions).toContain("first draft");
   });
 
   it("keeps displayed process material aligned with the same three-choice question", () => {

@@ -2,7 +2,7 @@
 
 import * as d3 from "d3";
 import clsx from "clsx";
-import { CheckCircle2, ChevronLeft, ChevronRight, RefreshCw, X } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Plus, RefreshCw, X } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -695,8 +695,9 @@ export function TreeCanvas({
   const currentNodeHasChildren = Boolean(
     currentNode && treeNodes?.some((node) => node.parentId === currentNode.id)
   );
-  const currentPrimaryOptionCount =
-    !isTerminalNode && currentNode ? currentNode.options.filter((option) => isPrimaryBranchOptionId(option.id)).length : 0;
+  const currentPrimaryOptionCount = currentNode
+    ? currentNode.options.filter((option) => isPrimaryBranchOptionId(option.id)).length
+    : 0;
   const effectiveVisibleOptionCount =
     nodeId && previousNodeIdRef.current === nodeId && !isBranchGenerating ? visibleOptionCount : 0;
   const isRevealing = Boolean(
@@ -1223,8 +1224,12 @@ export function TreeCanvas({
       {!currentNode && !pendingBranch ? (
         <div className="tree-empty">输入 seed 后开始创作，第一个问题和三个答案会出现在这里。</div>
       ) : null}
-      {shouldShowBranchControls && isTerminalNode && currentNode && !pendingBranch ? (
-        <BranchCompletePanel message={currentNode.roundIntent} />
+      {shouldShowBranchControls && isTerminalNode && currentNode && currentPrimaryOptionCount === 0 && !pendingBranch ? (
+        <BranchCompletePanel
+          isBusy={isBusy}
+          message={currentNode.roundIntent}
+          onAddCustomOption={onAddCustomOption}
+        />
       ) : shouldShowBranchControls && currentNode && !pendingBranch ? (
         <BranchOptionTray
           isBusy={isBusy}
@@ -1287,7 +1292,15 @@ function TreeOperationHint({
   );
 }
 
-function BranchCompletePanel({ message }: { message?: string }) {
+function BranchCompletePanel({
+  isBusy,
+  message,
+  onAddCustomOption
+}: {
+  isBusy: boolean;
+  message?: string;
+  onAddCustomOption?: (option: BranchOption) => void;
+}) {
   const trimmedMessage = message?.trim() || "当前作品已经收束。";
 
   return (
@@ -1299,6 +1312,21 @@ function BranchCompletePanel({ message }: { message?: string }) {
         <span>已完成</span>
       </div>
       <p className="branch-complete-panel__text">{trimmedMessage}</p>
+      {onAddCustomOption ? (
+        <MoreDirectionsCard
+          buttonClassName="branch-complete-panel__action"
+          disabled={isBusy}
+          fieldLabel="想继续追问什么？"
+          formClassName="branch-side-form branch-side-form--complete"
+          headerLabel="继续追问"
+          onAddCustomOption={onAddCustomOption}
+          placeholder="例如：追问这个结论适用于什么团队边界"
+          submitLabel="开始追问"
+          textareaLabel="继续追问内容"
+          triggerLabel="继续追问"
+          triggerTitle="继续追问"
+        />
+      ) : null}
     </div>
   );
 }
@@ -1685,11 +1713,29 @@ function BranchOptionComposer({
 }
 
 function MoreDirectionsCard({
+  buttonClassName = "branch-side-action",
   disabled,
-  onAddCustomOption
+  fieldLabel = "想让它怎么写？",
+  formClassName = "branch-side-form",
+  headerLabel = "自己写方向",
+  onAddCustomOption,
+  placeholder = "例如：从评论区争议切入，语气更像朋友聊天",
+  submitLabel = "添加",
+  textareaLabel = "自己写方向",
+  triggerLabel = "自己写方向",
+  triggerTitle = "写一个自己的方向"
 }: {
+  buttonClassName?: string;
   disabled: boolean;
+  fieldLabel?: string;
+  formClassName?: string;
+  headerLabel?: string;
   onAddCustomOption?: (option: BranchOption) => void;
+  placeholder?: string;
+  submitLabel?: string;
+  textareaLabel?: string;
+  triggerLabel?: string;
+  triggerTitle?: string;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState("");
@@ -1706,14 +1752,15 @@ function MoreDirectionsCard({
   if (!isEditing) {
     return (
       <button
-        aria-label="自己写方向"
-        className="branch-side-action"
+        aria-label={triggerLabel}
+        className={buttonClassName}
         disabled={disabled}
         onClick={() => setIsEditing(true)}
-        title="写一个自己的方向"
+        title={triggerTitle}
         type="button"
       >
-        自己写方向
+        {buttonClassName === "branch-complete-panel__action" ? <Plus aria-hidden="true" size={13} strokeWidth={2.4} /> : null}
+        <span>{triggerLabel}</span>
       </button>
     );
   }
@@ -1736,26 +1783,26 @@ function MoreDirectionsCard({
   }
 
   return (
-    <div className="branch-side-form">
+    <div className={formClassName}>
       <div className="branch-side-form__header">
-        <strong>自己写方向</strong>
-        <button aria-label="关闭自己写方向" disabled={disabled} onClick={closeCustomOption} type="button">
+        <strong>{headerLabel}</strong>
+        <button aria-label={`关闭${headerLabel}`} disabled={disabled} onClick={closeCustomOption} type="button">
           关闭
         </button>
       </div>
       <label className="branch-card__field">
-        <span>想让它怎么写？</span>
+        <span>{fieldLabel}</span>
         <textarea
-          aria-label="自己写方向"
+          aria-label={textareaLabel}
           disabled={disabled}
           onChange={(event) => setContent(event.target.value)}
-          placeholder="例如：从评论区争议切入，语气更像朋友聊天"
+          placeholder={placeholder}
           rows={3}
           value={content}
         />
       </label>
       <button className="branch-card__confirm" disabled={disabled || !trimmedContent} onClick={addCustomOption} type="button">
-        添加
+        {submitLabel}
       </button>
     </div>
   );

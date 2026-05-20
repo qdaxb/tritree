@@ -57,6 +57,10 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   }
   const focusedNode = focusedState.currentNode;
 
+  if (focusedNode.isTerminal && !body.force) {
+    return new Response(encodeNdjson({ type: "done", state }), { headers: ndjsonHeaders });
+  }
+
   if (focusedNode.options.length === 3 && !body.force) {
     return new Response(encodeNdjson({ type: "done", state }), { headers: ndjsonHeaders });
   }

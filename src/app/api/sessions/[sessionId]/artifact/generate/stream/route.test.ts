@@ -227,6 +227,66 @@ describe("POST /api/sessions/:sessionId/artifact/generate/stream", () => {
     expect(text.indexOf('"type":"artifact.replace"')).toBeLessThan(text.indexOf('"type":"done"'));
   });
 
+  it("completes the branch when the director submits a terminal artifact", async () => {
+    const generatedArtifact = {
+      type: "social-post",
+      payload: { title: "可发布", body: "最终正文", hashtags: ["#发布"], imagePrompt: "最终图" },
+      sourceArtifactIds: ["artifact-1"]
+    };
+    const savedArtifact = {
+      id: "artifact-2",
+      version: 1,
+      createdByNodeId: "node-2",
+      createdAt: "2026-04-27T00:00:01.000Z",
+      updatedAt: "2026-04-27T00:00:01.000Z",
+      ...generatedArtifact
+    };
+    const finalState = {
+      ...state,
+      currentArtifact: savedArtifact,
+      artifacts: [...state.artifacts, savedArtifact],
+      nodeArtifacts: [...state.nodeArtifacts, { nodeId: "node-2", artifact: savedArtifact }],
+      currentNode: { ...childNode, kind: "artifact", producedArtifactId: "artifact-2", isTerminal: true }
+    };
+    const completeNode = vi.fn().mockReturnValue(finalState);
+    const updateNodeArtifact = vi.fn();
+    getRepositoryMock.mockReturnValue({
+      getSessionState: vi.fn().mockReturnValue(state),
+      completeNode,
+      updateNodeArtifact
+    });
+    streamDirectorTurnMock.mockResolvedValue({
+      action: "artifact",
+      roundIntent: "发布包已完成",
+      artifact: generatedArtifact,
+      isTerminal: true,
+      agentMessages: [{ role: "assistant", content: "ready" }]
+    });
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/artifact/generate/stream", {
+        method: "POST",
+        body: JSON.stringify({ nodeId: "node-2" })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+    const text = await response.text();
+
+    expect(completeNode).toHaveBeenCalledWith({
+      userId: "user-1",
+      sessionId: "session-1",
+      nodeId: "node-2",
+      output: { roundIntent: "发布包已完成" },
+      artifact: generatedArtifact,
+      agentMessages: [{ role: "assistant", content: "ready" }]
+    });
+    expect(updateNodeArtifact).not.toHaveBeenCalled();
+    expect(text).toContain('"type":"artifact.replace"');
+    expect(text).toContain('"id":"artifact-2"');
+    expect(text).toContain('"isTerminal":true');
+    expect(text).toContain('"type":"done"');
+  });
+
   it("streams partial draft previews before the saved artifact", async () => {
     const generatedArtifact = {
       type: "social-post",

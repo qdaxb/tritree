@@ -234,6 +234,84 @@ describe("POST /api/sessions/:sessionId/options", () => {
     });
   });
 
+  it("does not automatically generate more options for a terminal branch", async () => {
+    const terminalState = {
+      ...state,
+      currentNode: { ...node, isTerminal: true },
+      selectedPath: [{ ...node, isTerminal: true }],
+      treeNodes: [{ ...node, isTerminal: true }]
+    };
+    const updateNodeOptions = vi.fn();
+    getRepositoryMock.mockReturnValue({
+      getSessionState: vi.fn().mockReturnValue(terminalState),
+      updateNodeOptions
+    });
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/options", {
+        method: "POST",
+        body: JSON.stringify({ nodeId: "node-1" })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+    const text = await response.text();
+
+    expect(text).toContain('"type":"done"');
+    expect(streamDirectorOptionsMock).not.toHaveBeenCalled();
+    expect(updateNodeOptions).not.toHaveBeenCalled();
+  });
+
+  it("lets the user explicitly continue a terminal branch with forced options", async () => {
+    const terminalState = {
+      ...state,
+      currentNode: { ...node, isTerminal: true },
+      selectedPath: [{ ...node, isTerminal: true }],
+      treeNodes: [{ ...node, isTerminal: true }]
+    };
+    const output = {
+      roundIntent: "已完成内容后，还想继续追问什么？",
+      options: [
+        { id: "a", label: "延展", description: "继续延展。", impact: "形成新分支。", kind: "deepen" },
+        { id: "b", label: "复盘", description: "回看结构。", impact: "沉淀经验。", kind: "explore" },
+        { id: "c", label: "改写", description: "换一种表达。", impact: "打开新版本。", kind: "reframe" }
+      ]
+    };
+    const stateWithOptions = {
+      ...terminalState,
+      currentNode: { ...terminalState.currentNode, options: output.options }
+    };
+    const updateNodeOptions = vi.fn().mockReturnValue(stateWithOptions);
+    getRepositoryMock.mockReturnValue({
+      getSessionState: vi.fn().mockReturnValue(terminalState),
+      updateNodeOptions
+    });
+    streamDirectorOptionsMock.mockResolvedValue({
+      ...output,
+      agentMessages: [{ role: "assistant", content: "continued" }]
+    });
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/options", {
+        method: "POST",
+        body: JSON.stringify({ nodeId: "node-1", force: true })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+    const text = await response.text();
+
+    expect(streamDirectorOptionsMock).toHaveBeenCalled();
+    expect(updateNodeOptions).toHaveBeenCalledWith({
+      userId: "user-1",
+      sessionId: "session-1",
+      nodeId: "node-1",
+      output,
+      agentMessages: [{ role: "assistant", content: "continued" }]
+    });
+    expect(text).toContain('"type":"options"');
+    expect(text).toContain("已完成内容后，还想继续追问什么？");
+    expect(text).toContain('"type":"done"');
+  });
+
   it("passes option mode into current-work option generation", async () => {
     const output = {
       roundIntent: "下一步",

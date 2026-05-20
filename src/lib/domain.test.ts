@@ -181,6 +181,19 @@ describe("DirectorOptionsOutputSchema", () => {
   });
 });
 
+describe("DirectorArtifactOutputSchema", () => {
+  it("accepts a terminal artifact result for a completed branch", () => {
+    const parsed = DirectorArtifactOutputSchema.parse({
+      roundIntent: "发布包已完成",
+      artifact: validGeneratedArtifact(),
+      isTerminal: true
+    });
+
+    expect(parsed.isTerminal).toBe(true);
+    expect(parsed.artifact?.type).toBe("social-post");
+  });
+});
+
 describe("DirectorNextStepOutputSchema", () => {
   it("accepts a routing decision to generate an artifact without embedding the artifact", () => {
     const parsed = DirectorNextStepOutputSchema.parse({
