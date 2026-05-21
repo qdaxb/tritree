@@ -2236,6 +2236,10 @@ describe("tree director compatibility generators", () => {
     expect(constructedOptions.instructions).toContain("show_process_data");
     expect(constructedOptions.instructions).toContain("Show only organized material from newly called tools in this turn");
     expect(constructedOptions.instructions).toContain("Do not replay historical show_process_data, duplicate final options");
+    expect(constructedOptions.instructions).toContain("When an item comes from an external source and a URL is available, put that URL in items[].url");
+    expect(constructedOptions.instructions).toContain("Do not leave external-source citations only in title, subtitle, or meta");
+    expect(constructedOptions.instructions).toContain("Every source-backed process item must include a clickable URL in items[].url");
+    expect(constructedOptions.instructions).toContain("Source names in meta are not clickable citations");
     expect(processDataEvents).toEqual([displayedData]);
     expect(progressEvents.map((event) => event.accumulatedText).join("\n")).not.toContain("show_process_data");
     expect(output.agentMessages).toContainEqual({
@@ -2264,7 +2268,7 @@ describe("tree director compatibility generators", () => {
       title: "参考材料",
       sourceToolCallIds: ["tool-1"],
       items: [
-        { title: "参考条目 A", subtitle: "方向 A" },
+        { title: "参考条目 A", subtitle: "方向 A", url: "https://example.com/a" },
         { title: "参考条目 B", meta: "#2" }
       ]
     };
@@ -2298,7 +2302,7 @@ describe("tree director compatibility generators", () => {
           payload: {
             toolCallId: "display-1",
             toolName: "show_process_data",
-            argsTextDelta: '","subtitle":"方向 A"},{"title":"参考条目 B","meta":"#2"}]}'
+            argsTextDelta: '","subtitle":"方向 A","url":"https://example.com/a"},{"title":"参考条目 B","meta":"#2"}]}'
           }
         };
         yield {

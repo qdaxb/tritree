@@ -404,8 +404,8 @@ describe("ArtifactWorkspace", () => {
                     title: "参考材料",
                     sourceToolCallIds: ["tool-1"],
                     items: [
-                      { title: "参考条目 A", subtitle: "方向 A", meta: "#5 · 120万" },
-                      { title: "参考条目 B", subtitle: "方向 B", meta: "#9 · 98万" }
+                      { title: "参考条目 A", subtitle: "方向 A", meta: "#5 · 120万", url: "https://example.com/a" },
+                      { title: "参考条目 B", subtitle: "方向 B", meta: "#9 · 98万", source_url: "https://example.com/b" }
                     ],
                     note: "这些材料用于帮助选择下一步参考角度。"
                   }
@@ -420,7 +420,9 @@ describe("ArtifactWorkspace", () => {
 
     expect(screen.getByRole("heading", { name: "过程材料" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "参考材料" })).toBeInTheDocument();
-    expect(screen.getByText("参考条目 A")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "参考条目 A 来源" })).toHaveAttribute("href", "https://example.com/a");
+    expect(screen.getByRole("link", { name: "参考条目 A 来源" })).toHaveClass("artifact-workspace__material-link");
+    expect(screen.getByRole("link", { name: "参考条目 B 来源" })).toHaveAttribute("href", "https://example.com/b");
     expect(screen.getByText("方向 A")).toBeInTheDocument();
     expect(screen.getByText("#5 · 120万")).toBeInTheDocument();
     expect(screen.getByText("这些材料用于帮助选择下一步参考角度。")).toBeInTheDocument();
@@ -443,7 +445,7 @@ describe("ArtifactWorkspace", () => {
                 input: {
                   title: "参考材料",
                   sourceToolCallIds: ["tool-1"],
-                  items: [{ title: "参考条目 A", subtitle: "方向 A" }],
+                  items: [{ title: "参考条目 A", subtitle: "方向 A", url: "https://example.com/a" }],
                   note: "工具结果不回显时也要保留。"
                 }
               }
@@ -470,7 +472,7 @@ describe("ArtifactWorkspace", () => {
 
     expect(screen.getByRole("heading", { name: "过程材料" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "参考材料" })).toBeInTheDocument();
-    expect(screen.getByText("参考条目 A")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "参考条目 A 来源" })).toHaveAttribute("href", "https://example.com/a");
     expect(screen.getByText("工具结果不回显时也要保留。")).toBeInTheDocument();
   });
 

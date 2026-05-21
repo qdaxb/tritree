@@ -55,15 +55,11 @@ const defaultSystemSkillIds = [
 const defaultLoadedSystemSkillIds = ["system-creator", "system-planner"];
 
 const repositoryCreationRequestOptions: ConfiguredDefaults["creationRequestOptions"] = [
-  { id: "default-preserve-my-meaning", label: "保留我的原意" },
-  { id: "default-dont-expand-much", label: "不要扩写太多" },
-  { id: "default-moments", label: "适合短动态" },
-  { id: "default-short-version", label: "先给短版" },
-  { id: "default-first-time-reader", label: "写给新手" },
-  { id: "default-no-ad-tone", label: "别太像广告" },
-  { id: "default-friend-tone", label: "像发给朋友" },
-  { id: "default-experienced-reader", label: "写给懂行的人" },
-  { id: "default-english", label: "改成英文" }
+  { id: "default-search-materials", label: "搜资料" },
+  { id: "default-find-topics", label: "找选题" },
+  { id: "default-copy-polish", label: "文案润色" },
+  { id: "default-review-proofread", label: "审稿及校对" },
+  { id: "default-short-weibo", label: "缩短到300字" }
 ];
 
 function writeDefaultsConfig({

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   focusSessionStateForNode,
   summarizeArtifactSelectionRewriteForDirector,
@@ -9,6 +9,10 @@ import {
 import type { Artifact, BranchOption, SessionState, Skill, TreeNode } from "./domain";
 
 describe("summarizeSessionForDirector", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("summarizes current artifacts through their plugins", () => {
     const state = createArtifactState({
       currentArtifact: {
@@ -155,6 +159,45 @@ describe("summarizeSessionForDirector", () => {
       "Based on the initial content and existing context"
     );
     expect(optionMessages.at(-1)?.content ?? optionMessages[0].content).not.toContain("当前内容：\n标题：");
+  });
+
+  it("puts runtime time and research creation request guidance into option messages", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-21T09:45:00"));
+    const state = {
+      ...createStateWithPath([
+        createNode({
+          id: "current",
+          roundIndex: 1,
+          options: [],
+          selectedOptionId: null
+        })
+      ]),
+      rootMemory: {
+        ...createStateWithPath([]).rootMemory,
+        preferences: {
+          ...createStateWithPath([]).rootMemory.preferences,
+          creationRequest: "搜资料",
+          seed: "关于meta裁员的信息"
+        },
+        summary: "Seed：关于meta裁员的信息\n本次创作要求：搜资料"
+      }
+    };
+
+    const summary = summarizeCurrentArtifactOptionsForDirector(state);
+    const messages = (summary as any).messages as Array<{ role: string; content: string }>;
+    const promptText = messages.map((message) => message.content).join("\n\n");
+    const finalMessage = messages.at(-1)?.content ?? "";
+
+    expect(messages[0].content).toContain("Current time:");
+    expect(messages[0].content).toMatch(/2026-05-21 .*09:45/);
+    expect(messages[0].content).toContain("星期四");
+    expect(promptText).toContain("Current task intent from creation request: 搜资料");
+    expect(promptText).toContain("research/source-gathering task");
+    expect(promptText).toContain("research scopes, source types, facts to verify, or material gaps");
+    expect(finalMessage).toContain("Current task intent from creation request: 搜资料");
+    expect(finalMessage).toContain("research/source-gathering task");
+    expect(finalMessage).toContain("that serve the current task intent");
   });
 
   it("includes user notes for the selected option", () => {

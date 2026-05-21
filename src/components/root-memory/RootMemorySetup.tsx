@@ -412,7 +412,7 @@ export function RootMemorySetup({
           <div className="root-setup__request-header">
             <div>
               <p className="eyebrow">本次创作要求</p>
-              <p className="root-setup__request-copy">可选。指定语言、读者、语气或限制。</p>
+              <p className="root-setup__request-copy">可选。选择这次要处理的具体任务。</p>
             </div>
             <div className="root-setup__request-actions">
               {!isManagingRequestOptions ? (
@@ -576,7 +576,7 @@ export function RootMemorySetup({
                     disabled={isSaving}
                     maxLength={240}
                     onChange={(event) => setCreationRequest(event.target.value)}
-                    placeholder="例如：保留我的原意，像发给朋友，不要扩写太多"
+                    placeholder="例如：搜资料，找选题，文案润色"
                     rows={2}
                     value={creationRequest}
                   />

@@ -65,7 +65,7 @@ const ARTIFACT_TYPES = [
     generationInstructions:
       "Artifact type: social-post content. Output artifact.type=\"social-post\". User-facing text must be Simplified Chinese by default. artifact.payload.title is an optional title, artifact.payload.body is the body text, artifact.payload.hashtags is a string array of topics, and artifact.payload.imagePrompt is an optional image prompt.",
     optionInstructions:
-      "Clarifying questions and the three answers should focus on social-media expression decisions, such as reader, angle, story, point of view, structure, compression, title, topics, or pre-publish closure."
+      "Clarifying questions and the three answers should focus on social-media expression decisions, such as reader, angle, story, point of view, structure, compression, title, topics, or pre-publish closure. If the current creation request names a concrete task, such as research/source-gathering, review, polish, or compression, let that task define the option surface first; social expression decisions are the default, not an override."
   },
   {
     id: "prd",

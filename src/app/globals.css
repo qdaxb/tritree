@@ -3990,12 +3990,52 @@ button:disabled {
 }
 
 .artifact-workspace__material-item-title a {
-  color: inherit;
-  text-decoration: none;
+  color: #0f766e;
+  text-decoration: underline;
+  text-decoration-color: rgba(15, 118, 110, 0.34);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
 }
 
 .artifact-workspace__material-item-title a:hover {
+  color: #0d9488;
+  text-decoration-color: currentColor;
+}
+
+.artifact-workspace__material-link {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.artifact-workspace__material-link > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifact-workspace__material-link-source {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.08);
   color: #0f766e;
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.artifact-workspace__material-link:hover .artifact-workspace__material-link-source {
+  border-color: rgba(13, 148, 136, 0.42);
+  background: rgba(20, 184, 166, 0.14);
+  color: #0d9488;
   text-decoration: underline;
 }
 

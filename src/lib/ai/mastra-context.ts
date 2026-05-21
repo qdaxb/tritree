@@ -1,6 +1,6 @@
 import type { Skill } from "@/lib/domain";
 
-const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const WEEKDAY_NAMES = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
 
 export function formatCurrentDateTime(now: Date = new Date()): string {
   const weekday = WEEKDAY_NAMES[now.getDay()];
@@ -163,6 +163,10 @@ function actualWorkExecutionProtocol(input: SharedAgentContextInput) {
   const lines = [
     "# ReAct Execution Protocol",
     "Before doing the actual work, decide which Skills this turn should load; after selection, execute according to the responsibilities and standards of the selected Skills.",
+    "Task intent means the concrete job to complete this turn: it controls skill choice, tool choice, and the option surface. It is different from style, tone, platform, audience, or output-format constraints.",
+    "Creation request fields, current task-intent fields, or similarly short user labels are task-intent signals unless a later user message overrides them.",
+    "Examples: labels that mean search materials, source finding, fact checking, or research mean a research/source-gathering task; topic-finding labels mean topic discovery; copy-polish labels mean wording polish; review/proofreading labels mean review; length-limit labels mean compression.",
+    "Treat short task labels in the input as the current task intent, not merely as style constraints; a brief search, research, source-finding, review, or polish request should steer what this turn does.",
     "When this turn explicitly requires finding, checking, or adding evidence, locating sources, or confirming external information, prefer available tools to obtain or verify material; directly organize only when the input context already provides material that is sufficiently specific and traceable.",
     "Prefer to advance the highest-value work in the main agent; complete judgment, organization, rewriting, or submission directly when the main agent can do so."
   ];
@@ -205,7 +209,8 @@ function threeChoiceProtocol() {
     "Three-choice is the user interaction and display protocol: when this turn requires the user to choose among three executable answers, first form decisionRationale, then write the question the user must decide as roundIntent.",
     "All three options must answer the same roundIntent; they must not become three unrelated new questions.",
     "If this turn already has a clear current work, selected direction, or user supplement, roundIntent and the three options must carry that context forward; do not return to earlier initial input, candidate direction lists, or a generic next step.",
-    "If this turn called search, material, subagent, or process-display tools, submitted options must show that tool results have been inspected and absorbed: the three options should be ways to use the new material, not a reset to the pre-research question.",
+    "If this turn called search, material, subagent, or process-display tools, submitted options must show that tool results have been inspected and absorbed: the three options should continue the current task with the new material, not reset to the pre-research question.",
+    "For research-like requests, the three options should compare research scopes, source types, facts to verify, or material gaps. Draft-angle choices belong after the material is sufficient or the user asks to write.",
     "Each option must be concrete enough for the user to compare the impact of choosing it.",
     "Process material may only support the same roundIntent and the same three options when it is displayed at the same time. Do not write process material as another A/B/C set, candidate topic list, or selection list."
   ].join("\n");

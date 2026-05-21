@@ -104,7 +104,7 @@ describe("subagent runtime tools", () => {
       context: expect.stringContaining("最新正文"),
       env: { KIMI_API_KEY: "test-token" },
       expectedOutput:
-        "A material list. Each item should include source, key point, usable angle, credibility note, and advice on how the main agent can use it.",
+        "A material list. Every source-backed item should include source, source_url, key point, usable angle, credibility note, and advice on how the main agent can use it. Preserve original URLs so the main agent can pass them to show_process_data items[].url.",
       task: "找三条资料",
       template: expect.objectContaining({ id: "material-search", title: "搜索资料" }),
       title: "搜索资料",

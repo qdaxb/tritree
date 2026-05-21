@@ -57,6 +57,15 @@ describe("artifact type registry", () => {
     expect(instructions).not.toContain("work.");
   });
 
+  it("keeps social-post option instructions subordinate to explicit task requests", () => {
+    const instructions = formatArtifactInstructionsForDirector("social-post");
+
+    expect(instructions).toContain("social-media expression decisions");
+    expect(instructions).toContain("If the current creation request names a concrete task");
+    expect(instructions).toContain("research/source-gathering");
+    expect(instructions).toContain("social expression decisions are the default");
+  });
+
   it("builds PRD delivery markdown and section checks", () => {
     const delivery = buildArtifactDelivery("prd", {
       title: "移动端作品管理 PRD",

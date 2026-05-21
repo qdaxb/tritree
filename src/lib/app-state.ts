@@ -8,6 +8,7 @@ import {
   type SessionState
 } from "@/lib/domain";
 import type { DirectorInputParts, DirectorMessage } from "@/lib/ai/prompts";
+import { formatCurrentDateTime } from "@/lib/ai/mastra-context";
 import { formatArtifactInstructionsForDirector } from "@/lib/artifacts";
 import { getArtifactPlugin } from "@/artifacts/registry";
 
@@ -198,12 +199,7 @@ function buildArtifactConversationMessages(state: SessionState, finalUserRequest
   const messages: DirectorMessage[] = [
     {
       role: "user",
-      content: [
-        artifactContextForState(state),
-        `Initial content:\n${state.rootMemory.summary}`
-      ]
-        .filter(Boolean)
-        .join("\n\n")
+      content: formatInitialDirectorContext(state)
     }
   ];
 
@@ -236,12 +232,7 @@ function buildEditorMessages(state: SessionState, currentArtifact: Artifact | nu
   const messages: DirectorMessage[] = [
     {
       role: "user",
-      content: [
-        artifactContextForState(state),
-        `Initial content:\n${state.rootMemory.summary}`
-      ]
-        .filter(Boolean)
-        .join("\n\n")
+      content: formatInitialDirectorContext(state)
     }
   ];
   const lastPathIndex = state.selectedPath.length - 1;
@@ -272,7 +263,7 @@ function buildEditorMessages(state: SessionState, currentArtifact: Artifact | nu
     messages.push({ role: "assistant", content: formatCurrentArtifactForWriter(currentArtifact) });
   }
 
-  messages.push({ role: "user", content: formatFollowUpOptionsRequest(currentArtifact, reviewInstruction) });
+  messages.push({ role: "user", content: formatFollowUpOptionsRequest(state, currentArtifact, reviewInstruction) });
 
   return mergeConsecutiveUserMessages(messages);
 }
@@ -395,16 +386,60 @@ function artifactContextForState(state: SessionState) {
   return formatArtifactInstructionsForDirector(artifactTypeIdForState(state));
 }
 
+function formatInitialDirectorContext(state: SessionState) {
+  return [
+    artifactContextForState(state),
+    `Current time: ${formatCurrentDateTime()}`,
+    taskIntentContextForState(state),
+    `Initial content:\n${state.rootMemory.summary}`
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function taskIntentContextForState(state: SessionState) {
+  const creationRequest = state.rootMemory.preferences.creationRequest?.trim();
+  if (!creationRequest) return "";
+
+  return [
+    `Current task intent from creation request: ${creationRequest}`,
+    "Task intent is the concrete work requested for this turn, not merely tone, style, platform, reader, or output-format guidance.",
+    taskIntentGuidance(creationRequest)
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function taskIntentGuidance(creationRequest: string) {
+  if (isResearchTaskIntent(creationRequest)) {
+    return "This is a research/source-gathering task. For three-choice options, compare research scopes, source types, facts to verify, or material gaps before drafting angles.";
+  }
+
+  return "";
+}
+
+function isResearchTaskIntent(value: string) {
+  return /搜资料|找资料|查资料|找来源|找证据|检索|核查|fact[-\s]?check|research|source/i.test(value);
+}
+
 function shouldRepeatArtifactContextForFinalRequest(state: SessionState) {
   return artifactTypeIdForState(state) !== DEFAULT_ARTIFACT_TYPE_ID;
 }
 
-function formatFollowUpOptionsRequest(currentArtifact: Artifact | null, reviewInstruction: string) {
+function formatFollowUpOptionsRequest(state: SessionState, currentArtifact: Artifact | null, reviewInstruction: string) {
+  const taskIntentContext = taskIntentContextForState(state);
+  const followUpRequest = currentArtifact
+    ? taskIntentContext
+      ? "Based on the AI result above, continue by giving three optional next directions that serve the current task intent."
+      : "Based on the AI result above, continue by giving three optional next directions."
+    : taskIntentContext
+      ? "Based on the initial content and existing context, give three optional next directions that serve the current task intent."
+      : "Based on the initial content and existing context, give three optional next directions.";
+
   return [
     reviewInstruction ? `This turn's request:\n${reviewInstruction}` : "",
-    currentArtifact
-      ? "Based on the AI result above, continue by giving three optional next directions."
-      : "Based on the initial content and existing context, give three optional next directions."
+    taskIntentContext,
+    followUpRequest
   ]
     .filter(Boolean)
     .join("\n\n");

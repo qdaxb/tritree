@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { Check, GitCompare, X } from "lucide-react";
+import { Check, ExternalLink, GitCompare, X } from "lucide-react";
 import type { Artifact, TreeNode } from "@/lib/domain";
 import { getArtifactClientManifest, getArtifactRenderer } from "@/artifacts/client-registry";
 import { ArtifactFallback } from "./ArtifactFallback";
@@ -329,8 +329,18 @@ function ProcessMaterials({ isStreaming, materials }: { isStreaming: boolean; ma
                 <li className="artifact-workspace__material-item" key={`${item.title}-${itemIndex}`}>
                   <div className="artifact-workspace__material-item-title">
                     {item.url ? (
-                      <a href={item.url} rel="noreferrer" target="_blank">
-                        {item.title}
+                      <a
+                        aria-label={`${item.title} 来源`}
+                        className="artifact-workspace__material-link"
+                        href={item.url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <span>{item.title}</span>
+                        <span className="artifact-workspace__material-link-source">
+                          来源
+                          <ExternalLink aria-hidden="true" size={12} strokeWidth={2.2} />
+                        </span>
                       </a>
                     ) : (
                       item.title
@@ -491,12 +501,13 @@ function processMaterialItemFromValue(value: unknown): ProcessMaterialItem | nul
 
   const title = stringField(value, "title");
   if (!title) return null;
+  const url = stringField(value, "url") ?? stringField(value, "source_url") ?? stringField(value, "sourceUrl");
 
   return {
     title,
     ...(stringField(value, "subtitle") ? { subtitle: stringField(value, "subtitle") } : {}),
     ...(stringField(value, "meta") ? { meta: stringField(value, "meta") } : {}),
-    ...(stringField(value, "url") ? { url: stringField(value, "url") } : {})
+    ...(url ? { url } : {})
   };
 }
 

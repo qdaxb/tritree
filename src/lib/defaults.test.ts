@@ -18,6 +18,7 @@ const defaultSystemSkillIds = [
   "system-publisher"
 ];
 const defaultLoadedSystemSkillIds = ["system-creator", "system-planner"];
+const defaultCreationRequestLabels = ["搜资料", "找选题", "文案润色", "审稿及校对", "缩短到300字"];
 const creatorChildSkillIds = [
   "system-planner",
   "system-researcher",
@@ -42,8 +43,8 @@ const validConfig = JSON.stringify({
     }
   ],
   creationRequestOptions: [
-    { id: "default-preserve-my-meaning", label: "  保留我的原意  " },
-    { id: "default-short-version", label: "先给短版", sortOrder: 1 }
+    { id: "default-search-materials", label: "  搜资料  " },
+    { id: "default-copy-polish", label: "文案润色", sortOrder: 1 }
   ],
   inspirations: [
     {
@@ -169,14 +170,14 @@ describe("defaults config loader", () => {
               }
             ],
             creationRequestOptions: [
-              { id: "default-preserve-my-meaning", label: "保留我的原意" },
-              { id: "default-preserve-my-meaning", label: "重复" }
+              { id: "default-search-materials", label: "搜资料" },
+              { id: "default-search-materials", label: "重复" }
             ],
             inspirations: []
           })
       });
 
-    expect(duplicateRequest).toThrow("Duplicate creationRequestOptions id: default-preserve-my-meaning");
+    expect(duplicateRequest).toThrow("Duplicate creationRequestOptions id: default-search-materials");
   });
 
   it("parses valid defaults through shared schemas", () => {
@@ -195,8 +196,8 @@ describe("defaults config loader", () => {
       })
     ]);
     expect(defaults.creationRequestOptions).toEqual([
-      { id: "default-preserve-my-meaning", label: "保留我的原意" },
-      { id: "default-short-version", label: "先给短版", sortOrder: 1 }
+      { id: "default-search-materials", label: "搜资料" },
+      { id: "default-copy-polish", label: "文案润色", sortOrder: 1 }
     ]);
     expect(defaults.inspirations).toEqual([
       {
@@ -246,8 +247,13 @@ describe("defaults config loader", () => {
     expect(systemSkillsById.get("system-creator")?.prompt).toContain("load_skill(system-writer)");
     expect(systemSkillsById.get("system-creator")?.prompt).toContain("Do not simulate child Skills from overview text");
     expect(systemSkillsById.get("system-creator")?.prompt).toContain("user-facing output must land in this turn's target artifact or options");
+    expect(systemSkillsById.get("system-creator")?.prompt).toContain("When the current task intent is a concrete task label");
+    expect(systemSkillsById.get("system-creator")?.prompt).toContain("Do not advance it to drafting, publishing, or expression-angle selection");
+    expect(systemSkillsById.get("system-creator")?.prompt).toContain("If the task intent is research/source-gathering");
     expect(systemSkillsById.get("system-planner")?.prompt).toContain("content can move back and forth among planning, research, writing, review, and publishing");
     expect(systemSkillsById.get("system-planner")?.prompt).toContain("After a draft exists, the work can still return to research");
+    expect(systemSkillsById.get("system-planner")?.prompt).toContain("Concrete task labels override generic planning");
+    expect(systemSkillsById.get("system-planner")?.prompt).toContain("do not convert a research task into reader, angle, story, or title choices");
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("material-search");
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("material, references, examples, evidence, fact checking, or sources");
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("proactively use available search, retrieval, MCP, or research capabilities");
@@ -255,6 +261,17 @@ describe("defaults config loader", () => {
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("Do not fabricate sources, numbers, quotes, people, or timelines");
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("mark it as open");
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("turn key material into a user-facing summary");
+    expect(systemSkillsById.get("system-researcher")?.prompt).toContain("When show_process_data is available");
+    expect(systemSkillsById.get("system-researcher")?.prompt).toContain("items[].title");
+    expect(systemSkillsById.get("system-researcher")?.prompt).toContain("items[].url");
+    expect(systemSkillsById.get("system-researcher")?.prompt).toContain("sourceToolCallIds");
+    expect(systemSkillsById.get("system-researcher")?.prompt).toContain(
+      "Every source-backed process item must include a clickable source URL in items[].url"
+    );
+    expect(systemSkillsById.get("system-researcher")?.prompt).toContain("meta is not a citation substitute");
+    expect(systemSkillsById.get("system-researcher")?.prompt).toContain(
+      "Do not count or label a process item as sourced when it has no URL"
+    );
     expect(systemSkillsById.get("system-writer")?.prompt).toContain("If the artifact type needs title, topics, or image prompt");
     expect(systemSkillsById.get("system-publisher")?.prompt).not.toContain("platform-rewrite");
     for (const skill of defaults.systemSkills) {
@@ -264,6 +281,7 @@ describe("defaults config loader", () => {
     }
     expect(defaults.systemSkills.filter((skill) => skill.defaultEnabled).map((skill) => skill.id)).toEqual(defaultSystemSkillIds);
     expect(defaults.systemSkills.map((skill) => skill.sortOrder)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(defaults.creationRequestOptions.map((option) => option.label)).toEqual(defaultCreationRequestLabels);
 
     for (const skillId of defaultSystemSkillIds) {
       const skill = systemSkillsById.get(skillId);

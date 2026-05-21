@@ -252,11 +252,19 @@ describe("agent instructions", () => {
 
   it("keeps displayed process material aligned with the same three-choice question", () => {
     const instructions = [
+      buildTreeTurnInstructions(shellInput),
       buildTreeOptionsInstructions(shellInput),
       buildTreeNextStepInstructions(shellInput)
     ].join("\n\n");
 
     expect(instructions).toContain("Process material may only support the same roundIntent and the same three options");
     expect(instructions).toContain("Do not write process material as another A/B/C set");
+    expect(instructions).toContain("Treat short task labels in the input as the current task intent, not merely as style constraints");
+    expect(instructions).toContain("Task intent means the concrete job to complete this turn");
+    expect(instructions).toContain("current task-intent fields");
+    expect(instructions).toContain("source finding");
+    expect(instructions).toContain("copy-polish labels");
+    expect(instructions).toContain("research scopes, source types, facts to verify, or material gaps");
+    expect(instructions).toContain("Draft-angle choices belong after the material is sufficient or the user asks to write");
   });
 });

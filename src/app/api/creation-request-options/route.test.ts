@@ -97,7 +97,7 @@ describe("/api/creation-request-options", () => {
   });
 
   it("resets quick request buttons to defaults", async () => {
-    const resetCreationRequestOptions = vi.fn().mockReturnValue([{ id: "default-preserve-my-meaning", label: "保留我的原意" }]);
+    const resetCreationRequestOptions = vi.fn().mockReturnValue([{ id: "default-search-materials", label: "搜资料" }]);
     getRepositoryMock.mockReturnValue({ resetCreationRequestOptions });
 
     const response = await RESET();
@@ -105,7 +105,7 @@ describe("/api/creation-request-options", () => {
 
     expect(response.status).toBe(200);
     expect(resetCreationRequestOptions).toHaveBeenCalledWith("user-1");
-    expect(data.options).toEqual([{ id: "default-preserve-my-meaning", label: "保留我的原意" }]);
+    expect(data.options).toEqual([{ id: "default-search-materials", label: "搜资料" }]);
   });
 
   it("updates a quick request button", async () => {

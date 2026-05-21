@@ -129,6 +129,7 @@ vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
     comparisonSelectionCount?: number;
     currentNode: {
       id: string;
+      agentMessages?: unknown[];
       options?: Array<{ id: string; label: string }>;
       parentId?: string | null;
       sourceArtifactIds?: string[];
@@ -3366,6 +3367,34 @@ describe("TreeableApp", () => {
       ...nodeOnlyState,
       currentNode: {
         ...nodeOnlyState.currentNode,
+        agentMessages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "display-1",
+                toolName: "show_process_data",
+                input: {
+                  title: "参考材料",
+                  sourceToolCallIds: ["tool-1"],
+                  items: [{ title: "参考条目 A", subtitle: "内容参考", url: "https://example.com/a" }]
+                }
+              }
+            ]
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "display-1",
+                toolName: "show_process_data",
+                output: { type: "json", value: true }
+              }
+            ]
+          }
+        ],
         roundIntent: "你想怎么使用这些参考？",
         options: finalOptions
       }
@@ -3391,7 +3420,7 @@ describe("TreeableApp", () => {
         data: {
           title: "参考材料",
           sourceToolCallIds: ["tool-1"],
-          items: [{ title: "参考条目 A", subtitle: "内容参考" }]
+          items: [{ title: "参考条目 A", subtitle: "内容参考", url: "https://example.com/a" }]
         }
       });
     });
@@ -3409,6 +3438,13 @@ describe("TreeableApp", () => {
 
     await vi.waitFor(() => {
       expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("idle");
+    });
+    await vi.waitFor(() => {
+      const latestProps = artifactWorkspaceMock.mock.calls.at(-1)?.[0] as
+        | { currentNode?: { agentMessages?: unknown[] } | null; streamingProcessMaterials?: unknown[] }
+        | undefined;
+      expect(latestProps?.streamingProcessMaterials).toEqual([]);
+      expect(JSON.stringify(latestProps?.currentNode?.agentMessages)).toContain("https://example.com/a");
     });
   });
 

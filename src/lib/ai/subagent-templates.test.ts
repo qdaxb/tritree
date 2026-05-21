@@ -39,4 +39,15 @@ describe("subagent templates", () => {
     expect(template.prompt).toContain("You are the material-search subagent");
     expect(template.prompt).toContain("Leave decisions about whether to continue");
   });
+
+  it("requires source URLs so the main agent can render clickable process materials", () => {
+    const template = DEFAULT_SUBAGENT_TEMPLATES[0];
+    const combined = [template.expectedOutput, template.prompt].join("\n");
+
+    expect(combined).toContain("source_url");
+    expect(combined).toContain("show_process_data");
+    expect(combined).toContain("items[].url");
+    expect(combined).toContain("Every source-backed item");
+    expect(combined).toContain("not only source names");
+  });
 });

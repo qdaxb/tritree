@@ -63,15 +63,11 @@ function requestOption(option: { id: string; label: string }, sortOrder = 0): Cr
 }
 
 const defaultRequestOptionSeeds = [
-  { id: "default-preserve-my-meaning", label: "保留我的原意" },
-  { id: "default-dont-expand-much", label: "不要扩写太多" },
-  { id: "default-moments", label: "适合短动态" },
-  { id: "default-short-version", label: "先给短版" },
-  { id: "default-first-time-reader", label: "写给新手" },
-  { id: "default-no-ad-tone", label: "别太像广告" },
-  { id: "default-friend-tone", label: "像发给朋友" },
-  { id: "default-experienced-reader", label: "写给懂行的人" },
-  { id: "default-english", label: "改成英文" }
+  { id: "default-search-materials", label: "搜资料" },
+  { id: "default-find-topics", label: "找选题" },
+  { id: "default-copy-polish", label: "文案润色" },
+  { id: "default-review-proofread", label: "审稿及校对" },
+  { id: "default-short-weibo", label: "缩短到300字" }
 ];
 
 const defaultRequestOptions = defaultRequestOptionSeeds.map((option, index) => requestOption(option, index));
@@ -405,19 +401,18 @@ describe("RootMemorySetup", () => {
     renderRootMemorySetup({ onSubmit });
 
     await userEvent.type(screen.getByRole("textbox", { name: "创作 seed" }), "我想写 AI 产品经理的真实困境");
-    await userEvent.click(screen.getByRole("button", { name: "展开更多创作要求" }));
-    await userEvent.click(screen.getByRole("button", { name: "改成英文" }));
-    await userEvent.click(screen.getByRole("button", { name: "像发给朋友" }));
+    await userEvent.click(screen.getByRole("button", { name: "搜资料" }));
+    await userEvent.click(screen.getByRole("button", { name: "文案润色" }));
     await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
 
     expect(screen.getByRole("group", { name: "本次创作要求" })).toBeInTheDocument();
-    expect(screen.getByText("可选。指定语言、读者、语气或限制。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "改成英文" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("可选。选择这次要处理的具体任务。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "搜资料" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("textbox", { name: "自定义创作要求" })).not.toBeInTheDocument();
     expect(onSubmit).toHaveBeenCalledWith({
       preferences: expect.objectContaining({
         seed: "我想写 AI 产品经理的真实困境",
-        creationRequest: "改成英文，像发给朋友"
+        creationRequest: "搜资料，文案润色"
       }),
       enabledSkillIds: ["system-analysis"]
     });
@@ -429,9 +424,9 @@ describe("RootMemorySetup", () => {
     const quickRequests = within(screen.getByRole("group", { name: "快速选择创作要求" }));
 
     expect(quickRequests.getAllByRole("button", { pressed: false }).map((button) => button.textContent)).toEqual(
-      defaultRequestOptions.slice(0, 6).map((option) => option.label)
+      defaultRequestOptions.map((option) => option.label)
     );
-    expect(screen.getByRole("button", { name: "展开更多创作要求" })).toHaveTextContent("+3");
+    expect(screen.queryByRole("button", { name: "展开更多创作要求" })).not.toBeInTheDocument();
     expect(quickRequests.queryByRole("button", { name: "展开自定义创作要求" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "展开自定义创作要求" })).toHaveClass("creation-request-toggle");
   });
@@ -452,9 +447,8 @@ describe("RootMemorySetup", () => {
     renderRootMemorySetup({ onSubmit });
 
     await userEvent.type(screen.getByRole("textbox", { name: "创作 seed" }), "我想写 AI 产品经理的真实困境");
-    await userEvent.click(screen.getByRole("button", { name: "展开更多创作要求" }));
-    await userEvent.click(screen.getByRole("button", { name: "改成英文" }));
-    await userEvent.click(screen.getByRole("button", { name: "像发给朋友" }));
+    await userEvent.click(screen.getByRole("button", { name: "搜资料" }));
+    await userEvent.click(screen.getByRole("button", { name: "文案润色" }));
 
     expect(screen.queryByRole("textbox", { name: "自定义创作要求" })).not.toBeInTheDocument();
 
@@ -463,35 +457,22 @@ describe("RootMemorySetup", () => {
     expect(onSubmit).toHaveBeenCalledWith({
       preferences: expect.objectContaining({
         seed: "我想写 AI 产品经理的真实困境",
-        creationRequest: "改成英文，像发给朋友"
+        creationRequest: "搜资料，文案润色"
       }),
       enabledSkillIds: ["system-analysis"]
     });
   });
 
-  it("keeps extra quick creation requests collapsed until the user asks for more", async () => {
+  it("shows the task-style quick creation requests without overflow", () => {
     renderRootMemorySetup();
-
-    expect(screen.queryByRole("button", { name: "改成英文" })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "展开更多创作要求" }));
 
     expect(
       within(screen.getByRole("group", { name: "快速选择创作要求" }))
         .getAllByRole("button", { pressed: false })
         .map((button) => button.textContent)
-    ).toEqual([
-      "保留我的原意",
-      "不要扩写太多",
-      "适合短动态",
-      "先给短版",
-      "写给新手",
-      "别太像广告",
-      "像发给朋友",
-      "写给懂行的人",
-      "改成英文"
-    ]);
-    expect(screen.getByRole("button", { name: "收起更多创作要求" })).toBeInTheDocument();
+    ).toEqual(["搜资料", "找选题", "文案润色", "审稿及校对", "缩短到300字"]);
+    expect(screen.queryByRole("button", { name: "展开更多创作要求" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "收起更多创作要求" })).not.toBeInTheDocument();
   });
 
   it("lets the user sort and reset quick creation request buttons", async () => {
@@ -509,11 +490,11 @@ describe("RootMemorySetup", () => {
     renderRootMemorySetup();
 
     await userEvent.click(screen.getByRole("button", { name: "管理创作要求快捷按钮" }));
-    await userEvent.click(screen.getByRole("button", { name: "下移快捷要求：保留我的原意" }));
+    await userEvent.click(screen.getByRole("button", { name: "下移快捷要求：搜资料" }));
     await userEvent.click(screen.getByRole("button", { name: "完成管理创作要求快捷按钮" }));
 
     expect(within(screen.getByRole("group", { name: "快速选择创作要求" })).getAllByRole("button")[0]).toHaveTextContent(
-      "不要扩写太多"
+      "找选题"
     );
 
     await userEvent.click(screen.getByRole("button", { name: "管理创作要求快捷按钮" }));
@@ -521,7 +502,7 @@ describe("RootMemorySetup", () => {
     await userEvent.click(screen.getByRole("button", { name: "完成管理创作要求快捷按钮" }));
 
     expect(within(screen.getByRole("group", { name: "快速选择创作要求" })).getAllByRole("button")[0]).toHaveTextContent(
-      "保留我的原意"
+      "搜资料"
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -599,7 +580,7 @@ describe("RootMemorySetup", () => {
 
     expect(screen.getByRole("button", { name: "保持克制" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "写给老板看" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "保留我的原意" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "搜资料" })).not.toBeInTheDocument();
   });
 
   it("lets the user submit a fully custom creation request", async () => {
@@ -708,8 +689,7 @@ describe("RootMemorySetup", () => {
     renderRootMemorySetup({ onSubmit });
 
     await userEvent.type(screen.getByRole("textbox", { name: "创作 seed" }), "周末想写个观察");
-    await userEvent.click(screen.getByRole("button", { name: "展开更多创作要求" }));
-    await userEvent.click(screen.getByRole("button", { name: "改成英文" }));
+    await userEvent.click(screen.getByRole("button", { name: "搜资料" }));
     await userEvent.click(screen.getByRole("button", { name: "展开自定义创作要求" }));
     await userEvent.type(screen.getByRole("textbox", { name: "自定义创作要求" }), "，写给第一次接触这个话题的人");
     await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
@@ -717,7 +697,7 @@ describe("RootMemorySetup", () => {
     expect(onSubmit).toHaveBeenCalledWith({
       preferences: expect.objectContaining({
         seed: "周末想写个观察",
-        creationRequest: "改成英文，写给第一次接触这个话题的人"
+        creationRequest: "搜资料，写给第一次接触这个话题的人"
       }),
       enabledSkillIds: ["system-analysis"]
     });
