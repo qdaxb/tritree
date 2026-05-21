@@ -44,10 +44,11 @@ describe("subagent templates", () => {
     const template = DEFAULT_SUBAGENT_TEMPLATES[0];
     const combined = [template.expectedOutput, template.prompt].join("\n");
 
-    expect(combined).toContain("source_url");
-    expect(combined).toContain("show_process_data");
-    expect(combined).toContain("items[].url");
-    expect(combined).toContain("Every source-backed item");
-    expect(combined).toContain("not only source names");
-  });
+      expect(combined).toContain("source_url");
+      expect(combined).toContain("show_process_data");
+      expect(combined).toContain("items[].url or items[].urls");
+      expect(combined).toContain("multiple source URLs");
+      expect(combined).toContain("Every source-backed item");
+      expect(combined).toContain("not only source names");
+    });
 });

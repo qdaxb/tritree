@@ -18,7 +18,7 @@ const defaultSystemSkillIds = [
   "system-publisher"
 ];
 const defaultLoadedSystemSkillIds = ["system-creator", "system-planner"];
-const defaultCreationRequestLabels = ["搜资料", "找选题", "文案润色", "审稿及校对", "缩短到300字"];
+const defaultCreationRequestLabels = ["搜资料", "找选题", "文案润色", "审稿及校对", "压缩到300字左右"];
 const creatorChildSkillIds = [
   "system-planner",
   "system-researcher",
@@ -261,13 +261,14 @@ describe("defaults config loader", () => {
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("Do not fabricate sources, numbers, quotes, people, or timelines");
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("mark it as open");
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("turn key material into a user-facing summary");
-    expect(systemSkillsById.get("system-researcher")?.prompt).toContain("When show_process_data is available");
-    expect(systemSkillsById.get("system-researcher")?.prompt).toContain("items[].title");
-    expect(systemSkillsById.get("system-researcher")?.prompt).toContain("items[].url");
-    expect(systemSkillsById.get("system-researcher")?.prompt).toContain("sourceToolCallIds");
-    expect(systemSkillsById.get("system-researcher")?.prompt).toContain(
-      "Every source-backed process item must include a clickable source URL in items[].url"
-    );
+      expect(systemSkillsById.get("system-researcher")?.prompt).toContain("When show_process_data is available");
+      expect(systemSkillsById.get("system-researcher")?.prompt).toContain("items[].title");
+      expect(systemSkillsById.get("system-researcher")?.prompt).toContain("items[].url or items[].urls");
+      expect(systemSkillsById.get("system-researcher")?.prompt).toContain("multiple source URLs");
+      expect(systemSkillsById.get("system-researcher")?.prompt).toContain("sourceToolCallIds");
+      expect(systemSkillsById.get("system-researcher")?.prompt).toContain(
+        "Every source-backed process item must include clickable source URLs in items[].url or items[].urls"
+      );
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain("meta is not a citation substitute");
     expect(systemSkillsById.get("system-researcher")?.prompt).toContain(
       "Do not count or label a process item as sourced when it has no URL"

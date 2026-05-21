@@ -102,10 +102,10 @@ describe("subagent runtime tools", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       context: expect.stringContaining("最新正文"),
-      env: { KIMI_API_KEY: "test-token" },
-      expectedOutput:
-        "A material list. Every source-backed item should include source, source_url, key point, usable angle, credibility note, and advice on how the main agent can use it. Preserve original URLs so the main agent can pass them to show_process_data items[].url.",
-      task: "找三条资料",
+        env: { KIMI_API_KEY: "test-token" },
+        expectedOutput:
+          "A material list. Every source-backed item should include source, source_url, key point, usable angle, credibility note, and advice on how the main agent can use it. Preserve original URLs so the main agent can pass them to show_process_data items[].url or items[].urls, using items[].urls for multiple source URLs.",
+        task: "找三条资料",
       template: expect.objectContaining({ id: "material-search", title: "搜索资料" }),
       title: "搜索资料",
       abortSignal: controller.signal

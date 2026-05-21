@@ -11,6 +11,7 @@ export type ProcessMaterialItem = {
   subtitle?: string;
   title: string;
   url?: string;
+  urls?: string[];
 };
 
 export type ProcessMaterial = {
@@ -328,23 +329,7 @@ function ProcessMaterials({ isStreaming, materials }: { isStreaming: boolean; ma
               {material.items.map((item, itemIndex) => (
                 <li className="artifact-workspace__material-item" key={`${item.title}-${itemIndex}`}>
                   <div className="artifact-workspace__material-item-title">
-                    {item.url ? (
-                      <a
-                        aria-label={`${item.title} 来源`}
-                        className="artifact-workspace__material-link"
-                        href={item.url}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        <span>{item.title}</span>
-                        <span className="artifact-workspace__material-link-source">
-                          来源
-                          <ExternalLink aria-hidden="true" size={12} strokeWidth={2.2} />
-                        </span>
-                      </a>
-                    ) : (
-                      item.title
-                    )}
+                    <ProcessMaterialItemTitle item={item} />
                   </div>
                   {item.subtitle ? <p>{item.subtitle}</p> : null}
                   {item.meta ? <span>{item.meta}</span> : null}
@@ -355,6 +340,51 @@ function ProcessMaterials({ isStreaming, materials }: { isStreaming: boolean; ma
         ))}
       </div>
     </section>
+  );
+}
+
+function ProcessMaterialItemTitle({ item }: { item: ProcessMaterialItem }) {
+  const urls = item.urls && item.urls.length > 0 ? item.urls : item.url ? [item.url] : [];
+
+  if (urls.length === 0) return item.title;
+
+  if (urls.length === 1) {
+    return (
+      <a
+        aria-label={`${item.title} 来源`}
+        className="artifact-workspace__material-link"
+        href={urls[0]}
+        rel="noreferrer"
+        target="_blank"
+      >
+        <span>{item.title}</span>
+        <span className="artifact-workspace__material-link-source">
+          来源
+          <ExternalLink aria-hidden="true" size={12} strokeWidth={2.2} />
+        </span>
+      </a>
+    );
+  }
+
+  return (
+    <>
+      <span className="artifact-workspace__material-title-text">{item.title}</span>
+      <span className="artifact-workspace__material-link-list">
+        {urls.map((sourceUrl, sourceIndex) => (
+          <a
+            aria-label={`${item.title} 来源 ${sourceIndex + 1}`}
+            className="artifact-workspace__material-link-source"
+            href={sourceUrl}
+            key={`${sourceUrl}-${sourceIndex}`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            来源 {sourceIndex + 1}
+            <ExternalLink aria-hidden="true" size={12} strokeWidth={2.2} />
+          </a>
+        ))}
+      </span>
+    </>
   );
 }
 
@@ -502,12 +532,18 @@ function processMaterialItemFromValue(value: unknown): ProcessMaterialItem | nul
   const title = stringField(value, "title");
   if (!title) return null;
   const url = stringField(value, "url") ?? stringField(value, "source_url") ?? stringField(value, "sourceUrl");
+  const urls = nonEmptyStringArrayField(value, "urls")
+    ?? nonEmptyStringArrayField(value, "source_urls")
+    ?? nonEmptyStringArrayField(value, "sourceUrls")
+    ?? (url ? [url] : []);
+  const normalizedUrl = urls[0] ?? url;
 
   return {
     title,
     ...(stringField(value, "subtitle") ? { subtitle: stringField(value, "subtitle") } : {}),
     ...(stringField(value, "meta") ? { meta: stringField(value, "meta") } : {}),
-    ...(url ? { url } : {})
+    ...(normalizedUrl ? { url: normalizedUrl } : {}),
+    ...(urls.length > 0 ? { urls } : {})
   };
 }
 
@@ -522,5 +558,15 @@ function stringField(record: Record<string, unknown>, field: string) {
 
 function stringArrayField(record: Record<string, unknown>, field: string) {
   const value = record[field];
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+  return Array.isArray(value)
+    ? value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)
+    : [];
+}
+
+function nonEmptyStringArrayField(record: Record<string, unknown>, field: string) {
+  const strings = stringArrayField(record, field);
+  return strings.length > 0 ? strings : undefined;
 }

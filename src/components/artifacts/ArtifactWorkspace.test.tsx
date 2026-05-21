@@ -402,13 +402,18 @@ describe("ArtifactWorkspace", () => {
                   type: "json",
                   value: {
                     title: "参考材料",
-                    sourceToolCallIds: ["tool-1"],
-                    items: [
-                      { title: "参考条目 A", subtitle: "方向 A", meta: "#5 · 120万", url: "https://example.com/a" },
-                      { title: "参考条目 B", subtitle: "方向 B", meta: "#9 · 98万", source_url: "https://example.com/b" }
-                    ],
-                    note: "这些材料用于帮助选择下一步参考角度。"
-                  }
+                      sourceToolCallIds: ["tool-1"],
+                      items: [
+                        { title: "参考条目 A", subtitle: "方向 A", meta: "#5 · 120万", url: "https://example.com/a" },
+                        { title: "参考条目 B", subtitle: "方向 B", meta: "#9 · 98万", source_url: "https://example.com/b" },
+                        {
+                          title: "参考条目 C",
+                          subtitle: "方向 C",
+                          urls: ["https://example.com/c1", "https://example.com/c2"]
+                        }
+                      ],
+                      note: "这些材料用于帮助选择下一步参考角度。"
+                    }
                 }
               }
             ]
@@ -419,13 +424,16 @@ describe("ArtifactWorkspace", () => {
     });
 
     expect(screen.getByRole("heading", { name: "过程材料" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "参考材料" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "参考条目 A 来源" })).toHaveAttribute("href", "https://example.com/a");
-    expect(screen.getByRole("link", { name: "参考条目 A 来源" })).toHaveClass("artifact-workspace__material-link");
-    expect(screen.getByRole("link", { name: "参考条目 B 来源" })).toHaveAttribute("href", "https://example.com/b");
-    expect(screen.getByText("方向 A")).toBeInTheDocument();
-    expect(screen.getByText("#5 · 120万")).toBeInTheDocument();
-    expect(screen.getByText("这些材料用于帮助选择下一步参考角度。")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "参考材料" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "参考条目 A 来源" })).toHaveAttribute("href", "https://example.com/a");
+      expect(screen.getByRole("link", { name: "参考条目 A 来源" })).toHaveClass("artifact-workspace__material-link");
+      expect(screen.getByRole("link", { name: "参考条目 B 来源" })).toHaveAttribute("href", "https://example.com/b");
+      expect(screen.getByText("参考条目 C")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "参考条目 C 来源 1" })).toHaveAttribute("href", "https://example.com/c1");
+      expect(screen.getByRole("link", { name: "参考条目 C 来源 2" })).toHaveAttribute("href", "https://example.com/c2");
+      expect(screen.getByText("方向 A")).toBeInTheDocument();
+      expect(screen.getByText("#5 · 120万")).toBeInTheDocument();
+      expect(screen.getByText("这些材料用于帮助选择下一步参考角度。")).toBeInTheDocument();
   });
 
   it("keeps process materials after the display tool returns only an acknowledgement", () => {

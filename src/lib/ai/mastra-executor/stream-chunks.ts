@@ -335,17 +335,27 @@ function processDataDisplayItemFromValue(value: unknown): ProcessDataDisplay["it
 
   const title = typeof value.title === "string" ? value.title : "";
   if (!title.trim()) return null;
+  const urls =
+    nonEmptyStringArrayValue(value.urls)
+    ?? nonEmptyStringArrayValue(value.source_urls)
+    ?? nonEmptyStringArrayValue(value.sourceUrls);
 
   return {
     title,
     ...(typeof value.subtitle === "string" && value.subtitle.trim() ? { subtitle: value.subtitle } : {}),
     ...(typeof value.meta === "string" && value.meta.trim() ? { meta: value.meta } : {}),
-    ...(typeof value.url === "string" && value.url.trim() ? { url: value.url } : {})
+    ...(typeof value.url === "string" && value.url.trim() ? { url: value.url } : {}),
+    ...(urls ? { urls } : {})
   };
 }
 
 function stringArrayValue(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function nonEmptyStringArrayValue(value: unknown) {
+  const strings = stringArrayValue(value);
+  return strings.length > 0 ? strings : undefined;
 }
 
 function dedupeProcessDataDisplay(
