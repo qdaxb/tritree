@@ -1815,35 +1815,15 @@ button:disabled {
   display: contents;
 }
 
-.module--generating {
-  isolation: isolate;
-  outline: 2px solid rgba(14, 165, 233, 0.38);
-  outline-offset: 4px;
-  box-shadow:
-    0 0 0 6px rgba(14, 165, 233, 0.08),
-    0 0 26px rgba(20, 184, 166, 0.22);
-  animation: module-glow 1.6s ease-in-out infinite;
+@property --active-surface-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0turn;
 }
 
-@keyframes module-glow {
-  0%,
-  100% {
-    outline-color: rgba(14, 165, 233, 0.28);
-    box-shadow:
-      0 0 0 4px rgba(14, 165, 233, 0.06),
-      0 0 16px rgba(20, 184, 166, 0.16);
-  }
-  50% {
-    outline-color: rgba(14, 165, 233, 0.58);
-    box-shadow:
-      0 0 0 8px rgba(14, 165, 233, 0.12),
-      0 0 30px rgba(20, 184, 166, 0.28);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .module--generating {
-    animation: none;
+@keyframes active-surface-spin {
+  to {
+    --active-surface-angle: 1turn;
   }
 }
 
@@ -2279,10 +2259,6 @@ button:disabled {
 }
 
 .desktop-tree-toggle {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 9;
   display: flex;
   justify-content: flex-start;
 }
@@ -2868,6 +2844,23 @@ button:disabled {
   scrollbar-width: thin;
 }
 
+.branch-option-question--with-action {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.branch-option-question__action,
+.branch-option-question__copy {
+  min-width: 0;
+}
+
+.branch-option-question__action {
+  display: flex;
+  align-items: flex-start;
+}
+
 .branch-option-question__eyebrow {
   color: #64748b;
   font-size: 0.72rem;
@@ -3024,6 +3017,39 @@ button:disabled {
   background: linear-gradient(90deg, #ffffff, #f8fafc, #ffffff);
   background-size: 220% 100%;
   animation: option-wait 1.1s ease-in-out infinite;
+}
+
+.branch-card--streaming {
+  --active-surface-angle: 0turn;
+  position: relative;
+  isolation: isolate;
+  border-color: rgba(14, 165, 233, 0.34);
+  box-shadow:
+    0 0 0 1px rgba(14, 165, 233, 0.1),
+    0 12px 28px rgba(14, 165, 233, 0.12);
+}
+
+.branch-card--streaming::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 8px;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--active-surface-angle),
+    rgba(14, 165, 233, 0.06) 0deg,
+    rgba(56, 189, 248, 0.98) 32deg,
+    rgba(45, 212, 191, 0.95) 68deg,
+    rgba(14, 165, 233, 0.08) 104deg,
+    rgba(14, 165, 233, 0.06) 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: active-surface-spin 5s linear infinite;
 }
 
 .branch-option-retry {
@@ -3266,7 +3292,7 @@ button:disabled {
   max-height: none;
   margin: 0;
   overflow: hidden;
-  padding: 54px 12px 12px;
+  padding: 12px;
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 8px;
@@ -3930,7 +3956,7 @@ button:disabled {
 .artifact-workspace__body {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(min(320px, 45dvh), 1fr);
   align-content: stretch;
   gap: 12px;
   overflow: hidden;
@@ -3939,13 +3965,15 @@ button:disabled {
 
 .artifact-workspace__supplements {
   min-height: 0;
+  align-self: start;
+  max-height: min(38dvh, 340px);
   display: grid;
   gap: 12px;
   overflow: auto;
 }
 
 .artifact-workspace__content {
-  min-height: 0;
+  min-height: min(320px, 45dvh);
   height: 100%;
   display: grid;
 }
@@ -3953,6 +3981,35 @@ button:disabled {
 .artifact-workspace__content > * {
   min-height: 0;
   height: 100%;
+}
+
+.artifact-workspace__content--generating > * {
+  --active-surface-angle: 0turn;
+  position: relative;
+  isolation: isolate;
+}
+
+.artifact-workspace__content--generating > *::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 8px;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--active-surface-angle),
+    rgba(14, 165, 233, 0.06) 0deg,
+    rgba(56, 189, 248, 0.98) 32deg,
+    rgba(45, 212, 191, 0.95) 68deg,
+    rgba(14, 165, 233, 0.08) 104deg,
+    rgba(14, 165, 233, 0.06) 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: active-surface-spin 5s linear infinite;
 }
 
 .artifact-workspace__status,
@@ -3981,6 +4038,35 @@ button:disabled {
   background: linear-gradient(135deg, rgba(224, 242, 254, 0.96), rgba(204, 251, 241, 0.86));
   border-color: rgba(14, 165, 233, 0.42);
   box-shadow: 0 14px 36px rgba(14, 165, 233, 0.13);
+}
+
+.artifact-workspace__process--generating {
+  --active-surface-angle: 0turn;
+  position: relative;
+  isolation: isolate;
+}
+
+.artifact-workspace__process--generating::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 8px;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--active-surface-angle),
+    rgba(14, 165, 233, 0.06) 0deg,
+    rgba(56, 189, 248, 0.98) 32deg,
+    rgba(45, 212, 191, 0.95) 68deg,
+    rgba(14, 165, 233, 0.08) 104deg,
+    rgba(14, 165, 233, 0.06) 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: active-surface-spin 5s linear infinite;
 }
 
 .artifact-workspace__process-header {
@@ -4072,14 +4158,52 @@ button:disabled {
   grid-template-rows: auto auto;
   gap: 10px;
   min-height: min(200px, 28dvh);
-  max-height: min(360px, 44dvh);
+  max-height: min(280px, 30dvh);
   overflow: hidden;
   background: #fff;
 }
 
 .artifact-workspace__materials--streaming {
   min-height: min(200px, 30dvh);
-  max-height: min(420px, 52dvh);
+  max-height: min(320px, 34dvh);
+}
+
+.artifact-workspace__materials--generating {
+  --active-surface-angle: 0turn;
+  position: relative;
+  isolation: isolate;
+}
+
+.artifact-workspace__materials--generating::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 8px;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--active-surface-angle),
+    rgba(14, 165, 233, 0.06) 0deg,
+    rgba(56, 189, 248, 0.98) 32deg,
+    rgba(45, 212, 191, 0.95) 68deg,
+    rgba(14, 165, 233, 0.08) 104deg,
+    rgba(14, 165, 233, 0.06) 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: active-surface-spin 5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branch-card--streaming::after,
+  .artifact-workspace__content--generating > *::after,
+  .artifact-workspace__materials--generating::after,
+  .artifact-workspace__process--generating::after {
+    animation: none;
+  }
 }
 
 .artifact-workspace__materials-header {
@@ -5455,22 +5579,6 @@ button:disabled {
     min-height: 0;
   }
 
-  .mobile-module--generating {
-    isolation: isolate;
-    outline: 2px solid rgba(14, 165, 233, 0.38);
-    outline-offset: 4px;
-    box-shadow:
-      0 0 0 6px rgba(14, 165, 233, 0.08),
-      0 0 26px rgba(20, 184, 166, 0.22);
-    animation: module-glow 1.6s ease-in-out infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .mobile-module--generating {
-      animation: none;
-    }
-  }
-
   .tree-canvas--tree {
     min-height: 320px;
   }
@@ -5585,6 +5693,34 @@ button:disabled {
     padding-right: 0;
     padding-bottom: 58px;
     scrollbar-gutter: auto;
+  }
+
+  .mobile-artifact-region .artifact-workspace__body {
+    grid-template-rows: auto minmax(min(360px, 46dvh), 1fr);
+  }
+
+  .mobile-artifact-region .artifact-workspace__supplements {
+    max-height: min(36dvh, 320px);
+  }
+
+  .mobile-artifact-region .artifact-workspace__content {
+    min-height: min(360px, 46dvh);
+  }
+
+  .mobile-artifact-region .social-post-panel {
+    min-height: min(360px, 46dvh);
+    height: min(640px, 56dvh);
+    max-height: min(640px, 56dvh);
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .mobile-artifact-region .social-post-panel__scroll {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 12px;
+    scrollbar-gutter: stable;
   }
 }
 

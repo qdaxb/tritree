@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -44,6 +45,7 @@ type TreeCanvasProps = {
   onRegenerateOptions?: (optionMode: OptionGenerationMode) => void;
   onSelectComparisonNode?: (nodeId: string) => void;
   onViewNode?: (nodeId: string) => void;
+  optionsHeaderAction?: ReactNode;
   skills?: Skill[];
 };
 
@@ -656,7 +658,8 @@ export function TreeCanvas({
   onChoose,
   onRegenerateOptions,
   onSelectComparisonNode,
-  onViewNode
+  onViewNode,
+  optionsHeaderAction
 }: TreeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const treeViewportRef = useRef<HTMLDivElement>(null);
@@ -1157,7 +1160,15 @@ export function TreeCanvas({
   ]);
 
   return (
-    <div className={clsx("tree-canvas", `tree-canvas--${display}`, isComparisonMode && "tree-canvas--comparison")} ref={containerRef}>
+    <div
+      className={clsx(
+        "tree-canvas",
+        `tree-canvas--${display}`,
+        generationStage?.stage === "options" && "tree-canvas--options-generating",
+        isComparisonMode && "tree-canvas--comparison"
+      )}
+      ref={containerRef}
+    >
       {shouldShowTree ? (
         <div className="tree-viewport-shell">
           <div
@@ -1235,10 +1246,12 @@ export function TreeCanvas({
         <BranchOptionTray
           isBusy={isBusy}
           isCustomOptionInline={shouldInlineCustomOption}
+          isStreamingOptions={generationStage?.stage === "options"}
           onAddCustomOption={onAddCustomOption}
           onChoose={onChoose}
           onRegenerateOptions={onRegenerateOptions}
           options={currentNode.options}
+          optionsHeaderAction={optionsHeaderAction}
           pendingChoice={pendingChoice}
           question={currentNode.roundIntent}
           visibleCount={effectiveVisibleOptionCount}
@@ -1336,20 +1349,24 @@ function BranchCompletePanel({
 export function BranchOptionTray({
   isCustomOptionInline = false,
   isBusy,
+  isStreamingOptions = false,
   onAddCustomOption,
   onChoose,
   onRegenerateOptions,
   options,
+  optionsHeaderAction,
   pendingChoice,
   question,
   visibleCount = options.length
 }: {
   isCustomOptionInline?: boolean;
   isBusy: boolean;
+  isStreamingOptions?: boolean;
   onAddCustomOption?: (option: BranchOption) => void;
   onChoose: (optionId: BranchOption["id"], note?: string, optionMode?: OptionGenerationMode) => void;
   onRegenerateOptions?: (optionMode: OptionGenerationMode) => void;
   options: BranchOption[];
+  optionsHeaderAction?: ReactNode;
   pendingChoice: string | null;
   question?: string;
   skills?: Skill[];
@@ -1379,10 +1396,15 @@ export function BranchOptionTray({
 
   return (
     <div aria-label="回答当前问题" className="branch-option-tray" role="group">
-      {trimmedQuestion ? (
-        <div className="branch-option-question">
-          <p className="branch-option-question__eyebrow">当前问题</p>
-          <p className="branch-option-question__text">{trimmedQuestion}</p>
+      {trimmedQuestion || optionsHeaderAction ? (
+        <div className={clsx("branch-option-question", optionsHeaderAction && "branch-option-question--with-action")}>
+          {optionsHeaderAction ? <div className="branch-option-question__action">{optionsHeaderAction}</div> : null}
+          {trimmedQuestion ? (
+            <div className="branch-option-question__copy">
+              <p className="branch-option-question__eyebrow">当前问题</p>
+              <p className="branch-option-question__text">{trimmedQuestion}</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {primaryAllVisible ? (
@@ -1403,6 +1425,7 @@ export function BranchOptionTray({
               isBusy={isBusy}
               isPending={pendingChoice === selectedOption.id}
               isSelected
+              isStreaming={isStreamingOptions}
               onSelect={() => setSelectedOptionId(selectedOption.id)}
               option={selectedOption}
             />
@@ -1440,6 +1463,7 @@ export function BranchOptionTray({
               <BranchOptionCard
                 isBusy={isBusy || !primaryAllVisible}
                 isPending={pendingChoice === option.id}
+                isStreaming={isStreamingOptions}
                 key={option.id}
                 onSelect={() => setSelectedOptionId(option.id)}
                 option={option}
@@ -1592,6 +1616,7 @@ function BranchOptionCard({
   isBusy,
   isPending,
   isSelected,
+  isStreaming,
   onSelect,
   option,
   variant = "primary"
@@ -1599,6 +1624,7 @@ function BranchOptionCard({
   isBusy: boolean;
   isPending: boolean;
   isSelected?: boolean;
+  isStreaming?: boolean;
   onSelect: () => void;
   option: BranchOption;
   variant?: "primary" | "side";
@@ -1614,7 +1640,8 @@ function BranchOptionCard({
         "branch-card--option",
         variant === "side" && "branch-card--side",
         isSelected && "branch-card--selected",
-        isPending && "branch-card--pending"
+        isPending && "branch-card--pending",
+        isStreaming && "branch-card--streaming"
       )}
     >
       <button

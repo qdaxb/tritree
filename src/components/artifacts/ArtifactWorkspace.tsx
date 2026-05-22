@@ -82,6 +82,7 @@ export function ArtifactWorkspace({
   const canUseComparison = canCompareArtifacts || isComparisonMode;
   const processMaterials = [...streamingProcessMaterials, ...processMaterialsForNode(currentNode)];
   const isStreamingProcessMaterials = isBusy && streamingProcessMaterials.length > 0;
+  const isDraftGenerating = isBusy && generationStage === "artifact" && Boolean(selectedArtifact);
   const processTitle =
     generationStage === "artifact"
       ? "AI 正在思考下一版产物..."
@@ -102,7 +103,7 @@ export function ArtifactWorkspace({
     <aside
       aria-busy={isGenerating}
       aria-labelledby="artifact-workspace-title"
-      className={`artifact-workspace${isGenerating ? " module--generating" : ""}`}
+      className="artifact-workspace"
     >
       <header className="artifact-workspace__header">
         <h2 id="artifact-workspace-title">产物</h2>
@@ -139,7 +140,11 @@ export function ArtifactWorkspace({
           ) : null}
 
           {isBusy && generationStage ? (
-            <div aria-live="polite" className="artifact-workspace__process" role="status">
+            <div
+              aria-live="polite"
+              className="artifact-workspace__process artifact-workspace__process--generating"
+              role="status"
+            >
               <div className="artifact-workspace__process-header">
                 <span className="artifact-workspace__process-dot" aria-hidden="true" />
                 <strong>{processTitle}</strong>
@@ -161,7 +166,7 @@ export function ArtifactWorkspace({
           ) : null}
         </div>
 
-        <div className="artifact-workspace__content">
+        <div className={`artifact-workspace__content${isDraftGenerating ? " artifact-workspace__content--generating" : ""}`}>
           {isComparisonMode ? (
             <ArtifactComparisonView
               comparisonArtifacts={comparisonArtifacts}
@@ -194,6 +199,7 @@ export function ArtifactWorkspace({
 }
 
 type ToolCallEntry = {
+  count?: number;
   id: number;
   kind: "tool" | "subagent";
   label: string;
@@ -259,7 +265,30 @@ function parseThinkingLines(text: string): ThinkingLine[] {
     result.push({ kind: "text", text: line });
   }
 
-  return result;
+  return collapseRepeatedThinkingLines(result);
+}
+
+function collapseRepeatedThinkingLines(lines: ThinkingLine[]): ThinkingLine[] {
+  const collapsed: ThinkingLine[] = [];
+
+  for (const line of lines) {
+    const previous = collapsed[collapsed.length - 1];
+    if (
+      previous &&
+      previous.kind !== "text" &&
+      line.kind !== "text" &&
+      previous.kind === line.kind &&
+      previous.label === line.label
+    ) {
+      previous.count = (previous.count ?? 1) + 1;
+      previous.status = line.status;
+      continue;
+    }
+
+    collapsed.push(line);
+  }
+
+  return collapsed;
 }
 
 function ThinkingTextLines({ text }: { text: string }) {
@@ -280,7 +309,10 @@ function ThinkingTextLines({ text }: { text: string }) {
               ) : (
                 <span aria-hidden="true" className="artifact-workspace__thinking-spinner" />
               )}
-              <span>{line.kind === "subagent" ? `[子代理] ${line.label}` : line.label}</span>
+              <span>
+                {line.kind === "subagent" ? `[子代理] ${line.label}` : line.label}
+                {line.count && line.count > 1 ? ` x ${line.count}` : ""}
+              </span>
             </li>
           );
         }
@@ -314,7 +346,9 @@ function ProcessMaterials({ isStreaming, materials }: { isStreaming: boolean; ma
 
   return (
     <section
-      className={`artifact-workspace__materials${isStreaming ? " artifact-workspace__materials--streaming" : ""}`}
+      className={`artifact-workspace__materials${
+        isStreaming ? " artifact-workspace__materials--streaming artifact-workspace__materials--generating" : ""
+      }`}
       aria-labelledby="artifact-workspace-materials-title"
     >
       <div className="artifact-workspace__materials-header">

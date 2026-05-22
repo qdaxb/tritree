@@ -14,7 +14,7 @@ import {
   RotateCcw,
   UsersRound
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArtifactSchema,
   SessionStateSchema,
@@ -1682,12 +1682,8 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
   const isOptionsModuleGenerating = Boolean(artifactGenerationStage === "options");
   const isMobileArtifactModuleGenerating = isMobileLayout && isArtifactModuleGenerating;
   const isMobileOptionsModuleGenerating = isMobileLayout && isOptionsModuleGenerating;
-  const mobileArtifactRegionClassName = `mobile-artifact-region${
-    isMobileArtifactModuleGenerating ? " mobile-module--generating mobile-artifact-region--generating" : ""
-  }`;
-  const mobileOptionsRegionClassName = `mobile-options-region${
-    isMobileOptionsModuleGenerating ? " mobile-module--generating mobile-options-region--generating" : ""
-  }`;
+  const mobileArtifactRegionClassName = "mobile-artifact-region";
+  const mobileOptionsRegionClassName = "mobile-options-region";
   const enabledSkillIds = sessionState?.enabledSkillIds ?? [];
   const enabledSkills: Skill[] = (sessionState?.enabledSkills ?? []).map((skill) => ({
     ...skill,
@@ -1791,7 +1787,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     });
   }
 
-  function renderTreeCanvas(display: "full" | "options" | "tree") {
+  function renderTreeCanvas(display: "full" | "options" | "tree", optionsHeaderAction?: ReactNode) {
     return (
       <TreeCanvas
         changedArtifactNodeIds={changedArtifactNodeIds}
@@ -1809,6 +1805,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
         onRegenerateOptions={canRefreshOptions ? regenerateOptionsForCurrentNode : undefined}
         onSelectComparisonNode={selectArtifactComparisonNode}
         onViewNode={(nodeId) => void viewNode(nodeId)}
+        optionsHeaderAction={optionsHeaderAction}
         pendingBranch={pendingBranch}
         pendingChoice={pendingChoice}
         selectedPath={sessionState?.selectedPath ?? []}
@@ -1818,33 +1815,38 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     );
   }
 
+  function renderDesktopTreeToggle() {
+    return (
+      <div aria-label="PC 树图控制" className="desktop-tree-toggle" role="group">
+        <button
+          aria-expanded={isDesktopFocusTreeExpanded}
+          className="desktop-tree-toggle__button"
+          onClick={() => setIsDesktopFocusTreeExpanded((expanded) => !expanded)}
+          type="button"
+        >
+          <GitBranch aria-hidden="true" size={16} strokeWidth={2.4} />
+          <span>{isDesktopFocusTreeExpanded ? "收起树图" : "展开树图"}</span>
+          {isDesktopFocusTreeExpanded ? (
+            <ChevronUp aria-hidden="true" size={15} strokeWidth={2.5} />
+          ) : (
+            <ChevronDown aria-hidden="true" size={15} strokeWidth={2.5} />
+          )}
+        </button>
+      </div>
+    );
+  }
+
   function renderDesktopFocusCanvas() {
     return (
       <section
         className={`canvas-region canvas-region--desktop-focus${
           isDesktopFocusTreeExpanded ? " canvas-region--desktop-focus-tree-open" : ""
-        }${isOptionsModuleGenerating ? " module--generating" : ""}`}
+        }`}
       >
-        <div aria-label="PC 树图控制" className="desktop-tree-toggle" role="group">
-          <button
-            aria-expanded={isDesktopFocusTreeExpanded}
-            className="desktop-tree-toggle__button"
-            onClick={() => setIsDesktopFocusTreeExpanded((expanded) => !expanded)}
-            type="button"
-          >
-            <GitBranch aria-hidden="true" size={16} strokeWidth={2.4} />
-            <span>{isDesktopFocusTreeExpanded ? "收起树图" : "展开树图"}</span>
-            {isDesktopFocusTreeExpanded ? (
-              <ChevronUp aria-hidden="true" size={15} strokeWidth={2.5} />
-            ) : (
-              <ChevronDown aria-hidden="true" size={15} strokeWidth={2.5} />
-            )}
-          </button>
-        </div>
         {isDesktopFocusTreeExpanded ? (
           <div className="desktop-focus-tree-region">{renderTreeCanvas("tree")}</div>
         ) : null}
-        <div className="desktop-focus-options-region">{renderTreeCanvas("options")}</div>
+        <div className="desktop-focus-options-region">{renderTreeCanvas("options", renderDesktopTreeToggle())}</div>
       </section>
     );
   }
@@ -1969,7 +1971,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
           {isDesktopArtifactFocusLayout ? (
             renderDesktopFocusCanvas()
           ) : (
-            <section className={`canvas-region${!isMobileLayout && isOptionsModuleGenerating ? " module--generating" : ""}`}>
+            <section className="canvas-region">
               {renderTreeCanvas(isMobileLayout ? "tree" : "full")}
             </section>
           )}

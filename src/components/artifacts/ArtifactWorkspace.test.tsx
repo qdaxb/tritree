@@ -231,15 +231,73 @@ describe("ArtifactWorkspace", () => {
     const socialPostPanelRule =
       css.match(/\.social-post-panel\s*\{\s*flex: 1 1 auto;(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
-    expect(bodyRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
+    expect(bodyRule).toContain("grid-template-rows: auto minmax(min(320px, 45dvh), 1fr)");
+    expect(bodyRule).not.toContain("grid-template-rows: minmax(0, min(38dvh, 340px))");
     expect(bodyRule).toContain("overflow: hidden");
+    expect(supplementsRule).toContain("align-self: start");
+    expect(supplementsRule).toContain("max-height: min(38dvh, 340px)");
     expect(supplementsRule).toContain("overflow: auto");
+    expect(contentRule).toContain("min-height: min(320px, 45dvh)");
     expect(contentRule).toContain("height: 100%");
-    expect(materialsRule).toContain("max-height: min(360px, 44dvh)");
+    expect(materialsRule).toContain("max-height: min(280px, 30dvh)");
     expect(materialsRule).toContain("overflow: hidden");
-    expect(streamingMaterialsRule).toContain("max-height: min(420px, 52dvh)");
+    expect(streamingMaterialsRule).toContain("max-height: min(320px, 34dvh)");
     expect(materialsListRule).toContain("overflow: auto");
     expect(socialPostPanelRule).toContain("min-height: 380px");
+  });
+
+  it("keeps draft content scrollable inside the mobile artifact workspace", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const mediaRule =
+      css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)?.groups?.body ??
+      "";
+    const mobileBodyRule =
+      mediaRule.match(/\.mobile-artifact-region \.artifact-workspace__body\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const mobileContentRule =
+      mediaRule.match(/\.mobile-artifact-region \.artifact-workspace__content\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
+      "";
+    const mobilePanelRule =
+      mediaRule.match(/\.mobile-artifact-region \.social-post-panel\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const mobileScrollRule =
+      mediaRule.match(/\.mobile-artifact-region \.social-post-panel__scroll\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
+      "";
+
+    expect(mobileBodyRule).toContain("grid-template-rows: auto minmax(min(360px, 46dvh), 1fr)");
+    expect(mobileBodyRule).not.toContain("grid-template-rows: minmax(0, min(36dvh, 320px))");
+    expect(mobileContentRule).toContain("min-height: min(360px, 46dvh)");
+    expect(mobilePanelRule).toContain("height: min(640px, 56dvh)");
+    expect(mobilePanelRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
+    expect(mobilePanelRule).toContain("overflow: hidden");
+    expect(mobileScrollRule).toContain("overflow-y: auto");
+    expect(mobileScrollRule).toContain("overscroll-behavior: contain");
+    expect(mobileScrollRule).toContain("scrollbar-gutter: stable");
+  });
+
+  it("uses a visible local spinning border for active process, materials, and draft surfaces", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const spinKeyframes = css.match(/@keyframes active-surface-spin\s*\{(?<body>[\s\S]+?)\n\}/)?.groups?.body ?? "";
+    const processRule = css.match(/\.artifact-workspace__process--generating\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const processBorderRule =
+      css.match(/\.artifact-workspace__process--generating::after\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const materialsRule =
+      css.match(/\.artifact-workspace__materials--generating\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const materialsBorderRule =
+      css.match(/\.artifact-workspace__materials--generating::after\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const draftRule =
+      css.match(/\.artifact-workspace__content--generating > \*\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const draftBorderRule =
+      css.match(/\.artifact-workspace__content--generating > \*::after\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(spinKeyframes).toContain("--active-surface-angle: 1turn");
+    expect(processRule).toContain("position: relative");
+    expect(processBorderRule).toContain("conic-gradient");
+    expect(processBorderRule).toContain("animation: active-surface-spin 5s linear infinite");
+    expect(materialsRule).toContain("position: relative");
+    expect(materialsBorderRule).toContain("conic-gradient");
+    expect(materialsBorderRule).toContain("animation: active-surface-spin 5s linear infinite");
+    expect(draftRule).toContain("position: relative");
+    expect(draftBorderRule).toContain("conic-gradient");
+    expect(draftBorderRule).toContain("animation: active-surface-spin 5s linear infinite");
   });
 
   it("wraps the selected artifact in a stretchable content region", () => {
@@ -300,7 +358,13 @@ describe("ArtifactWorkspace", () => {
     expect(screen.getByText("本步未生成产物")).toBeInTheDocument();
     expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("AI 正在思考下一版产物..."))).toBe(true);
     expect(screen.getByText("正在分析当前版本")).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: "产物" })).toHaveClass("module--generating");
+    expect(screen.getByRole("complementary", { name: "产物" })).not.toHaveClass("module--generating");
+    expect(screen.getByText("AI 正在思考下一版产物...").closest(".artifact-workspace__process")).toHaveClass(
+      "artifact-workspace__process--generating"
+    );
+    expect(screen.getByTestId("social-post-renderer").closest(".artifact-workspace__content")).toHaveClass(
+      "artifact-workspace__content--generating"
+    );
   });
 
   it("shows options-stage progress and tool-call thinking", () => {
@@ -319,6 +383,32 @@ describe("ArtifactWorkspace", () => {
     expect(screen.getByRole("status")).toHaveTextContent("AI 正在生成下一步选项...");
     expect(screen.getByRole("status")).toHaveTextContent("search");
     expect(screen.getByTestId("social-post-renderer")).toHaveTextContent("A short social post body.");
+  });
+
+  it("collapses repeated adjacent progress rows for the same tool", () => {
+    const social = socialPostArtifact();
+
+    renderWorkspace({
+      artifacts: [social],
+      currentNode: artifactNode(social.id),
+      generationStage: "artifact",
+      isBusy: true,
+      isGenerating: true,
+      selectedArtifactId: social.id,
+      thinkingText: [
+        "[子代理] 运行 搜索资料：查询微博",
+        "[子代理] 搜索资料：查询微博 完成，主 agent 正在检查返回值",
+        "[子代理] 运行 搜索资料：查询微博",
+        "[子代理] 搜索资料：查询微博 完成，主 agent 正在检查返回值",
+        "[子代理] 运行 搜索资料：查询微博"
+      ].join("\n")
+    });
+
+    expect(screen.getByText("[子代理] 搜索资料：查询微博 x 3")).toBeInTheDocument();
+    expect(screen.getByText("[子代理] 搜索资料：查询微博 x 3").closest("li")).toHaveClass(
+      "artifact-workspace__thinking-tool--calling"
+    );
+    expect(screen.queryAllByText("[子代理] 搜索资料：查询微博")).toHaveLength(0);
   });
 
   it("scrolls the progress body to the latest thinking record", () => {
@@ -521,7 +611,8 @@ describe("ArtifactWorkspace", () => {
 
     expect(screen.getByRole("heading", { name: "过程材料" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "过程材料" }).closest(".artifact-workspace__materials")).toHaveClass(
-      "artifact-workspace__materials--streaming"
+      "artifact-workspace__materials--streaming",
+      "artifact-workspace__materials--generating"
     );
     expect(screen.getByRole("heading", { name: "参考材料" })).toBeInTheDocument();
     expect(screen.getByText("参考条目 A")).toBeInTheDocument();

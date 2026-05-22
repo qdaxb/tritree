@@ -32,6 +32,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
     onRegenerateOptions,
     onSelectComparisonNode,
     onViewNode,
+    optionsHeaderAction,
     skills
   }: {
     changedArtifactNodeIds?: string[];
@@ -47,6 +48,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
     onRegenerateOptions?: (optionMode: "focused") => void;
     onSelectComparisonNode?: (nodeId: string) => void;
     onViewNode?: (nodeId: string) => void;
+    optionsHeaderAction?: ReactNode;
     skills?: Skill[];
   }) =>
     treeCanvasMock({
@@ -63,6 +65,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
       onRegenerateOptions,
       onSelectComparisonNode,
       onViewNode,
+      optionsHeaderAction,
       skills
     }) || (
       <div data-testid="tree-canvas">
@@ -74,6 +77,9 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
         <div data-testid="canvas-generation-stage">
           {generationStage ? `${generationStage.nodeId}:${generationStage.stage}` : "idle"}
         </div>
+        {display === "options" && optionsHeaderAction ? (
+          <div data-testid="canvas-options-header-action">{optionsHeaderAction}</div>
+        ) : null}
         <div data-testid="canvas-options">{currentNode?.options.map((option) => option.label).join("|") ?? ""}</div>
         <div data-testid="canvas-skills">{skills?.map((skill) => skill.title).join("|")}</div>
         {display !== "options" ? (
@@ -1445,6 +1451,7 @@ describe("TreeableApp", () => {
     expect(screen.getByRole("button", { name: "收起右侧布局" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("group", { name: "PC 树图控制" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "展开树图" })).toHaveAttribute("aria-expanded", "false");
+    expect(within(screen.getByTestId("tree-canvas")).getByRole("group", { name: "PC 树图控制" })).toBeInTheDocument();
     expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["options"]);
 
     await userEvent.click(screen.getByRole("button", { name: "展开树图" }));
@@ -1465,14 +1472,19 @@ describe("TreeableApp", () => {
     const expandedShellRule = css.match(/\.app-shell--artifact-expanded\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const focusCanvasRule = css.match(/\.canvas-region--desktop-focus\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const treeToggleRule = css.match(/\.desktop-tree-toggle\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const desktopTrayRule =
+      css.match(/\.app-shell--artifact-expanded \.tree-canvas--options \.branch-option-tray\s*\{(?<body>[^}]+)\}/)
+        ?.groups?.body ?? "";
     const desktopOptionsRule =
       css.match(/\.app-shell--artifact-expanded \.tree-canvas--options \.branch-option-main\s*\{(?<body>[^}]+)\}/)
         ?.groups?.body ?? "";
 
     expect(expandedShellRule).toContain("grid-template-columns: minmax(320px, 0.6fr) minmax(520px, 1.4fr)");
     expect(focusCanvasRule).toContain("grid-template-rows: minmax(0, 1fr)");
-    expect(treeToggleRule).toContain("position: absolute");
-    expect(treeToggleRule).toContain("top: 12px");
+    expect(treeToggleRule).toContain("display: flex");
+    expect(treeToggleRule).not.toContain("position: absolute");
+    expect(desktopTrayRule).toContain("padding: 12px");
+    expect(desktopTrayRule).not.toContain("padding: 54px 12px 12px");
     expect(desktopOptionsRule).toContain("grid-template-columns: 1fr");
     expect(desktopOptionsRule).toContain("grid-auto-rows: max-content");
     expect(desktopOptionsRule).toContain("align-content: start");
@@ -1491,8 +1503,8 @@ describe("TreeableApp", () => {
     expect(mediaRule).toContain(".mobile-artifact-region");
     expect(mediaRule).toContain(".mobile-options-region");
     expect(mediaRule).toContain(".mobile-artifact-region");
-    expect(mediaRule).toContain(".mobile-module--generating");
-    expect(mediaRule).toContain("animation: module-glow");
+    expect(mediaRule).not.toContain(".mobile-module--generating");
+    expect(mediaRule).not.toContain("animation: module-glow");
     expect(mediaRule).toContain("overflow-y: visible");
     expect(mediaRule).toContain("overscroll-behavior: auto");
     expect(mediaRule).not.toContain("conic-gradient");
@@ -2311,7 +2323,7 @@ describe("TreeableApp", () => {
       await vi.waitFor(() => {
         expect(liveArtifactMock).toHaveBeenLastCalledWith(expect.objectContaining({ generationStage: "artifact" }));
       });
-      expect(document.querySelector(".mobile-artifact-region")).toHaveClass("mobile-artifact-region--generating");
+      expect(document.querySelector(".mobile-artifact-region")).not.toHaveClass("mobile-artifact-region--generating");
       expect(document.querySelector(".mobile-options-region")).not.toHaveClass("mobile-options-region--generating");
       await vi.waitFor(() => {
         expect(scrollIntoView).toHaveBeenCalledTimes(1);
@@ -2332,7 +2344,7 @@ describe("TreeableApp", () => {
         );
       });
       expect(document.querySelector(".mobile-artifact-region")).not.toHaveClass("mobile-artifact-region--generating");
-      expect(document.querySelector(".mobile-options-region")).toHaveClass("mobile-options-region--generating");
+      expect(document.querySelector(".mobile-options-region")).not.toHaveClass("mobile-options-region--generating");
       expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
       expect(screen.queryByRole("group", { name: "移动端主面板" })).not.toBeInTheDocument();
@@ -3621,6 +3633,7 @@ describe("TreeableApp", () => {
       );
       expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("node-1:options");
       expect(screen.getByTestId("canvas-options")).toBeEmptyDOMElement();
+      expect(screen.getByTestId("tree-canvas").closest(".canvas-region")).not.toHaveClass("module--generating");
     });
 
     act(() => {

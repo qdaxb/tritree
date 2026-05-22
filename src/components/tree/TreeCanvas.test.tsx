@@ -528,6 +528,18 @@ describe("TreeCanvas", () => {
     expect(hoverPreviewRule).toContain("display: block");
   });
 
+  it("uses the same visible local spinning border on streamed option cards without lighting the tray", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const streamingCardRule = css.match(/\.branch-card--streaming\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const streamingCardBorderRule = css.match(/\.branch-card--streaming::after\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(streamingCardRule).toContain("position: relative");
+    expect(streamingCardBorderRule).toContain("conic-gradient");
+    expect(streamingCardBorderRule).toContain("animation: active-surface-spin 5s linear infinite");
+    expect(css).not.toContain(".tree-canvas--options-generating .branch-option-tray");
+    expect(css).not.toContain(".tree-canvas--options-generating .branch-card--placeholder");
+  });
+
   it("only renders hover previews for option copy that may be truncated", () => {
     const { container, rerender } = render(
       <BranchOptionTray
@@ -563,6 +575,8 @@ describe("TreeCanvas", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const trayRule = css.match(/\.branch-option-tray\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const questionRule = css.match(/\.branch-option-question\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const questionWithActionRule =
+      css.match(/\.branch-option-question--with-action\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const questionTextRule = css.match(/\.branch-option-question__text\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const mainRule = css.match(/\.branch-option-main\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
@@ -571,10 +585,32 @@ describe("TreeCanvas", () => {
     expect(questionRule).toContain("max-height:");
     expect(questionRule).toContain("overflow: auto");
     expect(questionRule).toContain("overscroll-behavior: contain");
+    expect(questionWithActionRule).toContain("grid-template-columns: auto minmax(0, 1fr)");
+    expect(questionWithActionRule).toContain("align-items: start");
     expect(questionTextRule).toContain("overflow-wrap: anywhere");
     expect(questionTextRule).toContain("word-break: break-word");
     expect(mainRule).toContain("min-height: 0");
     expect(mainRule).toContain("overflow: visible");
+  });
+
+  it("places a provided tree toggle action in the current question row", () => {
+    render(
+      <BranchOptionTray
+        isBusy={false}
+        onChoose={vi.fn()}
+        options={currentNode.options}
+        optionsHeaderAction={<button type="button">展开树图</button>}
+        pendingChoice={null}
+        question="基于当前稿，下一步怎么改？"
+      />
+    );
+
+    const question = document.querySelector(".branch-option-question");
+
+    expect(question).toHaveClass("branch-option-question--with-action");
+    expect(within(question as HTMLElement).getByRole("button", { name: "展开树图" })).toBeInTheDocument();
+    expect(within(question as HTMLElement).getByText("当前问题")).toBeInTheDocument();
+    expect(within(question as HTMLElement).getByText("基于当前稿，下一步怎么改？")).toBeInTheDocument();
   });
 
   it("selects an option before showing the shared writing controls", () => {
@@ -1971,6 +2007,9 @@ describe("TreeCanvas", () => {
     );
     const spinner = container.querySelector(".tree-node__spinner");
 
+    expect(container.querySelector(".tree-canvas")).toHaveClass("tree-canvas--options-generating");
+    expect(screen.getByRole("group", { name: "回答当前问题" })).toHaveClass("branch-option-tray");
+
     rerender(
       <TreeCanvas
         currentNode={{
@@ -2018,6 +2057,45 @@ describe("TreeCanvas", () => {
     const main = screen.getByRole("group", { name: "三个主选项" });
     expect(await within(main).findByRole("button", { name: /A 具体场景/ })).toBeDisabled();
     expect(within(main).getAllByText("等待中")).toHaveLength(2);
+  });
+
+  it("does not light waiting option placeholders before option content streams in", () => {
+    const waitingNode = { ...currentNode, options: [] };
+    const { container } = render(
+      <TreeCanvas
+        currentNode={waitingNode}
+        generationStage={{ nodeId: currentNode.id, stage: "options" }}
+        isBusy
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[waitingNode]}
+      />
+    );
+
+    expect(container.querySelector(".branch-option-tray")).not.toHaveClass("branch-option-tray--generating");
+    expect(container.querySelectorAll(".branch-card--streaming")).toHaveLength(0);
+    expect(container.querySelectorAll(".branch-card--placeholder")).toHaveLength(3);
+  });
+
+  it("lights only streamed option cards during option generation", async () => {
+    const firstStreamedOptionNode = { ...currentNode, options: [currentNode.options[0]] };
+    const { container } = render(
+      <TreeCanvas
+        currentNode={firstStreamedOptionNode}
+        generationStage={{ nodeId: currentNode.id, stage: "options" }}
+        isBusy
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[firstStreamedOptionNode]}
+      />
+    );
+
+    const firstOption = await screen.findByRole("button", { name: /A 具体场景/ });
+
+    expect(firstOption.closest(".branch-card")).toHaveClass("branch-card--streaming");
+    expect(container.querySelector(".branch-option-tray")).not.toHaveClass("branch-option-tray--generating");
+    expect(container.querySelectorAll(".branch-card--streaming")).toHaveLength(1);
+    expect(container.querySelectorAll(".branch-card--placeholder.branch-card--streaming")).toHaveLength(0);
   });
 
   it("updates changed tree labels without remounting the generation spinner", () => {
