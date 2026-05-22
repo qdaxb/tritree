@@ -67,7 +67,7 @@ const defaultRequestOptionSeeds = [
   { id: "default-find-topics", label: "找选题" },
   { id: "default-copy-polish", label: "文案润色" },
   { id: "default-review-proofread", label: "审稿及校对" },
-  { id: "default-short-weibo", label: "缩短到300字" }
+  { id: "default-short-weibo", label: "压缩到300字左右" }
 ];
 
 const defaultRequestOptions = defaultRequestOptionSeeds.map((option, index) => requestOption(option, index));
@@ -470,7 +470,7 @@ describe("RootMemorySetup", () => {
       within(screen.getByRole("group", { name: "快速选择创作要求" }))
         .getAllByRole("button", { pressed: false })
         .map((button) => button.textContent)
-    ).toEqual(["搜资料", "找选题", "文案润色", "审稿及校对", "缩短到300字"]);
+    ).toEqual(["搜资料", "找选题", "文案润色", "审稿及校对", "压缩到300字左右"]);
     expect(screen.queryByRole("button", { name: "展开更多创作要求" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "收起更多创作要求" })).not.toBeInTheDocument();
   });
