@@ -3537,7 +3537,7 @@ button:disabled {
   justify-content: flex-start;
   gap: 8px;
   min-height: 36px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .branch-option-tray__controls > .branch-side-action {
@@ -3545,12 +3545,13 @@ button:disabled {
 }
 
 .option-mode-control-wrap {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   color: rgba(71, 85, 105, 0.76);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .option-mode-control__label {
@@ -3574,8 +3575,8 @@ button:disabled {
   align-items: center;
   justify-content: center;
   min-height: 32px;
-  min-width: 58px;
-  padding: 0 12px;
+  min-width: 46px;
+  padding: 0 9px;
   color: rgba(71, 85, 105, 0.72);
   background: transparent;
   border: 0;
@@ -3596,6 +3597,7 @@ button:disabled {
 .option-mode-refresh {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   min-height: 34px;
   padding: 0 8px;
@@ -3948,6 +3950,12 @@ button:disabled {
   white-space: nowrap;
   background: #ffedd5;
   border-radius: 8px;
+}
+
+.option-mode-refresh--icon {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
 }
 
 .minimap-empty,
@@ -6065,6 +6073,11 @@ button:disabled {
 
   .branch-option-tray__controls > .branch-side-action {
     margin-left: 0;
+  }
+
+  .branch-option-tray__controls,
+  .option-mode-control-wrap {
+    flex-wrap: wrap;
   }
 
   .branch-option-main {

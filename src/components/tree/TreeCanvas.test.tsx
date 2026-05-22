@@ -766,12 +766,14 @@ describe("TreeCanvas", () => {
     expect(within(range).getByRole("button", { name: "平衡" })).toBeInTheDocument();
     expect(within(range).getByRole("button", { name: "专注" })).toBeInTheDocument();
     expect(screen.queryByText("兼顾延展和当前稿推进")).not.toBeInTheDocument();
+    const refreshButton = screen.getByRole("button", { name: "重新生成当前选项" });
+    expect(within(refreshButton).queryByText("重新生成当前选项")).not.toBeInTheDocument();
 
     fireEvent.click(within(range).getByRole("button", { name: "发散" }));
 
     expect(onRegenerateOptions).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "重新生成当前选项" }));
+    fireEvent.click(refreshButton);
 
     expect(onRegenerateOptions).toHaveBeenCalledWith("divergent");
   });
@@ -1685,6 +1687,21 @@ describe("TreeCanvas", () => {
     expect(compactHeaderRule).toContain("display: none");
     expect(compactFieldLabelRule).toContain("display: none");
     expect(compactInputRule).toContain("min-height: 38px");
+  });
+
+  it("keeps the option mode controls and refresh icon on one compact row", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const controlsRule = css.match(/\.branch-option-tray__controls\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const wrapRule = css.match(/\.option-mode-control-wrap\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const modeButtonRule = css.match(/\.option-mode-control__button\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const refreshRule = css.match(/\.option-mode-refresh--icon\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(controlsRule).toContain("flex-wrap: nowrap");
+    expect(wrapRule).toContain("width: 100%");
+    expect(wrapRule).toContain("flex-wrap: nowrap");
+    expect(modeButtonRule).toContain("min-width: 46px");
+    expect(refreshRule).toContain("width: 34px");
+    expect(refreshRule).toContain("padding: 0");
   });
 
   it("keeps unselected historical options as grey folded side paths", () => {

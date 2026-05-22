@@ -1572,14 +1572,13 @@ function OptionModeControl({
       {onRegenerateOptions ? (
         <button
           aria-label="重新生成当前选项"
-          className="option-mode-refresh"
+          className="option-mode-refresh option-mode-refresh--icon"
           disabled={disabled}
           onClick={() => onRegenerateOptions(mode)}
           title="按当前发散度重新生成这三个选项"
           type="button"
         >
           <RefreshCw aria-hidden="true" size={13} strokeWidth={2.4} />
-          <span>重新生成当前选项</span>
         </button>
       ) : null}
     </div>
