@@ -1765,7 +1765,7 @@ button:disabled {
 .app-shell {
   height: max(100dvh, calc(56px + 12px + 260px + 24px));
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
+  grid-template-columns: minmax(520px, 1.42fr) minmax(320px, 0.58fr);
   grid-template-rows: 56px minmax(260px, 1fr);
   align-items: stretch;
   gap: 12px;
@@ -1774,8 +1774,8 @@ button:disabled {
   transition: grid-template-columns 180ms ease;
 }
 
-.app-shell--artifact-expanded {
-  grid-template-columns: minmax(320px, 0.6fr) minmax(520px, 1.4fr);
+.app-shell--control-expanded {
+  grid-template-columns: minmax(320px, 0.72fr) minmax(520px, 1.28fr);
 }
 
 .topbar {
@@ -2248,46 +2248,86 @@ button:disabled {
   overflow: visible;
 }
 
-.canvas-region--desktop-focus {
-  position: relative;
-  grid-template-rows: minmax(0, 1fr);
+.mobile-panel--desktop-control {
+  min-height: 0;
+  display: grid;
+}
+
+.desktop-control-region {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
   overflow: hidden;
 }
 
-.canvas-region--desktop-focus-tree-open {
-  grid-template-rows: minmax(220px, 0.62fr) minmax(0, 1fr);
-}
-
-.desktop-tree-toggle {
+.desktop-control-region__header {
+  min-height: 42px;
   display: flex;
-  justify-content: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
 }
 
-.desktop-tree-toggle__button {
+.desktop-control-region__header strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.88rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-control-toggle {
   min-height: 36px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   justify-content: center;
   padding: 0 11px;
+  flex: 0 0 auto;
   color: #0f766e;
   background: #ffffff;
   border: 1px solid rgba(20, 184, 166, 0.24);
   border-radius: 8px;
+  cursor: pointer;
   font: inherit;
   font-size: 0.82rem;
   font-weight: 850;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
-.desktop-tree-toggle__button[aria-expanded="true"] {
+.desktop-control-toggle[aria-expanded="true"] {
   color: #075985;
   border-color: rgba(14, 116, 144, 0.28);
   background: #f0f9ff;
 }
 
-.desktop-focus-tree-region,
-.desktop-focus-options-region {
+.desktop-control-toggle:disabled {
+  cursor: default;
+}
+
+.desktop-control-region__body {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(180px, 0.48fr) minmax(0, 0.52fr);
+  gap: 10px;
+  overflow: hidden;
+}
+
+.app-shell--control-expanded .desktop-control-region__body {
+  grid-template-rows: minmax(260px, 0.58fr) minmax(0, 0.42fr);
+}
+
+.desktop-control-region__tree,
+.desktop-control-region__options {
   min-height: 0;
   display: grid;
   overflow: hidden;
@@ -3265,17 +3305,17 @@ button:disabled {
   gap: 8px;
 }
 
-.app-shell--artifact-expanded .desktop-focus-tree-region .tree-canvas--tree {
+.desktop-control-region__tree .tree-canvas--tree {
   min-height: 0;
   height: 100%;
   grid-template-rows: minmax(0, 1fr);
 }
 
-.app-shell--artifact-expanded .desktop-focus-tree-region .tree-viewport-shell {
+.desktop-control-region__tree .tree-viewport-shell {
   min-height: 0;
 }
 
-.app-shell--artifact-expanded .desktop-focus-options-region .tree-canvas--options {
+.desktop-control-region__options .tree-canvas--options {
   min-height: 0;
   height: 100%;
   display: grid;
@@ -3287,7 +3327,7 @@ button:disabled {
   box-shadow: none;
 }
 
-.app-shell--artifact-expanded .tree-canvas--options .branch-option-tray {
+.desktop-control-region__options .tree-canvas--options .branch-option-tray {
   height: 100%;
   max-height: none;
   margin: 0;
@@ -3298,11 +3338,11 @@ button:disabled {
   border-radius: 8px;
 }
 
-.app-shell--artifact-expanded .tree-canvas--options .branch-option-question {
+.desktop-control-region__options .tree-canvas--options .branch-option-question {
   max-height: none;
 }
 
-.app-shell--artifact-expanded .tree-canvas--options .branch-option-main {
+.desktop-control-region__options .tree-canvas--options .branch-option-main {
   grid-template-columns: 1fr;
   grid-auto-rows: max-content;
   align-content: start;
@@ -3310,27 +3350,27 @@ button:disabled {
   padding-right: 2px;
 }
 
-.app-shell--artifact-expanded .tree-canvas--options .branch-card--option:not(.branch-card--side) {
+.desktop-control-region__options .tree-canvas--options .branch-card--option:not(.branch-card--side) {
   min-height: 0;
   max-height: none;
 }
 
-.app-shell--artifact-expanded .tree-canvas--options .branch-option-focus {
+.desktop-control-region__options .tree-canvas--options .branch-option-focus {
   grid-template-columns: 1fr;
   grid-template-rows: auto;
   align-items: stretch;
 }
 
-.app-shell--artifact-expanded .tree-canvas--options .branch-option-focus__composer {
+.desktop-control-region__options .tree-canvas--options .branch-option-focus__composer {
   grid-column: auto;
   grid-row: auto;
 }
 
-.app-shell--artifact-expanded .tree-canvas--options .branch-option-focus__composer .branch-option-composer {
+.desktop-control-region__options .tree-canvas--options .branch-option-focus__composer .branch-option-composer {
   height: auto;
 }
 
-.app-shell--artifact-expanded .tree-canvas--options .branch-option-focus__others {
+.desktop-control-region__options .tree-canvas--options .branch-option-focus__others {
   grid-template-columns: 1fr;
 }
 

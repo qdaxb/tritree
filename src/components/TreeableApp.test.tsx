@@ -1491,27 +1491,33 @@ describe("TreeableApp", () => {
     ]);
   });
 
-  it("defines a wider desktop grid for the expanded artifact workspace", () => {
+  it("defines desktop columns for left artifact and right control focus states", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
-    const expandedShellRule = css.match(/\.app-shell--artifact-expanded\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const focusCanvasRule = css.match(/\.canvas-region--desktop-focus\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const treeToggleRule = css.match(/\.desktop-tree-toggle\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const desktopTrayRule =
-      css.match(/\.app-shell--artifact-expanded \.tree-canvas--options \.branch-option-tray\s*\{(?<body>[^}]+)\}/)
-        ?.groups?.body ?? "";
+    const shellRule = css.match(/\.app-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const expandedShellRule = css.match(/\.app-shell--control-expanded\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const controlRegionRule = css.match(/\.desktop-control-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const controlHeaderRule = css.match(/\.desktop-control-region__header\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const controlToggleRule = css.match(/\.desktop-control-toggle\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const controlBodyRule = css.match(/\.desktop-control-region__body\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const expandedControlBodyRule =
+      css.match(/\.app-shell--control-expanded \.desktop-control-region__body\s*\{(?<body>[^}]+)\}/)?.groups
+        ?.body ?? "";
     const desktopOptionsRule =
-      css.match(/\.app-shell--artifact-expanded \.tree-canvas--options \.branch-option-main\s*\{(?<body>[^}]+)\}/)
+      css.match(/\.desktop-control-region__options \.tree-canvas--options \.branch-option-main\s*\{(?<body>[^}]+)\}/)
         ?.groups?.body ?? "";
 
-    expect(expandedShellRule).toContain("grid-template-columns: minmax(320px, 0.6fr) minmax(520px, 1.4fr)");
-    expect(focusCanvasRule).toContain("grid-template-rows: minmax(0, 1fr)");
-    expect(treeToggleRule).toContain("display: flex");
-    expect(treeToggleRule).not.toContain("position: absolute");
-    expect(desktopTrayRule).toContain("padding: 12px");
-    expect(desktopTrayRule).not.toContain("padding: 54px 12px 12px");
+    expect(shellRule).toContain("grid-template-columns: minmax(520px, 1.42fr) minmax(320px, 0.58fr)");
+    expect(expandedShellRule).toContain("grid-template-columns: minmax(320px, 0.72fr) minmax(520px, 1.28fr)");
+    expect(controlRegionRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
+    expect(controlHeaderRule).toContain("justify-content: space-between");
+    expect(controlToggleRule).toContain("display: inline-flex");
+    expect(controlBodyRule).toContain("grid-template-rows: minmax(180px, 0.48fr) minmax(0, 0.52fr)");
+    expect(expandedControlBodyRule).toContain("grid-template-rows: minmax(260px, 0.58fr) minmax(0, 0.42fr)");
     expect(desktopOptionsRule).toContain("grid-template-columns: 1fr");
     expect(desktopOptionsRule).toContain("grid-auto-rows: max-content");
     expect(desktopOptionsRule).toContain("align-content: start");
+    expect(css).not.toContain(".app-shell--artifact-expanded");
+    expect(css).not.toContain(".desktop-tree-toggle");
   });
 
   it("defines mobile-only unified workspace visibility rules", () => {
