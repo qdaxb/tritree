@@ -189,11 +189,51 @@ function findMastraStructuredOutputValidationValue(error: unknown): unknown {
 
 export function unwrapMastraToolInput(value: unknown) {
   const parsed = parseMaybeJson(value);
-  if (!isRecord(parsed) || Object.keys(parsed).length !== 1 || !("input" in parsed)) {
-    return parsed;
+  const unwrapped =
+    isRecord(parsed) && Object.keys(parsed).length === 1 && "input" in parsed
+      ? parseMaybeJson(parsed.input)
+      : parsed;
+
+  return deepParseEmbeddedJsonStrings(unwrapped);
+}
+
+function deepParseEmbeddedJsonStrings(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(deepParseEmbeddedJsonStrings);
   }
 
-  return parseMaybeJson(parsed.input);
+  if (isRecord(value)) {
+    const result: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      result[key] = deepParseEmbeddedJsonStrings(child);
+    }
+    return result;
+  }
+
+  if (typeof value === "string") {
+    return tryParseEmbeddedJsonString(value);
+  }
+
+  return value;
+}
+
+function tryParseEmbeddedJsonString(value: string): unknown {
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+
+  const firstChar = trimmed[0];
+  if (firstChar !== "{" && firstChar !== "[") return value;
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (isRecord(parsed) || Array.isArray(parsed)) {
+      return deepParseEmbeddedJsonStrings(parsed);
+    }
+  } catch {
+    // Leave the original string untouched if it does not parse as JSON.
+  }
+
+  return value;
 }
 
 export function summarizeErrorForLog(error: unknown) {
