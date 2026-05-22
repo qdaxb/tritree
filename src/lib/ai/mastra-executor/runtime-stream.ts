@@ -361,8 +361,9 @@ async function parseRuntimeReActStreamOutput<TOutput>(
   });
 
   if (summary.submittedOutput !== undefined) {
+    const submittedOutput = unwrapMastraToolInput(summary.submittedOutput);
     try {
-      const parsed = schema.parse(summary.submittedOutput);
+      const parsed = schema.parse(submittedOutput);
       assertMeaningfulRuntimeAction({ output: parsed, summary, target });
       logTritreeAiDebug("react-stream", "parse-submit-success", {
         target,
@@ -378,7 +379,7 @@ async function parseRuntimeReActStreamOutput<TOutput>(
         target,
         error: summarizeErrorForLog(error)
       });
-      logAiResponse(target, "stream-parse-failed", summary.submittedOutput);
+      logAiResponse(target, "stream-parse-failed", submittedOutput);
       logZodIssues(target, "submit", error);
       throw error;
     }
