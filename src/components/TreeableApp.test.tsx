@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -166,6 +166,7 @@ vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
     onSave?: (artifact: Artifact) => void | Promise<void>;
     onStartComparison?: () => void;
     onStopGeneration?: () => void;
+    scrollBodyRef?: React.Ref<HTMLDivElement>;
     selectedArtifactId: string | null;
     streamingProcessMaterials?: Array<{
       items: Array<{ meta?: string; subtitle?: string; title: string; url?: string }>;
@@ -191,6 +192,7 @@ vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
     return (
       <div data-testid="live-artifact">
         <div data-testid="artifact-workspace" />
+        <div className="artifact-workspace__body" ref={props.scrollBodyRef} />
         <div data-testid="mock-artifact-actions">{props.headerActions}</div>
         {props.headerPanel}
         <div data-testid="artifact-workspace-selected">{props.selectedArtifactId ?? "none"}</div>
@@ -586,6 +588,17 @@ function installDesktopViewport() {
   installViewport(1280);
 }
 
+function installArtifactBodyScrollMetrics(region: HTMLElement, metrics: { clientHeight: number; scrollHeight: number }) {
+  Object.defineProperty(region, "clientHeight", {
+    configurable: true,
+    value: metrics.clientHeight
+  });
+  Object.defineProperty(region, "scrollHeight", {
+    configurable: true,
+    value: metrics.scrollHeight
+  });
+}
+
 describe("TreeableApp", () => {
   afterEach(() => {
     liveArtifactMock.mockClear();
@@ -960,6 +973,122 @@ describe("TreeableApp", () => {
         })
       );
     });
+  });
+
+  it("moves to the progress area first, then follows new artifact updates downward", async () => {
+    installDesktopViewport();
+    const artifactStream = controlledNdjsonResponse();
+    const childNode = {
+      ...artifactState().currentNode!,
+      id: "node-2",
+      parentId: "node-1",
+      parentOptionId: "a" as const,
+      kind: "analysis" as const,
+      producedArtifactId: null,
+      sourceArtifactIds: ["artifact-1"],
+      roundIndex: 2,
+      roundIntent: "A",
+      options: []
+    };
+    const chosenState = artifactState({
+      session: { ...artifactState().session, currentNodeId: "node-2" },
+      currentNode: childNode,
+      currentArtifact: null,
+      artifacts: [socialPostArtifact],
+      nodeArtifacts: [{ nodeId: "node-1", artifact: socialPostArtifact }],
+      selectedPath: [artifactState().currentNode!, childNode]
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: artifactState() }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: chosenState }) })
+      .mockResolvedValueOnce(artifactStream.response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("artifact-workspace");
+    const artifactBody = document.querySelector(".artifact-workspace__body") as HTMLDivElement;
+    installArtifactBodyScrollMetrics(artifactBody, { clientHeight: 320, scrollHeight: 980 });
+    artifactBody.scrollTop = 640;
+
+    await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(5, "/api/sessions/session-1/artifact/generate/stream", expect.anything());
+    });
+    await vi.waitFor(() => {
+      expect(artifactBody.scrollTop).toBe(0);
+    });
+
+    act(() => {
+      artifactStream.push({ type: "thinking", nodeId: "node-2", stage: "artifact", text: "正在整理过程材料" });
+    });
+
+    await vi.waitFor(() => {
+      expect(artifactBody.scrollTop).toBe(980);
+    });
+  });
+
+  it("stops auto-scrolling the artifact region after the user scrolls it", async () => {
+    installDesktopViewport();
+    const artifactStream = controlledNdjsonResponse();
+    const childNode = {
+      ...artifactState().currentNode!,
+      id: "node-2",
+      parentId: "node-1",
+      parentOptionId: "a" as const,
+      kind: "analysis" as const,
+      producedArtifactId: null,
+      sourceArtifactIds: ["artifact-1"],
+      roundIndex: 2,
+      roundIntent: "A",
+      options: []
+    };
+    const chosenState = artifactState({
+      session: { ...artifactState().session, currentNodeId: "node-2" },
+      currentNode: childNode,
+      currentArtifact: null,
+      artifacts: [socialPostArtifact],
+      nodeArtifacts: [{ nodeId: "node-1", artifact: socialPostArtifact }],
+      selectedPath: [artifactState().currentNode!, childNode]
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: artifactState() }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: chosenState }) })
+      .mockResolvedValueOnce(artifactStream.response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    await screen.findByTestId("artifact-workspace");
+    const artifactBody = document.querySelector(".artifact-workspace__body") as HTMLDivElement;
+    installArtifactBodyScrollMetrics(artifactBody, { clientHeight: 320, scrollHeight: 980 });
+    artifactBody.scrollTop = 640;
+
+    await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(5, "/api/sessions/session-1/artifact/generate/stream", expect.anything());
+    });
+    await vi.waitFor(() => {
+      expect(artifactBody.scrollTop).toBe(0);
+    });
+
+    artifactBody.scrollTop = 120;
+    fireEvent.wheel(artifactBody);
+
+    act(() => {
+      artifactStream.push({ type: "thinking", nodeId: "node-2", stage: "artifact", text: "继续输出下一段" });
+    });
+
+    await vi.waitFor(() => {
+      expect(liveArtifactMock).toHaveBeenLastCalledWith(expect.objectContaining({ thinkingText: "继续输出下一段" }));
+    });
+    expect(artifactBody.scrollTop).toBe(120);
   });
 
   it("selects the current artifact from a done state even when no artifact.replace event was streamed", async () => {
@@ -1463,8 +1592,8 @@ describe("TreeableApp", () => {
     expect(shell).not.toHaveClass("app-shell--control-expanded");
     expect(artifactPanel).not.toBeNull();
     expect(shellChildren.indexOf(artifactPanel as Element)).toBeLessThan(shellChildren.indexOf(controlPanel));
-    expect(document.querySelector(".desktop-control-region__header")).toBeNull();
-    expect(screen.queryByText("树图 / 方向")).not.toBeInTheDocument();
+    expect(document.querySelector(".desktop-control-region__header")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "控制" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "展开控制区" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["tree", "options"]);
     expect(screen.getAllByTestId("canvas-tree-label-mode").map((item) => item.textContent)).toEqual([
@@ -1509,20 +1638,23 @@ describe("TreeableApp", () => {
 
     expect(shellRule).toContain("grid-template-columns: minmax(520px, 1.42fr) minmax(320px, 0.58fr)");
     expect(expandedShellRule).toContain("grid-template-columns: minmax(320px, 0.72fr) minmax(520px, 1.28fr)");
-    expect(controlRegionRule).toContain("position: relative");
-    expect(controlRegionRule).toContain("grid-template-rows: minmax(0, 1fr)");
+    const controlHeaderRule = css.match(/\.desktop-control-region__header\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(controlRegionRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
+    expect(controlRegionRule).toContain("padding: 14px");
+    expect(controlRegionRule).toContain("background: rgba(255, 255, 255, 0.9)");
+    expect(controlRegionRule).toContain("border: 1px solid var(--line)");
+    expect(controlHeaderRule).toContain("display: flex");
+    expect(controlHeaderRule).toContain("justify-content: space-between");
     expect(controlToggleRule).toContain("display: inline-flex");
-    expect(controlToggleRule).toContain("position: absolute");
-    expect(controlToggleRule).toContain("top: 10px");
-    expect(controlToggleRule).toContain("right: 10px");
-    expect(controlBodyRule).toContain("grid-template-rows: minmax(110px, 0.2fr) minmax(0, 0.8fr)");
+    expect(controlToggleRule).toContain("position: static");
+    expect(controlBodyRule).toContain("grid-template-rows: minmax(84px, 0.14fr) minmax(0, 0.86fr)");
     expect(expandedControlBodyRule).toContain("grid-template-rows: minmax(180px, 0.32fr) minmax(0, 0.68fr)");
     expect(desktopOptionsRule).toContain("grid-template-columns: 1fr");
     expect(desktopOptionsRule).toContain("grid-auto-rows: max-content");
     expect(desktopOptionsRule).toContain("align-content: start");
     expect(css).not.toContain(".app-shell--artifact-expanded");
     expect(css).not.toContain(".desktop-tree-toggle");
-    expect(css).not.toContain(".desktop-control-region__header");
   });
 
   it("defines mobile-only unified workspace visibility rules", () => {

@@ -1807,7 +1807,11 @@ button:disabled {
 }
 
 .mobile-artifact-region {
-  display: contents;
+  min-height: 0;
+  height: 100%;
+  display: block;
+  overflow-x: hidden;
+  overflow-y: hidden;
 }
 
 .mobile-panel {
@@ -2254,19 +2258,37 @@ button:disabled {
 }
 
 .desktop-control-region {
-  position: relative;
   min-height: 0;
   height: 100%;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
   overflow: hidden;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 16px 45px rgba(16, 32, 51, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+.desktop-control-region__header {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.desktop-control-region__header h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.96rem;
+  font-weight: 850;
 }
 
 .desktop-control-toggle {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 6;
+  position: static;
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -2282,7 +2304,6 @@ button:disabled {
   font: inherit;
   font-size: 0.82rem;
   font-weight: 850;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
 .desktop-control-toggle[aria-expanded="true"] {
@@ -2298,13 +2319,13 @@ button:disabled {
 .desktop-control-region__body {
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(110px, 0.2fr) minmax(0, 0.8fr);
+  grid-template-rows: minmax(84px, 0.14fr) minmax(0, 0.86fr);
   gap: 10px;
   overflow: hidden;
 }
 
 .desktop-control-region .tree-scroll-controls {
-  top: 58px;
+  top: 10px;
 }
 
 .app-shell--control-expanded .desktop-control-region__body {
@@ -2481,7 +2502,7 @@ button:disabled {
 }
 
 .tree-canvas--compact.tree-canvas--tree {
-  min-height: 110px;
+  min-height: 84px;
   grid-template-rows: minmax(0, 1fr);
 }
 
@@ -3239,40 +3260,6 @@ button:disabled {
   color: #075985;
 }
 
-.branch-option-focus {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: stretch;
-  min-height: 0;
-  animation: option-focus-in 170ms ease-out;
-}
-
-.branch-option-focus__selected {
-  min-width: 0;
-}
-
-.branch-option-focus__selected .branch-card--option:not(.branch-card--side) {
-  height: 100%;
-}
-
-.branch-option-focus__composer {
-  min-width: 0;
-  grid-column: 2;
-  grid-row: 1 / span 2;
-}
-
-.branch-option-focus__composer .branch-option-composer {
-  height: 100%;
-}
-
-.branch-option-focus__others {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
 .desktop-control-region__tree .tree-canvas--tree {
   min-height: 0;
   height: 100%;
@@ -3321,80 +3308,6 @@ button:disabled {
 .desktop-control-region__options .tree-canvas--options .branch-card--option:not(.branch-card--side) {
   min-height: 0;
   max-height: none;
-}
-
-.desktop-control-region__options .tree-canvas--options .branch-option-focus {
-  grid-template-columns: 1fr;
-  grid-template-rows: auto;
-  align-items: stretch;
-}
-
-.desktop-control-region__options .tree-canvas--options .branch-option-focus__composer {
-  grid-column: auto;
-  grid-row: auto;
-}
-
-.desktop-control-region__options .tree-canvas--options .branch-option-focus__composer .branch-option-composer {
-  height: auto;
-}
-
-.desktop-control-region__options .tree-canvas--options .branch-option-focus__others {
-  grid-template-columns: 1fr;
-}
-
-.branch-option-mini {
-  min-height: 36px;
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
-  gap: 7px;
-  align-items: center;
-  padding: 7px 8px;
-  color: #475569;
-  text-align: left;
-  background: rgba(248, 250, 252, 0.86);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 8px;
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
-}
-
-.branch-option-mini:hover:not(:disabled) {
-  color: #0f766e;
-  background: #ffffff;
-  border-color: rgba(15, 118, 110, 0.28);
-  transform: translateY(-1px);
-}
-
-.branch-option-mini__choice {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  color: #075985;
-  background: #e0f2fe;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 900;
-}
-
-.branch-option-mini__label {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 0.76rem;
-  font-weight: 850;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@keyframes option-focus-in {
-  from {
-    opacity: 0.72;
-    transform: translateY(6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .branch-option-composer {
@@ -3485,6 +3398,65 @@ button:disabled {
 .branch-option-composer__submit:disabled {
   cursor: not-allowed;
   opacity: 0.56;
+}
+
+.branch-option-composer--inline {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.branch-option-composer--inline .branch-option-composer__summary {
+  padding-right: 0;
+}
+
+.branch-option-composer--inline .branch-option-composer__summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 10px;
+  color: #0f766e;
+  background: #ecfdf5;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 8px;
+}
+
+.branch-option-composer--inline .branch-option-composer__note span {
+  display: none;
+}
+
+.branch-option-composer--inline .branch-option-composer__note input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  border-radius: 8px;
+  outline: none;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.branch-option-composer--inline .branch-option-composer__note input:focus {
+  border-color: rgba(15, 118, 110, 0.44);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+}
+
+.branch-option-composer--inline .branch-option-composer__close {
+  position: static;
+  width: 38px;
+  height: 38px;
+}
+
+.branch-option-composer--inline .branch-option-composer__submit {
+  min-width: 52px;
+  min-height: 38px;
 }
 
 .branch-option-tray__controls {
@@ -3924,21 +3896,21 @@ button:disabled {
 .social-post-panel {
   flex: 1 1 auto;
   position: relative;
-  min-height: 380px;
-  height: 100%;
+  min-height: 0;
+  height: auto;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  align-content: stretch;
+  grid-template-rows: auto auto;
+  align-content: start;
   padding: 14px 0 14px 14px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .artifact-workspace {
   flex: 1 1 auto;
-  min-height: 300px;
+  min-height: 0;
   height: 100%;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   overflow: hidden;
   padding: 14px;
@@ -4015,33 +3987,36 @@ button:disabled {
 }
 
 .artifact-workspace__body {
+  flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(min(320px, 45dvh), 1fr);
-  align-content: stretch;
+  grid-template-rows: auto auto;
+  align-content: start;
   gap: 12px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .artifact-workspace__supplements {
   min-height: 0;
   align-self: start;
-  max-height: min(38dvh, 340px);
   display: grid;
   gap: 12px;
-  overflow: auto;
+  overflow: visible;
 }
 
 .artifact-workspace__content {
-  min-height: min(320px, 45dvh);
-  height: 100%;
+  min-height: 0;
+  height: auto;
   display: grid;
 }
 
 .artifact-workspace__content > * {
   min-height: 0;
-  height: 100%;
+  height: auto;
 }
 
 .artifact-workspace__content--generating > * {
@@ -4219,14 +4194,12 @@ button:disabled {
   grid-template-rows: auto auto;
   gap: 10px;
   min-height: min(200px, 28dvh);
-  max-height: min(280px, 30dvh);
-  overflow: hidden;
+  overflow: visible;
   background: #fff;
 }
 
 .artifact-workspace__materials--streaming {
   min-height: min(200px, 30dvh);
-  max-height: min(320px, 34dvh);
 }
 
 .artifact-workspace__materials--generating {
@@ -4291,8 +4264,8 @@ button:disabled {
 .artifact-workspace__materials-list {
   display: grid;
   gap: 8px;
-  overflow: auto;
-  padding-right: 4px;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .artifact-workspace__material {
@@ -4906,13 +4879,13 @@ button:disabled {
 .social-post-panel__scroll {
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto;
   overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow-y: visible;
+  overscroll-behavior: auto;
   padding-right: 18px;
   padding-bottom: 58px;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 .panel-heading {
@@ -5671,7 +5644,7 @@ button:disabled {
 
   .tree-canvas--options .branch-option-tray {
     max-height: none;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto auto auto;
     overflow: visible;
     padding: 12px;
     background: rgba(255, 255, 255, 0.76);
@@ -5694,23 +5667,8 @@ button:disabled {
     overscroll-behavior: auto;
   }
 
-  .tree-canvas--options .branch-option-focus {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
-    align-items: stretch;
-  }
-
-  .tree-canvas--options .branch-option-focus__selected .branch-card--option:not(.branch-card--side) {
-    height: auto;
-  }
-
-  .tree-canvas--options .branch-option-focus__composer {
-    grid-column: auto;
-    grid-row: auto;
-  }
-
-  .tree-canvas--options .branch-option-focus__composer .branch-option-composer {
-    height: auto;
+  .tree-canvas--options .branch-option-composer--inline {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .tree-canvas--options .branch-side-form {

@@ -395,7 +395,7 @@ describe("TreeCanvas", () => {
       css.match(/\.tree-canvas--compact\.tree-canvas--tree \.mind-map-svg\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
       "";
 
-    expect(compactCanvasRule).toContain("min-height: 110px");
+    expect(compactCanvasRule).toContain("min-height: 84px");
     expect(compactCanvasRule).toContain("grid-template-rows: minmax(0, 1fr)");
     expect(compactViewportShellRule).toContain("min-height: 0");
     expect(compactViewportRule).toContain("min-height: 0");
@@ -497,6 +497,7 @@ describe("TreeCanvas", () => {
     render(
       <BranchOptionTray
         isBusy={false}
+        isCustomOptionInline
         onChoose={vi.fn()}
         options={currentNode.options}
         pendingChoice={null}
@@ -647,7 +648,7 @@ describe("TreeCanvas", () => {
     expect(within(question as HTMLElement).getByText("基于当前稿，下一步怎么改？")).toBeInTheDocument();
   });
 
-  it("selects an option before showing the shared writing controls", () => {
+  it("keeps selected option state in the main list and merges writing controls into the bottom bar", () => {
     const onChoose = vi.fn();
     const longDescription =
       "把当前内容重构为面向第一次接触该主题的读者的实用内容，保留原有骨架，但增加背景解释、判断标准、行动建议和风险提醒。";
@@ -666,16 +667,16 @@ describe("TreeCanvas", () => {
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
     expect(onChoose).not.toHaveBeenCalled();
-    const focusPanel = screen.getByRole("group", { name: "已选方向" });
-    expect(focusPanel).toHaveClass("branch-option-focus");
-    expect(within(focusPanel).getByRole("button", { name: /A 具体场景/ })).toHaveClass("branch-card__choose");
+    expect(screen.queryByRole("group", { name: "已选方向" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "三个主选项" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /A 具体场景/ }).closest(".branch-card")).toHaveClass("branch-card--selected");
     expect(screen.getByText("已选 A")).toBeInTheDocument();
     expect(within(screen.getByRole("group", { name: "A 写作操作" })).queryByText("具体场景")).not.toBeInTheDocument();
     expect(within(screen.getByRole("group", { name: "A 写作操作" })).queryByText(longDescription)).not.toBeInTheDocument();
     expect(screen.getByLabelText("补充想法 A")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "A 按这个方向写" })).toBeInTheDocument();
-    expect(screen.getByText("还想补一句吗？")).toBeInTheDocument();
-    expect(within(screen.getByRole("group", { name: "其他方向" })).getByRole("button", { name: /切换到 B/ })).toBeInTheDocument();
+    expect(screen.getByLabelText("补充想法 A")).toHaveAttribute("placeholder", "还想补一句吗？");
+    expect(screen.queryByRole("group", { name: "其他方向" })).not.toBeInTheDocument();
     expect(screen.queryByText("更多备注")).not.toBeInTheDocument();
   });
 
@@ -705,6 +706,7 @@ describe("TreeCanvas", () => {
     render(
       <BranchOptionTray
         isBusy={false}
+        isCustomOptionInline
         onChoose={vi.fn()}
         options={currentNode.options}
         pendingChoice={null}
@@ -713,12 +715,14 @@ describe("TreeCanvas", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
-    expect(screen.getByRole("group", { name: "已选方向" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "已选方向" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "A 写作操作" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭写作操作" }));
 
     expect(screen.queryByRole("group", { name: "已选方向" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "A 写作操作" })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "三个主选项" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "自己写方向" })).toBeInTheDocument();
   });
 
   it("uses one tray-level direction range control for choosing option mode", () => {
@@ -1580,30 +1584,20 @@ describe("TreeCanvas", () => {
     expect(mobileRule).toContain("margin-left: 0");
   });
 
-  it("stacks the selected mobile option above the writing controls", () => {
+  it("uses the compact bottom writing bar for selected mobile options", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const mobileWorkspaceRule = css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)
       ?.groups?.body ?? "";
-    const focusRule =
-      mobileWorkspaceRule.match(/\.tree-canvas--options \.branch-option-focus\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const selectedCardRule =
-      mobileWorkspaceRule.match(
-        /\.tree-canvas--options \.branch-option-focus__selected \.branch-card--option:not\(\.branch-card--side\)\s*\{(?<body>[^}]+)\}/
-      )?.groups?.body ?? "";
     const composerRule =
-      mobileWorkspaceRule.match(/\.tree-canvas--options \.branch-option-focus__composer\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
-      "";
-    const composerCardRule =
-      mobileWorkspaceRule.match(
-        /\.tree-canvas--options \.branch-option-focus__composer \.branch-option-composer\s*\{(?<body>[^}]+)\}/
-      )?.groups?.body ?? "";
+      css.match(/\.branch-option-composer--inline\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactComposerRule =
+      mobileWorkspaceRule.match(/\.tree-canvas--options \.branch-option-composer--inline\s*\{(?<body>[^}]+)\}/)?.groups
+        ?.body ?? "";
 
-    expect(focusRule).toContain("grid-template-columns: 1fr");
-    expect(focusRule).toContain("grid-template-rows: auto");
-    expect(selectedCardRule).toContain("height: auto");
-    expect(composerRule).toContain("grid-column: auto");
-    expect(composerRule).toContain("grid-row: auto");
-    expect(composerCardRule).toContain("height: auto");
+    expect(composerRule).toContain("grid-template-columns: auto minmax(0, 1fr) auto auto");
+    expect(composerRule).toContain("box-shadow: none");
+    expect(compactComposerRule).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(mobileWorkspaceRule).not.toContain(".tree-canvas--options .branch-option-focus");
   });
 
   it("lets the full mobile options question expand the page height", () => {

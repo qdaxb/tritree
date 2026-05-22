@@ -514,6 +514,10 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
   const activeGenerationStopRequestedRef = useRef(false);
   const loadRequestIdRef = useRef(0);
   const mobileArtifactRegionRef = useRef<HTMLDivElement>(null);
+  const artifactScrollBodyRef = useRef<HTMLDivElement>(null);
+  const artifactScrollGenerationKeyRef = useRef<string | null>(null);
+  const shouldAutoScrollArtifactRegionRef = useRef(true);
+  const artifactAutoScrollIgnoreUntilRef = useRef(0);
   const wasMobileArtifactGenerationActiveRef = useRef(false);
   const canImportSkills = currentUser?.isAdmin === true;
   const isMobileArtifactGenerationActive = Boolean(
@@ -573,6 +577,10 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
   }, [currentUser?.id]);
 
   useEffect(() => {
+    shouldAutoScrollArtifactRegionRef.current = true;
+  }, [sessionState?.session.id, sessionState?.currentNode?.id, viewNodeId]);
+
+  useEffect(() => {
     if (sessionState?.currentNode?.id) {
       setViewNodeId(sessionState.currentNode.id);
       setCustomOption(null);
@@ -589,11 +597,92 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     if (wasMobileArtifactGenerationActiveRef.current) return;
 
     wasMobileArtifactGenerationActiveRef.current = true;
-    const artifactRegion = mobileArtifactRegionRef.current;
+    const artifactRegion = artifactScrollBodyRef.current;
     if (typeof artifactRegion?.scrollIntoView === "function") {
       artifactRegion.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [isMobileArtifactGenerationActive]);
+
+  useEffect(() => {
+    const artifactRegion = artifactScrollBodyRef.current;
+    if (!artifactRegion) return;
+
+    const hasScrollableArtifactRegion = () => artifactRegion.scrollHeight > artifactRegion.clientHeight + 2;
+    const stopAutoScroll = () => {
+      if (!hasScrollableArtifactRegion()) return;
+      shouldAutoScrollArtifactRegionRef.current = false;
+    };
+    const handleScroll = () => {
+      if (Date.now() < artifactAutoScrollIgnoreUntilRef.current) return;
+      const distanceFromBottom = artifactRegion.scrollHeight - artifactRegion.clientHeight - artifactRegion.scrollTop;
+      if (distanceFromBottom > 4) {
+        shouldAutoScrollArtifactRegionRef.current = false;
+      }
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      const rect = artifactRegion.getBoundingClientRect();
+      const isScrollbarHit = event.target === artifactRegion && event.clientX >= rect.right - 18;
+      if (isScrollbarHit) stopAutoScroll();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target !== artifactRegion) return;
+      if (["ArrowUp", "ArrowDown", "End", "Home", "PageDown", "PageUp", " "].includes(event.key)) {
+        stopAutoScroll();
+      }
+    };
+
+    artifactRegion.addEventListener("wheel", stopAutoScroll, { passive: true });
+    artifactRegion.addEventListener("touchstart", stopAutoScroll, { passive: true });
+    artifactRegion.addEventListener("pointerdown", handlePointerDown, { passive: true });
+    artifactRegion.addEventListener("keydown", handleKeyDown);
+    artifactRegion.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      artifactRegion.removeEventListener("wheel", stopAutoScroll);
+      artifactRegion.removeEventListener("touchstart", stopAutoScroll);
+      artifactRegion.removeEventListener("pointerdown", handlePointerDown);
+      artifactRegion.removeEventListener("keydown", handleKeyDown);
+      artifactRegion.removeEventListener("scroll", handleScroll);
+    };
+  }, [loadState, sessionState?.session.id, isMobileLayout]);
+
+  useEffect(() => {
+    if (!shouldAutoScrollArtifactRegionRef.current) return;
+
+    const artifactRegion = artifactScrollBodyRef.current;
+    if (!artifactRegion) return;
+
+    const scrollToBottom = () => {
+      artifactAutoScrollIgnoreUntilRef.current = Date.now() + 120;
+      artifactRegion.scrollTop = artifactRegion.scrollHeight;
+    };
+
+    scrollToBottom();
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") return;
+
+    const frameId = window.requestAnimationFrame(scrollToBottom);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [isMobileLayout, isSkillPanelOpen, loadState, streamingArtifact, streamingProcessMaterials, streamingThinking]);
+
+  useEffect(() => {
+    const generationKey = generationStage ? `${generationStage.nodeId}:${generationStage.stage}` : null;
+    if (!generationKey) {
+      artifactScrollGenerationKeyRef.current = null;
+      return;
+    }
+
+    if (artifactScrollGenerationKeyRef.current === generationKey) return;
+
+    artifactScrollGenerationKeyRef.current = generationKey;
+    shouldAutoScrollArtifactRegionRef.current = true;
+    const artifactRegion = artifactScrollBodyRef.current;
+    if (!artifactRegion) return;
+
+    artifactAutoScrollIgnoreUntilRef.current = Date.now() + 120;
+    artifactRegion.scrollTop = 0;
+  }, [generationStage?.nodeId, generationStage?.stage]);
 
   function mobilePanelClassName(panel: MobilePanel, extraClassName?: string) {
     return `mobile-panel mobile-panel--${panel}${extraClassName ? ` ${extraClassName}` : ""}`;
@@ -1971,6 +2060,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
             currentNode={currentNodeForCanvas}
             generationStage={artifactGenerationStage}
             publishPlatforms={selectedArtifactPublishPlatforms}
+            scrollBodyRef={artifactScrollBodyRef}
             headerActions={
               <button
                 aria-expanded={isSkillPanelOpen}
@@ -2044,7 +2134,10 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
           role="region"
         >
           <section className="desktop-control-region">
-            {renderDesktopControlToggle()}
+            <header className="desktop-control-region__header">
+              <h2>控制</h2>
+              {renderDesktopControlToggle()}
+            </header>
             <div className="desktop-control-region__body">
               <div className="desktop-control-region__tree">{renderTreeCanvas("tree")}</div>
               <div className="desktop-control-region__options">{renderTreeCanvas("options")}</div>
