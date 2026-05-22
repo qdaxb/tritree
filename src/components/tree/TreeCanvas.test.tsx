@@ -177,7 +177,7 @@ describe("TreeCanvas", () => {
     expect(tray.querySelector("foreignObject")).toBeNull();
   });
 
-  it("keeps a custom direction composer open at the bottom in vertical option mode", () => {
+  it("keeps a compact custom direction input at the bottom in vertical option mode", () => {
     const onAddCustomOption = vi.fn();
     render(
       <BranchOptionTray
@@ -193,12 +193,18 @@ describe("TreeCanvas", () => {
 
     const tray = screen.getByRole("group", { name: "回答当前问题" });
     const customInput = within(tray).getByRole("textbox", { name: "自己写方向" });
+    const sendButton = within(tray).getByRole("button", { name: "发送" });
 
     expect(within(tray).queryByRole("button", { name: "自己写方向" })).not.toBeInTheDocument();
+    expect(within(tray).queryByRole("button", { name: "关闭自己写方向" })).not.toBeInTheDocument();
+    expect(within(tray).queryByText("自己写方向")).not.toBeInTheDocument();
     expect(customInput).toBeInTheDocument();
+    expect(customInput.tagName).toBe("INPUT");
+    expect(sendButton).toBeDisabled();
 
     fireEvent.change(customInput, { target: { value: "从评论区提问开头" } });
-    fireEvent.click(within(tray).getByRole("button", { name: "发送" }));
+    expect(sendButton).toBeEnabled();
+    fireEvent.click(sendButton);
 
     expect(onAddCustomOption).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1613,6 +1619,23 @@ describe("TreeCanvas", () => {
     expect(formRule).toContain("max-height: min(420px, calc(100dvh - 160px))");
     expect(formRule).toContain("overflow: auto");
     expect(formRule).toContain("background: #ffffff");
+  });
+
+  it("renders the inline custom direction as a compact input row", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const compactRule = css.match(/\.branch-side-form--compact\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactHeaderRule =
+      css.match(/\.branch-side-form--compact \.branch-side-form__header\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactFieldLabelRule =
+      css.match(/\.branch-side-form--compact \.branch-card__field > span\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactInputRule =
+      css.match(/\.branch-side-form--compact \.branch-card__field input\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(compactRule).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(compactRule).toContain("padding: 0");
+    expect(compactHeaderRule).toContain("display: none");
+    expect(compactFieldLabelRule).toContain("display: none");
+    expect(compactInputRule).toContain("min-height: 38px");
   });
 
   it("keeps unselected historical options as grey folded side paths", () => {

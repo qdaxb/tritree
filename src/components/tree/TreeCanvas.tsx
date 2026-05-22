@@ -1495,9 +1495,10 @@ export function BranchOptionTray({
             defaultEditing
             disabled={isBusy}
             fieldLabel="自己写方向"
-            formClassName="branch-side-form branch-side-form--inline"
+            formClassName="branch-side-form branch-side-form--inline branch-side-form--compact"
             headerLabel="自己写方向"
             hideHeaderClose
+            isCompactInline
             isPersistent
             onAddCustomOption={onAddCustomOption}
             placeholder="输入你想补充的方向..."
@@ -1774,6 +1775,7 @@ function MoreDirectionsCard({
   formClassName = "branch-side-form",
   headerLabel = "自己写方向",
   hideHeaderClose = false,
+  isCompactInline = false,
   isPersistent = false,
   onAddCustomOption,
   placeholder = "例如：从评论区争议切入，语气更像朋友聊天",
@@ -1789,6 +1791,7 @@ function MoreDirectionsCard({
   formClassName?: string;
   headerLabel?: string;
   hideHeaderClose?: boolean;
+  isCompactInline?: boolean;
   isPersistent?: boolean;
   onAddCustomOption?: (option: BranchOption) => void;
   placeholder?: string;
@@ -1848,24 +1851,37 @@ function MoreDirectionsCard({
 
   return (
     <div className={formClassName}>
-      <div className="branch-side-form__header">
-        <strong>{headerLabel}</strong>
-        {hideHeaderClose ? null : (
-          <button aria-label={`关闭${headerLabel}`} disabled={disabled} onClick={closeCustomOption} type="button">
-            关闭
-          </button>
-        )}
-      </div>
+      {isCompactInline ? null : (
+        <div className="branch-side-form__header">
+          <strong>{headerLabel}</strong>
+          {hideHeaderClose ? null : (
+            <button aria-label={`关闭${headerLabel}`} disabled={disabled} onClick={closeCustomOption} type="button">
+              关闭
+            </button>
+          )}
+        </div>
+      )}
       <label className="branch-card__field">
-        <span>{fieldLabel}</span>
-        <textarea
-          aria-label={textareaLabel}
-          disabled={disabled}
-          onChange={(event) => setContent(event.target.value)}
-          placeholder={placeholder}
-          rows={3}
-          value={content}
-        />
+        {isCompactInline ? null : <span>{fieldLabel}</span>}
+        {isCompactInline ? (
+          <input
+            aria-label={textareaLabel}
+            disabled={disabled}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={placeholder}
+            type="text"
+            value={content}
+          />
+        ) : (
+          <textarea
+            aria-label={textareaLabel}
+            disabled={disabled}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={placeholder}
+            rows={3}
+            value={content}
+          />
+        )}
       </label>
       <button className="branch-card__confirm" disabled={disabled || !trimmedContent} onClick={addCustomOption} type="button">
         {submitLabel}

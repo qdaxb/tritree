@@ -3671,6 +3671,51 @@ button:disabled {
   margin-top: 0;
 }
 
+.branch-side-form--compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.branch-side-form--compact .branch-side-form__header {
+  display: none;
+}
+
+.branch-side-form--compact .branch-card__field > span {
+  display: none;
+}
+
+.branch-side-form--compact .branch-card__field {
+  grid-column: 1;
+}
+
+.branch-side-form--compact .branch-card__field input {
+  min-height: 38px;
+  width: 100%;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  border-radius: 8px;
+  outline: none;
+}
+
+.branch-side-form--compact .branch-card__field input:focus {
+  border-color: rgba(15, 118, 110, 0.44);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+}
+
+.branch-side-form--compact .branch-card__confirm {
+  grid-column: 2;
+  min-width: 52px;
+  min-height: 38px;
+  margin-top: 0;
+}
+
 .branch-side-form__header {
   display: flex;
   align-items: center;
