@@ -381,6 +381,30 @@ describe("TreeCanvas", () => {
     expect(mobileRule).toContain("left: 12px");
   });
 
+  it("styles compact tree mode as a fitted overview instead of a scroll surface", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const compactCanvasRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--tree\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactViewportShellRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--tree \.tree-viewport-shell\s*\{(?<body>[^}]+)\}/)?.groups
+        ?.body ?? "";
+    const compactViewportRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--tree \.tree-viewport\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
+      "";
+    const compactSvgRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--tree \.mind-map-svg\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
+      "";
+
+    expect(compactCanvasRule).toContain("min-height: 110px");
+    expect(compactCanvasRule).toContain("grid-template-rows: minmax(0, 1fr)");
+    expect(compactViewportShellRule).toContain("min-height: 0");
+    expect(compactViewportRule).toContain("min-height: 0");
+    expect(compactViewportRule).toContain("overflow: hidden");
+    expect(compactViewportRule).toContain("scrollbar-width: none");
+    expect(compactSvgRule).toContain("width: 100%");
+    expect(compactSvgRule).toContain("height: 100%");
+  });
+
   it("does not reserve tree viewport space in options-only mode", () => {
     const { container } = render(
       <TreeCanvas
@@ -1205,6 +1229,31 @@ describe("TreeCanvas", () => {
 
     expect(seedElement?.querySelector("title")).toHaveTextContent("种子念头");
     expect(container.querySelectorAll(".force-labels")).toHaveLength(0);
+  });
+
+  it("renders compact tree mode as a non-scrollable overview", () => {
+    const selectedPath = buildLongSelectedPath(9);
+    const { container } = render(
+      <TreeCanvas
+        currentNode={selectedPath[selectedPath.length - 1]}
+        isBusy={false}
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={selectedPath}
+        treeLabelMode="compact"
+        treeNodes={selectedPath}
+      />
+    );
+
+    const viewport = screen.getByRole("region", { name: "长任务树图浏览区" });
+    const svg = container.querySelector(".mind-map-svg");
+
+    expect(screen.queryByRole("note", { name: "树图说明" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看较早节点" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "回到最新节点" })).not.toBeInTheDocument();
+    expect(container.querySelector(".tree-scroll-controls")).not.toBeInTheDocument();
+    expect(viewport).not.toHaveClass("tree-viewport--scrollable");
+    expect(svg).toHaveStyle({ height: "100%", minHeight: "0", width: "100%" });
   });
 
   it("shows visual node labels in detail tree mode", () => {

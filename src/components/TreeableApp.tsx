@@ -2044,10 +2044,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
           role="region"
         >
           <section className="desktop-control-region">
-            <header className="desktop-control-region__header">
-              <strong>树图 / 方向</strong>
-              {renderDesktopControlToggle()}
-            </header>
+            {renderDesktopControlToggle()}
             <div className="desktop-control-region__body">
               <div className="desktop-control-region__tree">{renderTreeCanvas("tree")}</div>
               <div className="desktop-control-region__options">{renderTreeCanvas("options")}</div>

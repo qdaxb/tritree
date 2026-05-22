@@ -694,8 +694,13 @@ export function TreeCanvas({
   );
   const isTreeScrollable = branchLayout.width > canvasWidth + 1;
   const shouldShowTree = display !== "options";
+  const isCompactTreeOverview = shouldShowTree && treeLabelMode === "compact";
   const shouldShowBranchControls = display !== "tree";
   const shouldInlineCustomOption = display === "options" && !isMobileLayout;
+  const shouldShowTreeScrollControls = !isCompactTreeOverview && isTreeScrollable;
+  const treeSvgStyle = isCompactTreeOverview
+    ? { height: "100%", minHeight: 0, width: "100%" }
+    : { height: branchLayout.height, minHeight: 300, width: branchLayout.width };
   const nodeId = currentNode?.id ?? null;
   const isBranchGenerating = Boolean(pendingBranch);
   const graphCurrentNode = isBranchGenerating ? null : currentNode;
@@ -829,13 +834,15 @@ export function TreeCanvas({
   }, [currentNode?.id, currentPrimaryOptionCount, isOptionsGenerating]);
 
   useEffect(() => {
+    if (isCompactTreeOverview) return;
+
     if (isMobileLayout) {
       scrollTreeToRoot("auto");
       return;
     }
 
     scrollTreeToLatest("auto");
-  }, [branchLayout.height, branchLayout.width, isMobileLayout, nodeId, pendingBranch?.nodeId]);
+  }, [branchLayout.height, branchLayout.width, isCompactTreeOverview, isMobileLayout, nodeId, pendingBranch?.nodeId]);
 
   function scrollTreeToRoot(behavior: ScrollBehavior = "smooth") {
     const viewport = treeViewportRef.current;
@@ -880,6 +887,8 @@ export function TreeCanvas({
   }
 
   function handleTreeViewportKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (isCompactTreeOverview) return;
+
     if (event.key === "ArrowLeft") {
       event.preventDefault();
       scrollTreeBy(-180, 0);
@@ -902,6 +911,8 @@ export function TreeCanvas({
   }
 
   function handleTreeViewportPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (isCompactTreeOverview) return;
+
     const viewport = treeViewportRef.current;
     if (!viewport || event.button !== 0) return;
     if (isClickableTreePointerTarget(event.target)) return;
@@ -1181,8 +1192,8 @@ export function TreeCanvas({
             aria-label="长任务树图浏览区"
             className={clsx(
               "tree-viewport",
-              isTreeScrollable && "tree-viewport--scrollable",
-              isDraggingTree && "tree-viewport--dragging"
+              shouldShowTreeScrollControls && "tree-viewport--scrollable",
+              !isCompactTreeOverview && isDraggingTree && "tree-viewport--dragging"
             )}
             data-pan-axis="x"
             onClickCapture={handleTreeViewportClick}
@@ -1199,18 +1210,21 @@ export function TreeCanvas({
               aria-label="AI 内容方向示意图"
               className="mind-map-svg"
               height={branchLayout.height}
+              preserveAspectRatio="xMidYMid meet"
               ref={svgRef}
               role="img"
-              style={{ height: branchLayout.height, minHeight: 300, width: branchLayout.width }}
+              style={treeSvgStyle}
               viewBox={`0 0 ${branchLayout.width} ${branchLayout.height}`}
               width={branchLayout.width}
             />
           </div>
-          <TreeOperationHint
-            isExpanded={isOperationHintExpanded}
-            onToggle={toggleOperationHint}
-          />
-          {isTreeScrollable ? (
+          {isCompactTreeOverview ? null : (
+            <TreeOperationHint
+              isExpanded={isOperationHintExpanded}
+              onToggle={toggleOperationHint}
+            />
+          )}
+          {shouldShowTreeScrollControls ? (
             <div aria-label="树图浏览控制" className="tree-scroll-controls" role="group">
               <button
                 aria-label="查看较早节点"

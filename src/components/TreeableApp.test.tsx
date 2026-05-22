@@ -1463,6 +1463,8 @@ describe("TreeableApp", () => {
     expect(shell).not.toHaveClass("app-shell--control-expanded");
     expect(artifactPanel).not.toBeNull();
     expect(shellChildren.indexOf(artifactPanel as Element)).toBeLessThan(shellChildren.indexOf(controlPanel));
+    expect(document.querySelector(".desktop-control-region__header")).toBeNull();
+    expect(screen.queryByText("树图 / 方向")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "展开控制区" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["tree", "options"]);
     expect(screen.getAllByTestId("canvas-tree-label-mode").map((item) => item.textContent)).toEqual([
@@ -1496,7 +1498,6 @@ describe("TreeableApp", () => {
     const shellRule = css.match(/\.app-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const expandedShellRule = css.match(/\.app-shell--control-expanded\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const controlRegionRule = css.match(/\.desktop-control-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const controlHeaderRule = css.match(/\.desktop-control-region__header\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const controlToggleRule = css.match(/\.desktop-control-toggle\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const controlBodyRule = css.match(/\.desktop-control-region__body\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const expandedControlBodyRule =
@@ -1508,16 +1509,20 @@ describe("TreeableApp", () => {
 
     expect(shellRule).toContain("grid-template-columns: minmax(520px, 1.42fr) minmax(320px, 0.58fr)");
     expect(expandedShellRule).toContain("grid-template-columns: minmax(320px, 0.72fr) minmax(520px, 1.28fr)");
-    expect(controlRegionRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
-    expect(controlHeaderRule).toContain("justify-content: space-between");
+    expect(controlRegionRule).toContain("position: relative");
+    expect(controlRegionRule).toContain("grid-template-rows: minmax(0, 1fr)");
     expect(controlToggleRule).toContain("display: inline-flex");
-    expect(controlBodyRule).toContain("grid-template-rows: minmax(180px, 0.48fr) minmax(0, 0.52fr)");
-    expect(expandedControlBodyRule).toContain("grid-template-rows: minmax(260px, 0.58fr) minmax(0, 0.42fr)");
+    expect(controlToggleRule).toContain("position: absolute");
+    expect(controlToggleRule).toContain("top: 10px");
+    expect(controlToggleRule).toContain("right: 10px");
+    expect(controlBodyRule).toContain("grid-template-rows: minmax(110px, 0.2fr) minmax(0, 0.8fr)");
+    expect(expandedControlBodyRule).toContain("grid-template-rows: minmax(180px, 0.32fr) minmax(0, 0.68fr)");
     expect(desktopOptionsRule).toContain("grid-template-columns: 1fr");
     expect(desktopOptionsRule).toContain("grid-auto-rows: max-content");
     expect(desktopOptionsRule).toContain("align-content: start");
     expect(css).not.toContain(".app-shell--artifact-expanded");
     expect(css).not.toContain(".desktop-tree-toggle");
+    expect(css).not.toContain(".desktop-control-region__header");
   });
 
   it("defines mobile-only unified workspace visibility rules", () => {

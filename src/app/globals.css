@@ -2254,38 +2254,19 @@ button:disabled {
 }
 
 .desktop-control-region {
+  position: relative;
   min-height: 0;
   height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 10px;
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
-}
-
-.desktop-control-region__header {
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  color: #0f172a;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 8px;
-  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
-}
-
-.desktop-control-region__header strong {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 0.88rem;
-  font-weight: 850;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-control-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 6;
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -2317,13 +2298,17 @@ button:disabled {
 .desktop-control-region__body {
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(180px, 0.48fr) minmax(0, 0.52fr);
+  grid-template-rows: minmax(110px, 0.2fr) minmax(0, 0.8fr);
   gap: 10px;
   overflow: hidden;
 }
 
+.desktop-control-region .tree-scroll-controls {
+  top: 58px;
+}
+
 .app-shell--control-expanded .desktop-control-region__body {
-  grid-template-rows: minmax(260px, 0.58fr) minmax(0, 0.42fr);
+  grid-template-rows: minmax(180px, 0.32fr) minmax(0, 0.68fr);
 }
 
 .desktop-control-region__tree,
@@ -2493,6 +2478,33 @@ button:disabled {
 .tree-viewport .mind-map-svg {
   max-width: none;
   min-width: 100%;
+}
+
+.tree-canvas--compact.tree-canvas--tree {
+  min-height: 110px;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.tree-canvas--compact.tree-canvas--tree .tree-viewport-shell {
+  min-height: 0;
+}
+
+.tree-canvas--compact.tree-canvas--tree .tree-viewport {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  scrollbar-width: none;
+  touch-action: auto;
+}
+
+.tree-canvas--compact.tree-canvas--tree .tree-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.tree-canvas--compact.tree-canvas--tree .mind-map-svg {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
 }
 
 .tree-scroll-controls {
