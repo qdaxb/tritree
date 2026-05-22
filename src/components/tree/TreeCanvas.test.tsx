@@ -1183,6 +1183,42 @@ describe("TreeCanvas", () => {
     expect(seedElement?.querySelector(".force-labels")).toHaveTextContent("种子念头");
   });
 
+  it("keeps node titles but hides visual labels in compact tree mode", () => {
+    const { container } = render(
+      <TreeCanvas
+        currentNode={selectedNode}
+        isBusy={false}
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[currentNode, selectedNode]}
+        treeLabelMode="compact"
+      />
+    );
+
+    const seedElement = container.querySelector(".tree-node--seed-root");
+
+    expect(seedElement?.querySelector("title")).toHaveTextContent("种子念头");
+    expect(container.querySelectorAll(".force-labels")).toHaveLength(0);
+  });
+
+  it("shows visual node labels in detail tree mode", () => {
+    const { container } = render(
+      <TreeCanvas
+        currentNode={selectedNode}
+        isBusy={false}
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[currentNode, selectedNode]}
+        treeLabelMode="detail"
+      />
+    );
+
+    const seedElement = container.querySelector(".tree-node--seed-root");
+
+    expect(seedElement?.querySelector("title")).toHaveTextContent("种子念头");
+    expect(seedElement?.querySelector(".force-labels")).toHaveTextContent("种子念头");
+  });
+
   it("shows a single loading leaf while the first seed generation is running", () => {
     const graph = createForceTreeGraph({
       currentNode: null,

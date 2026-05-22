@@ -47,7 +47,10 @@ type TreeCanvasProps = {
   onViewNode?: (nodeId: string) => void;
   optionsHeaderAction?: ReactNode;
   skills?: Skill[];
+  treeLabelMode?: TreeLabelMode;
 };
+
+type TreeLabelMode = "compact" | "detail";
 
 const CANVAS_HEIGHT = 380;
 const MIN_CANVAS_WIDTH = 320;
@@ -659,7 +662,8 @@ export function TreeCanvas({
   onRegenerateOptions,
   onSelectComparisonNode,
   onViewNode,
-  optionsHeaderAction
+  optionsHeaderAction,
+  treeLabelMode = "detail"
 }: TreeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const treeViewportRef = useRef<HTMLDivElement>(null);
@@ -1100,7 +1104,7 @@ export function TreeCanvas({
 
     node
       .selectAll<SVGTextElement, ForceTreeNode>("text.force-labels")
-      .data((datum) => (datum.kind !== "loading" ? [datum] : []))
+      .data((datum) => (treeLabelMode === "detail" && datum.kind !== "loading" ? [datum] : []))
       .join(
         (enter) => enter.append("text").attr("class", "force-labels"),
         (update) => update,
@@ -1156,7 +1160,8 @@ export function TreeCanvas({
     onSelectComparisonNode,
     onViewNode,
     pendingBranch,
-    pendingChoice
+    pendingChoice,
+    treeLabelMode
   ]);
 
   return (
@@ -1165,7 +1170,8 @@ export function TreeCanvas({
         "tree-canvas",
         `tree-canvas--${display}`,
         generationStage?.stage === "options" && "tree-canvas--options-generating",
-        isComparisonMode && "tree-canvas--comparison"
+        isComparisonMode && "tree-canvas--comparison",
+        treeLabelMode === "compact" && "tree-canvas--compact"
       )}
       ref={containerRef}
     >
