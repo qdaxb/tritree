@@ -14,9 +14,6 @@ import {
 
 export function createTreeableAnthropicModel(env: Record<string, string | undefined> = process.env) {
   const apiKey = getDirectorAuthToken(env);
-  if (!apiKey) {
-    throw new Error("KIMI_API_KEY is not configured.");
-  }
 
   const anthropic = createAnthropic({
     apiKey,
