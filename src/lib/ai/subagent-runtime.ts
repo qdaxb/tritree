@@ -10,12 +10,16 @@ import {
   type ContextViewPolicy
 } from "./context-projection";
 import { createTreeableAnthropicModel } from "./mastra-agents";
+import { ShowProcessDataInputSchema, type ProcessDataDisplay } from "./mastra-executor/schemas";
 import { toAsyncIterable } from "./mastra-executor/json-utils";
 import {
+  processDataDisplayFromStreamChunk,
   reasoningDeltaFromStreamChunk,
   textDeltaFromStreamChunk,
-  toolProgressDeltaFromStreamChunk
+  toolProgressDeltaFromStreamChunk,
+  type ToolCallDeltaState
 } from "./mastra-executor/stream-chunks";
+import { SHOW_PROCESS_DATA_TOOL_NAME } from "./mastra-executor/tools";
 import { DEFAULT_MAX_OUTPUT_TOKENS, resolveModelContextBudget } from "./model-context";
 import type { DirectorInputParts } from "./prompts";
 import type { StreamSource } from "./mastra-executor/types";
@@ -39,6 +43,7 @@ export type SubagentTask = {
   context: string;
   env?: StringEnv;
   expectedOutput: string;
+  onProcessData?: (data: ProcessDataDisplay) => void;
   onProgress?: (segments: RuntimeProgressSegment[]) => void;
   task: string;
   template?: SubagentTemplate;
@@ -57,6 +62,7 @@ type CreateSubagentRuntimeToolsOptions = {
   contextPolicy?: ContextViewPolicy;
   contextSource?: DirectorInputParts;
   env?: StringEnv;
+  onProcessData?: (data: ProcessDataDisplay) => void;
   progressBridge?: RuntimeProgressBridge;
   runSubagentTask?: SubagentTaskRunner;
   templates?: SubagentTemplate[];
@@ -68,6 +74,7 @@ export function createSubagentRuntimeTools({
   contextPolicy = SUBAGENT_CONTEXT_POLICY,
   contextSource,
   env = process.env,
+  onProcessData,
   progressBridge,
   runSubagentTask = runSubagentTaskWithModel,
   templates = DEFAULT_SUBAGENT_TEMPLATES,
@@ -79,7 +86,7 @@ export function createSubagentRuntimeTools({
     run_subagent_template: createTool({
       id: "run_subagent_template",
       description:
-        "Run one precreated Tritree subagent template for a bounded task. Use this when a listed template matches the need.",
+        "Run one precreated Tritree subagent template for a bounded task. Use this when a listed template matches the need. If the result includes displayedProcessData and showProcessDataAlreadyDisplayed, those materials are already shown through show_process_data; inspect and use them, but do not call show_process_data again for the same items.",
       inputSchema: z.object({
         templateId: z.string().min(1).describe("Template id from the available subagent template list."),
         task: z.string().min(1).describe("Specific bounded task for the subagent."),
@@ -91,11 +98,13 @@ export function createSubagentRuntimeTools({
           throw new Error(`Unknown subagent template: ${templateId}`);
         }
 
+        const processDataCollector = createProcessDataCollector(onProcessData);
         const result = await runSubagentTask({
           abortSignal: executeContext?.abortSignal,
           context: subagentContext,
           env,
           expectedOutput: expectedOutput ?? template.expectedOutput,
+          onProcessData: processDataCollector.emit,
           onProgress: createSubagentProgressReporter(progressBridge, template.title),
           task,
           template,
@@ -106,7 +115,13 @@ export function createSubagentRuntimeTools({
 
         return {
           ok: true,
-          result,
+          ...(processDataCollector.processData.length
+            ? {
+                displayedProcessData: processDataCollector.processData,
+                showProcessDataAlreadyDisplayed: true
+              }
+            : {}),
+          result: subagentToolResultText(result, processDataCollector.processData, template.title),
           templateId,
           title: template.title
         };
@@ -115,7 +130,7 @@ export function createSubagentRuntimeTools({
     run_custom_subagent: createTool({
       id: "run_custom_subagent",
       description:
-        "Run a custom one-off Tritree subagent only when no precreated template matches a bounded task.",
+        "Run a custom one-off Tritree subagent only when no precreated template matches a bounded task. If the result includes displayedProcessData and showProcessDataAlreadyDisplayed, those materials are already shown through show_process_data; inspect and use them, but do not call show_process_data again for the same items.",
       inputSchema: z.object({
         title: z.string().min(1).describe("Short role title for the custom subagent."),
         task: z.string().min(1).describe("Specific bounded task for the subagent."),
@@ -123,12 +138,14 @@ export function createSubagentRuntimeTools({
         constraints: z.string().min(1).optional().describe("Optional constraints for this run.")
       }),
       execute: async ({ title, task, expectedOutput, constraints }, executeContext?: ToolExecuteContext) => {
+        const processDataCollector = createProcessDataCollector(onProcessData);
         const result = await runSubagentTask({
           abortSignal: executeContext?.abortSignal,
           constraints,
           context: subagentContext,
           env,
           expectedOutput,
+          onProcessData: processDataCollector.emit,
           onProgress: createSubagentProgressReporter(progressBridge, title),
           task,
           template: undefined,
@@ -139,7 +156,13 @@ export function createSubagentRuntimeTools({
 
         return {
           ok: true,
-          result,
+          ...(processDataCollector.processData.length
+            ? {
+                displayedProcessData: processDataCollector.processData,
+                showProcessDataAlreadyDisplayed: true
+              }
+            : {}),
+          result: subagentToolResultText(result, processDataCollector.processData, title),
           title
         };
       }
@@ -149,8 +172,8 @@ export function createSubagentRuntimeTools({
   return {
     subagentTemplateSummaries: [formatSubagentTemplateSummaries(templates)],
     toolSummaries: [
-      "run_subagent_template: run one precreated subagent template when a templateId in the template list matches the task. Provide templateId, task, and optional expectedOutput; the runtime supplies the current context view.",
-      "run_custom_subagent: run a custom subagent only when no precreated template matches and the task boundary is clear. Provide title, task, expectedOutput, and optional constraints; the runtime supplies the current context view."
+      "run_subagent_template: run one precreated subagent template when a templateId in the template list matches the task. Provide templateId, task, and optional expectedOutput; the runtime supplies the current context view. If the result includes displayedProcessData and showProcessDataAlreadyDisplayed, that means the subagent completed successfully and the material is already represented as show_process_data; inspect and use displayedProcessData, but do not call show_process_data again for the same items.",
+      "run_custom_subagent: run a custom subagent only when no precreated template matches and the task boundary is clear. Provide title, task, expectedOutput, and optional constraints; the runtime supplies the current context view. If the result includes displayedProcessData and showProcessDataAlreadyDisplayed, that means the subagent completed successfully and the material is already represented as show_process_data; inspect and use displayedProcessData, but do not call show_process_data again for the same items."
     ],
     tools
   };
@@ -163,6 +186,7 @@ function subagentContextForRun(contextSource: DirectorInputParts | undefined, po
 
 export async function runSubagentTaskWithModel(task: SubagentTask): Promise<string> {
   const env = task.env ?? process.env;
+  const tools = toolsForSubagentTask(task);
   const agent = new Agent({
     id: "tritree-subagent-runtime-agent",
     name: `Tritree ${task.title} Subagent`,
@@ -170,13 +194,55 @@ export async function runSubagentTaskWithModel(task: SubagentTask): Promise<stri
     model: createTreeableAnthropicModel(env),
     defaultOptions: { modelSettings: { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS } },
     inputProcessors: [new TokenLimiterProcessor({ limit: resolveModelContextBudget(env).inputBudgetTokens })],
-    ...(hasRuntimeTools(task.tools) ? { tools: task.tools } : {})
+    ...(hasRuntimeTools(tools) ? { tools } : {})
   });
 
-  const streamedText = await streamSubagentTask(agent, task);
+  const streamedText = await streamSubagentTask(agent, task, tools);
   if (streamedText.trim()) return streamedText;
 
-  return runSubagentTaskWithGenerate(agent, task);
+  return runSubagentTaskWithGenerate(agent, task, tools);
+}
+
+function createProcessDataCollector(forward?: (data: ProcessDataDisplay) => void) {
+  const processData: ProcessDataDisplay[] = [];
+  const indexesByKey = new Map<string, number>();
+  const forwardedKeys = new Set<string>();
+
+  return {
+    processData,
+    emit(data: ProcessDataDisplay) {
+      const processDataKey = processDataCollectorKey(data);
+      const existingIndex = indexesByKey.get(processDataKey);
+      if (existingIndex === undefined) {
+        indexesByKey.set(processDataKey, processData.length);
+        processData.push(data);
+      } else {
+        processData[existingIndex] = moreCompleteProcessData(processData[existingIndex], data);
+      }
+
+      const forwardedKey = JSON.stringify(data);
+      if (forwardedKeys.has(forwardedKey)) return;
+
+      forwardedKeys.add(forwardedKey);
+      forward?.(data);
+    }
+  };
+}
+
+function processDataCollectorKey(data: ProcessDataDisplay) {
+  return data.title;
+}
+
+function moreCompleteProcessData(current: ProcessDataDisplay, next: ProcessDataDisplay) {
+  return processDataCompletenessScore(next) >= processDataCompletenessScore(current) ? next : current;
+}
+
+function processDataCompletenessScore(data: ProcessDataDisplay) {
+  return data.items.length * 10_000 + JSON.stringify(data).length;
+}
+
+function subagentToolResultText(result: string, processData: ProcessDataDisplay[], title: string) {
+  return processData.length ? `${title}已完成，结果已经使用 show_process_data 工具传递，无需再次调用 show_process_data。` : result;
 }
 
 function createSubagentProgressReporter(progressBridge: RuntimeProgressBridge | undefined, title: string) {
@@ -214,7 +280,7 @@ type SubagentStreamResult = {
   text?: Promise<string> | string;
 };
 
-async function streamSubagentTask(agent: Agent, task: SubagentTask) {
+async function streamSubagentTask(agent: Agent, task: SubagentTask, tools: ToolsInput | undefined) {
   const stream = await agent.stream(
     [
       {
@@ -224,12 +290,12 @@ async function streamSubagentTask(agent: Agent, task: SubagentTask) {
     ],
     {
       abortSignal: task.abortSignal,
-      ...executionOptionsForSubagentTools(task.tools)
+      ...executionOptionsForSubagentTools(tools)
     }
   ) as SubagentStreamResult;
 
   const streamedText = stream.fullStream
-    ? await consumeSubagentFullStream(stream.fullStream, task.onProgress, task.toolLabels)
+    ? await consumeSubagentFullStream(stream.fullStream, task.onProgress, task.toolLabels, task.onProcessData)
     : "";
   return resolveSubagentStreamText(stream, streamedText);
 }
@@ -237,12 +303,22 @@ async function streamSubagentTask(agent: Agent, task: SubagentTask) {
 async function consumeSubagentFullStream(
   streamSource: StreamSource<unknown>,
   onProgress?: (segments: RuntimeProgressSegment[]) => void,
-  toolLabels?: Record<string, string>
+  toolLabels?: Record<string, string>,
+  onProcessData?: (data: ProcessDataDisplay) => void
 ) {
   let rawText = "";
+  let emittedProcessData = false;
+  const toolCallDeltaState: ToolCallDeltaState = {
+    announcedIds: new Set(),
+    argsById: new Map(),
+    processDataOutputById: new Map(),
+    submittedOutputById: new Map(),
+    toolNamesById: new Map()
+  };
 
   for await (const chunk of toAsyncIterable(streamSource)) {
     const reasoningDelta = reasoningDeltaFromStreamChunk(chunk);
+    const processData = processDataDisplayFromStreamChunk(chunk, toolCallDeltaState);
     const toolProgressDelta = toolProgressDeltaFromStreamChunk(chunk, toolLabels);
     const textDelta = textDeltaFromStreamChunk(chunk);
     const segments: RuntimeProgressSegment[] = [
@@ -251,10 +327,14 @@ async function consumeSubagentFullStream(
       { delta: toolProgressDelta, kind: "tool" as const }
     ].filter((segment) => segment.delta);
     if (segments.length > 0) onProgress?.(segments);
+    if (processData) {
+      emittedProcessData = true;
+      onProcessData?.(processData);
+    }
     rawText += textDelta;
   }
 
-  return rawText;
+  return rawText || (emittedProcessData ? "已整理过程材料。" : "");
 }
 
 async function resolveSubagentStreamText(stream: SubagentStreamResult, fallbackText: string) {
@@ -280,7 +360,7 @@ async function safeResolve<T>(value: Promise<T> | T | undefined): Promise<T | un
   }
 }
 
-async function runSubagentTaskWithGenerate(agent: Agent, task: SubagentTask) {
+async function runSubagentTaskWithGenerate(agent: Agent, task: SubagentTask, tools: ToolsInput | undefined) {
   const result = await agent.generate([
     {
       role: "user",
@@ -288,10 +368,29 @@ async function runSubagentTaskWithGenerate(agent: Agent, task: SubagentTask) {
     }
   ], {
     abortSignal: task.abortSignal,
-    ...executionOptionsForSubagentTools(task.tools)
+    ...executionOptionsForSubagentTools(tools)
   });
 
   return resultToText(result);
+}
+
+function toolsForSubagentTask(task: SubagentTask): ToolsInput | undefined {
+  if (!task.onProcessData) return task.tools;
+
+  return {
+    ...(task.tools ?? {}),
+    [SHOW_PROCESS_DATA_TOOL_NAME]: createTool({
+      id: SHOW_PROCESS_DATA_TOOL_NAME,
+      description:
+        "Display structured process material found by this subagent. Use this instead of writing long material lists in ordinary text. The main agent will receive these same materials in the subagent tool result.",
+      inputSchema: ShowProcessDataInputSchema,
+      outputSchema: z.literal(true),
+      execute: async (input) => {
+        task.onProcessData?.(ShowProcessDataInputSchema.parse(input));
+        return true as const;
+      }
+    })
+  };
 }
 
 function executionOptionsForSubagentTools(tools: ToolsInput | undefined) {
@@ -314,6 +413,7 @@ You receive a scoped, read-only snapshot of the current working context.
 Complete only the assigned task.
 Return a result that the main agent can inspect, verify, and decide how to use.
 You must communicate user-facing text in Simplified Chinese unless the input requires otherwise.
+Keep ordinary text responses concise, no more than 80 Chinese characters. Do not repeat long material lists, evidence tables, or source lists in ordinary text; put structured material in tools when available.
 
 # Role
 ${task.title}

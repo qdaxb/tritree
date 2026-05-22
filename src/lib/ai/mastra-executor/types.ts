@@ -99,5 +99,6 @@ export type RuntimeSubmitTarget = "artifact" | "next-step" | "options" | "turn";
 
 export type DirectorRuntimeToolPolicy = {
   includeSubagentTools?: boolean;
+  onProcessData?: (data: ProcessDataDisplay) => void;
   progressBridge?: RuntimeProgressBridge;
 };

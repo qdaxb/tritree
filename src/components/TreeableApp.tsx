@@ -37,7 +37,7 @@ import {
 } from "@/lib/domain";
 import { getArtifactType, listArtifactTypes, type ArtifactType } from "@/lib/artifacts";
 import type { UserRole } from "@/lib/auth/types";
-import { ArtifactWorkspace, type ProcessMaterial } from "@/components/artifacts/ArtifactWorkspace";
+import { ArtifactWorkspace, processMaterialsForNode, type ProcessMaterial } from "@/components/artifacts/ArtifactWorkspace";
 import { RootMemorySetup } from "@/components/root-memory/RootMemorySetup";
 import { SkillLibraryPanel } from "@/components/skills/SkillLibraryPanel";
 import { SkillPicker } from "@/components/skills/SkillPicker";
@@ -361,6 +361,32 @@ function sourceArtifactForView(state: SessionState, nodeId: string) {
   }
 
   return null;
+}
+
+function previousProcessMaterialsForView(state: SessionState, nodeId: string | null) {
+  const viewedNode = findTreeNode(state, nodeId);
+  if (!viewedNode) return [];
+
+  let node = viewedNode;
+  const visited = new Set<string>([node.id]);
+  while (node.parentId && !visited.has(node.parentId)) {
+    visited.add(node.parentId);
+    const parentNode = findTreeNode(state, node.parentId);
+    if (!parentNode) break;
+
+    const materials = processMaterialsForNode(parentNode);
+    if (materials.length > 0) return materials;
+
+    node = parentNode;
+  }
+
+  const selectedPathIndex = state.selectedPath.findIndex((pathNode) => pathNode.id === viewedNode.id);
+  for (let index = selectedPathIndex - 1; index >= 0; index--) {
+    const materials = processMaterialsForNode(state.selectedPath[index]);
+    if (materials.length > 0) return materials;
+  }
+
+  return [];
 }
 
 function withCustomOption(node: TreeNode, customOption: BranchOption | null) {
@@ -1790,6 +1816,19 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     streamingProcessMaterials && (!streamingProcessMaterials.nodeId || streamingProcessMaterials.nodeId === activeViewNodeId)
       ? streamingProcessMaterials.materials
       : [];
+  const persistedActiveProcessMaterials = processMaterialsForNode(currentNodeForCanvas);
+  const activeNodeArtifact = displaySessionState && activeViewNodeId ? artifactForNode(displaySessionState, activeViewNodeId) : null;
+  const activeNodeHasDisplayArtifact = Boolean(
+    displaySessionState && activeNodeArtifact && !isSeedArtifactForState(displaySessionState, activeNodeArtifact)
+  );
+  const staleProcessMaterials =
+    displaySessionState &&
+    activeViewNodeId &&
+    !activeNodeHasDisplayArtifact &&
+    activeProcessMaterials.length === 0 &&
+    persistedActiveProcessMaterials.length === 0
+      ? previousProcessMaterialsForView(displaySessionState, activeViewNodeId)
+      : [];
   const artifactGenerationStage =
     generationStage && (!generationStage.nodeId || generationStage.nodeId === activeViewNodeId) ? generationStage.stage : null;
   const isArtifactModuleGenerating = Boolean(artifactGenerationStage === "artifact");
@@ -2154,6 +2193,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
             onStopGeneration={isBusy && generationStage ? stopActiveGeneration : undefined}
             renderComparisonInline={true}
             selectedArtifactId={effectiveSelectedArtifactId}
+            staleProcessMaterials={staleProcessMaterials}
             streamingProcessMaterials={activeProcessMaterials}
             thinkingText={activeThinking?.text}
           />

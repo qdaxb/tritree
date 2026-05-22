@@ -163,6 +163,46 @@ vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
       </div>
     </div>
   ),
+  processMaterialsForNode: (node: { agentMessages?: Array<{ content: unknown }> } | null) => {
+    const materials: Array<{
+      items: Array<{ meta?: string; subtitle?: string; title: string; url?: string }>;
+      note?: string;
+      sourceToolCallIds: string[];
+      title: string;
+    }> = [];
+    for (const message of node?.agentMessages ?? []) {
+      for (const part of Array.isArray(message.content) ? message.content : [message.content]) {
+        if (!part || typeof part !== "object" || Array.isArray(part)) continue;
+        const record = part as Record<string, unknown>;
+        if (record.toolName !== "show_process_data") continue;
+        const rawValue = Object.prototype.hasOwnProperty.call(record, "input") ? record.input : record.output;
+        const value =
+          rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && (rawValue as Record<string, unknown>).type === "json"
+            ? (rawValue as Record<string, unknown>).value
+            : rawValue;
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        const material = value as Record<string, unknown>;
+        if (typeof material.title !== "string" || !Array.isArray(material.items)) continue;
+        materials.push({
+          title: material.title,
+          sourceToolCallIds: Array.isArray(material.sourceToolCallIds)
+            ? material.sourceToolCallIds.filter((item): item is string => typeof item === "string")
+            : [],
+          items: material.items
+            .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+            .filter((item) => typeof item.title === "string")
+            .map((item) => ({
+              title: item.title as string,
+              ...(typeof item.subtitle === "string" ? { subtitle: item.subtitle } : {}),
+              ...(typeof item.meta === "string" ? { meta: item.meta } : {}),
+              ...(typeof item.url === "string" ? { url: item.url } : {})
+            })),
+          ...(typeof material.note === "string" ? { note: material.note } : {})
+        });
+      }
+    }
+    return materials;
+  },
   ArtifactWorkspace: (props: {
     artifacts: Artifact[];
     canCompareArtifacts?: boolean;
@@ -190,6 +230,12 @@ vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
     renderComparisonInline?: boolean;
     scrollBodyRef?: React.Ref<HTMLDivElement>;
     selectedArtifactId: string | null;
+    staleProcessMaterials?: Array<{
+      items: Array<{ meta?: string; subtitle?: string; title: string; url?: string }>;
+      note?: string;
+      sourceToolCallIds: string[];
+      title: string;
+    }>;
     streamingProcessMaterials?: Array<{
       items: Array<{ meta?: string; subtitle?: string; title: string; url?: string }>;
       note?: string;
@@ -229,6 +275,9 @@ vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
         </div>
         <div data-testid="live-process-materials">
           {(props.streamingProcessMaterials ?? []).map((material) => material.items.map((item) => item.title).join("|")).join("||")}
+        </div>
+        <div data-testid="stale-process-materials">
+          {(props.staleProcessMaterials ?? []).map((material) => material.items.map((item) => item.title).join("|")).join("||")}
         </div>
         <div data-testid="artifact-generation-status">
           {generationStatus}
@@ -748,6 +797,79 @@ describe("TreeableApp", () => {
       })
     );
     expect(screen.getByTestId("artifact-workspace-selected")).toHaveTextContent("none");
+  });
+
+  it("passes previous process materials as stale fallback when the current node has no display output", async () => {
+    const seedArtifact = testSocialPostArtifact("artifact-seed", "node-seed", {
+      title: "种子念头",
+      body: rootMemory.preferences.seed,
+      hashtags: [],
+      imagePrompt: ""
+    });
+    const parentNode = {
+      ...artifactState().currentNode!,
+      id: "node-seed",
+      parentId: null,
+      parentOptionId: null,
+      producedArtifactId: seedArtifact.id,
+      sourceArtifactIds: [],
+      roundIndex: 1,
+      roundIntent: "种子念头",
+      agentMessages: [
+        {
+          role: "tool" as const,
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "display-1",
+              toolName: "show_process_data",
+              output: {
+                type: "json",
+                value: {
+                  title: "上一轮材料",
+                  sourceToolCallIds: ["tool-1"],
+                  items: [{ title: "上一条参考", subtitle: "沿用上一轮状态" }]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    };
+    const childNode = {
+      ...parentNode,
+      id: "node-child",
+      parentId: parentNode.id,
+      parentOptionId: "a" as const,
+      kind: "analysis" as const,
+      producedArtifactId: null,
+      sourceArtifactIds: [],
+      roundIndex: 2,
+      roundIntent: "继续收窄方向",
+      agentMessages: [],
+      options: []
+    };
+    const state = artifactState({
+      session: { ...artifactState().session, currentNodeId: childNode.id },
+      currentNode: childNode,
+      currentArtifact: null,
+      artifacts: [seedArtifact],
+      nodeArtifacts: [{ nodeId: parentNode.id, artifact: seedArtifact }],
+      selectedPath: [parentNode, childNode],
+      treeNodes: [parentNode, childNode]
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
+    expect(screen.getByTestId("artifact-workspace-selected")).toHaveTextContent("none");
+    expect(screen.getByTestId("stale-process-materials")).toHaveTextContent("上一条参考");
   });
 
   it("runs artifact actions from the selected artifact node", async () => {

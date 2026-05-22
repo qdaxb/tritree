@@ -104,7 +104,7 @@ describe("subagent runtime tools", () => {
       context: expect.stringContaining("最新正文"),
         env: { KIMI_API_KEY: "test-token" },
         expectedOutput:
-          "A material list. Every source-backed item should include source, source_url, key point, usable angle, credibility note, and advice on how the main agent can use it. Preserve original URLs so the main agent can pass them to show_process_data items[].url or items[].urls, using items[].urls for multiple source URLs.",
+          "Call show_process_data with the organized material. Every source-backed item should include source, source_url, key point, usable angle, credibility note, and advice on how the main agent can use it. Preserve original URLs in show_process_data items[].url or items[].urls, using items[].urls for multiple source URLs.",
         task: "找三条资料",
       template: expect.objectContaining({ id: "material-search", title: "搜索资料" }),
       title: "搜索资料",
@@ -141,6 +141,44 @@ describe("subagent runtime tools", () => {
       { delta: "\n[工具] 调用 [子代理] 搜索资料：search", kind: "tool" },
       { delta: "\n[工具] [子代理] 搜索资料：search 完成", kind: "tool" }
     ]);
+  });
+
+  it("returns and forwards process data emitted inside a template subagent", async () => {
+    const processData = {
+      title: "子代理材料",
+      sourceToolCallIds: ["search-1"],
+      items: [{ title: "资料 A", subtitle: "可用于正文", url: "https://example.com/a", urls: ["https://example.com/a"] }]
+    };
+    const forwardedProcessData: unknown[] = [];
+    const runtime = createSubagentRuntimeTools({
+      onProcessData: (data) => forwardedProcessData.push(data),
+      runSubagentTask: async (task) => {
+        task.onProcessData?.(processData);
+        return [
+          "已整理完成2026-05-22微博热搜趋势分析，涵盖主榜、社会榜、生活榜三大榜单，筛选出10个高热度、高讨论价值的选题方向。",
+          "核心发现：综艺娱乐占据流量高地，职场情绪反映年轻人集体心态变化。",
+          "推荐优先级：歌手2026、职场消费观变迁、年轻人全款买房。"
+        ].join("\n");
+      }
+    });
+
+    const result = await executableTool(runtime.tools.run_subagent_template).execute(
+      {
+        templateId: "material-search",
+        task: "整理两条资料"
+      },
+      {}
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      displayedProcessData: [processData],
+      result: "搜索资料已完成，结果已经使用 show_process_data 工具传递，无需再次调用 show_process_data。",
+      showProcessDataAlreadyDisplayed: true,
+      templateId: "material-search",
+      title: "搜索资料"
+    });
+    expect(forwardedProcessData).toEqual([processData]);
   });
 
   it("runs a selected template with expected output override", async () => {
@@ -213,7 +251,7 @@ describe("subagent runtime tools", () => {
     });
   });
 
-  it("streams subagent model thinking and tool progress while returning the final text", async () => {
+  it("streams subagent model thinking, body text, and tool progress", async () => {
     const controller = new AbortController();
     const progressSegments: Array<Array<{ delta: string; kind: string }>> = [];
     mockStream.mockResolvedValueOnce({
@@ -299,6 +337,109 @@ describe("subagent runtime tools", () => {
         toolChoice: "auto"
       })
     );
+  });
+
+  it("injects a local show_process_data tool for subagents to submit structured material", async () => {
+    const processDataEvents: unknown[] = [];
+    mockStream.mockResolvedValueOnce({
+      text: Promise.resolve("已整理过程材料。")
+    });
+
+    await runSubagentTaskWithModel({
+      context: "背景",
+      env: { KIMI_API_KEY: "test-token" },
+      expectedOutput: "优先调用 show_process_data 展示材料，只返回短结论。",
+      onProcessData: (data) => processDataEvents.push(data),
+      task: "任务",
+      title: "资料子代理"
+    });
+
+    const constructedOptions = mockAgentConstructor.mock.calls[0]?.[0] as {
+      instructions?: string;
+      tools?: Record<string, unknown>;
+    };
+    expect(constructedOptions.instructions).not.toContain("结果已经使用 show_process_data 传递");
+    expect(constructedOptions.instructions).toContain("Keep ordinary text responses concise");
+    expect(constructedOptions.instructions).toContain("no more than 80 Chinese characters");
+    expect(constructedOptions.instructions).toContain("Do not repeat long material lists");
+    expect(constructedOptions.tools).toEqual(
+      expect.objectContaining({
+        show_process_data: expect.anything()
+      })
+    );
+
+    await executableTool(constructedOptions.tools?.show_process_data).execute(
+      {
+        title: "子代理材料",
+        sourceToolCallIds: ["search-1"],
+        items: [{ title: "资料 A", source_url: "https://example.com/a" }]
+      },
+      {}
+    );
+
+    expect(processDataEvents).toEqual([
+      {
+        title: "子代理材料",
+        sourceToolCallIds: ["search-1"],
+        items: [{ title: "资料 A", url: "https://example.com/a", urls: ["https://example.com/a"] }]
+      }
+    ]);
+  });
+
+  it("streams subagent show_process_data updates but returns only the final display in the subagent tool result", async () => {
+    const partialData = {
+      title: "子代理材料",
+      sourceToolCallIds: [],
+      items: [{ title: "资料" }]
+    };
+    const displayedData = {
+      title: "子代理材料",
+      sourceToolCallIds: ["search-1"],
+      items: [{ title: "资料 A", subtitle: "可用于正文", url: "https://example.com/a", urls: ["https://example.com/a"] }]
+    };
+    const forwardedProcessData: unknown[] = [];
+    mockStream.mockResolvedValueOnce({
+      fullStream: async function* () {
+        yield {
+          type: "tool-call",
+          payload: {
+            toolCallId: "display-1",
+            toolName: "show_process_data",
+            args: partialData
+          }
+        };
+        yield {
+          type: "tool-call",
+          payload: {
+            toolCallId: "display-1",
+            toolName: "show_process_data",
+            args: displayedData
+          }
+        };
+      },
+      text: Promise.resolve("已整理过程材料。")
+    });
+    const runtime = createSubagentRuntimeTools({
+      onProcessData: (data) => forwardedProcessData.push(data)
+    });
+
+    const result = await executableTool(runtime.tools.run_subagent_template).execute(
+      {
+        templateId: "material-search",
+        task: "整理两条资料"
+      },
+      {}
+    );
+
+    expect(forwardedProcessData).toEqual([partialData, displayedData]);
+    expect(result).toEqual({
+      ok: true,
+      displayedProcessData: [displayedData],
+      result: "搜索资料已完成，结果已经使用 show_process_data 工具传递，无需再次调用 show_process_data。",
+      showProcessDataAlreadyDisplayed: true,
+      templateId: "material-search",
+      title: "搜索资料"
+    });
   });
 
   it("passes abortSignal to the default Mastra agent stream call", async () => {

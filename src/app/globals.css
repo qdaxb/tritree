@@ -4188,6 +4188,19 @@ button:disabled {
   height: auto;
 }
 
+.artifact-workspace__content--stale,
+.artifact-workspace__materials--stale {
+  opacity: 0.46;
+  filter: grayscale(0.42);
+}
+
+.artifact-workspace__content--stale button,
+.artifact-workspace__content--stale input,
+.artifact-workspace__content--stale textarea,
+.artifact-workspace__content--stale select {
+  cursor: not-allowed;
+}
+
 .artifact-workspace__content--generating > * {
   --active-surface-angle: 0turn;
   position: relative;
@@ -4461,7 +4474,7 @@ button:disabled {
   font-size: 0.9rem;
   line-height: 1.3;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: pre-wrap;
 }
 
 .artifact-workspace__material-header span {
@@ -4476,6 +4489,7 @@ button:disabled {
   color: #475569;
   font-size: 0.82rem;
   line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .artifact-workspace__material-items {
@@ -4507,6 +4521,7 @@ button:disabled {
   font-size: 0.9rem;
   font-weight: 850;
   line-height: 1.35;
+  white-space: pre-wrap;
 }
 
 .artifact-workspace__material-item-title a {
@@ -4534,12 +4549,14 @@ button:disabled {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: pre-wrap;
 }
 
 .artifact-workspace__material-title-text {
   color: #0f172a;
   font-size: 0.9rem;
   font-weight: 850;
+  white-space: pre-wrap;
 }
 
 .artifact-workspace__material-link-list {
@@ -4579,12 +4596,14 @@ button:disabled {
   color: #475569;
   font-size: 0.82rem;
   line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .artifact-workspace__material-item > span {
   color: #64748b;
   font-size: 0.75rem;
   font-weight: 800;
+  white-space: pre-wrap;
 }
 
 .artifact-workspace__material-preview {

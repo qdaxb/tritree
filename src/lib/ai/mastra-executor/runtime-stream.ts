@@ -1,15 +1,20 @@
 import type { AgentMessage } from "@/lib/domain";
 import type { ToolsInput } from "@mastra/core/agent";
 import { ZodError } from "zod";
-import { logTritreeAiDebug } from "../debug-log";
+import { logTritreeAiDebug, logTritreeAiResponse } from "../debug-log";
 import { attachRuntimeProgressBridge, type RuntimeProgressBridge, type RuntimeProgressSegment } from "../runtime-progress";
 import { executionOptionsForTools, structuredOutputForDirector } from "./context";
 import { logAiResponse, logAiStream } from "./logging";
 import type { DirectorAgentTrace, MastraConversationMessage, ParseableOutputSchema, ReasoningTextEvent, RuntimeSubmitTarget, StructuredObjectStreamResult, StreamSource, TreeArtifactAgentLike, TreeOptionsAgentLike } from "./types";
-import type { ProcessDataDisplay } from "./schemas";
-import { finalSubmitToolRequiredError, isFinalSubmitToolName } from "./tools";
+import { ShowProcessDataInputSchema, type ProcessDataDisplay } from "./schemas";
+import {
+  SHOW_PROCESS_DATA_TOOL_NAME,
+  finalSubmitToolRequiredError,
+  isFinalSubmitToolName,
+  isSubagentToolName
+} from "./tools";
 import { resolveStructuredStreamOutput, summarizeErrorForLog, unwrapMastraToolInput, withStructuredOutputRetries, zodIssuesFromError } from "./structured-output";
-import { isObjectRecord, stringifyDiagnosticValue, summarizeJsonValue, toAsyncIterable, truncateText } from "./json-utils";
+import { isObjectRecord, parseMaybeJson, stringifyDiagnosticValue, summarizeJsonValue, toAsyncIterable, truncateText } from "./json-utils";
 import { collectAgentMessageFromStreamChunk, formatProgressSegments, processDataDisplayFromStreamChunk, progressSegmentsFromStreamChunk, reasoningDeltaFromStreamChunk, runtimeTextDeltaPolicy, streamChunkKeysForLog, streamChunkTypeForLog, structuredObjectFromStreamChunk, submittedOutputDeltaFromStreamChunk, submittedOutputFromStreamChunk, summarizePartialObjectForLog, textDeltaFromStreamChunk, toolCallDeltaProgressFromStreamChunk, toolNameFromPayload, toolProgressDeltaFromStreamChunk, type AgentMessageHistoryState, type ProgressSegmentKind, type ToolCallDeltaState } from "./stream-chunks";
 
 
@@ -47,7 +52,6 @@ type RuntimeStreamChunkSummary = {
 
 const ACTUAL_WORK_RETRY_MESSAGE =
   "You must complete a meaningful ReAct step before ending this turn. Handle the task yourself when possible, inspect any tool or subagent result you use, call the required final submit tool, or submit three user-facing options only when a real user decision is blocked.";
-
 
 export async function streamRuntimeToolsThenStructure<TPartial, TOutput>({
   agent,
@@ -101,6 +105,141 @@ function withAgentMessages<TOutput>(output: TOutput, agentMessages: AgentMessage
     ...output,
     agentMessages
   };
+}
+
+function synthesizeSubagentProcessDataMessages(
+  chunk: unknown,
+  state: AgentMessageHistoryState,
+  displayedProcessDataKeys: Set<string>
+) {
+  const subagentProcessData = subagentProcessDataFromStreamChunk(chunk);
+  if (!subagentProcessData) return false;
+
+  rewriteToolResultToTrue(state, subagentProcessData.toolCallId, subagentProcessData.toolName);
+
+  subagentProcessData.items.forEach((data, index) => {
+    const processDataKey = processDataDisplayKey(data);
+    if (displayedProcessDataKeys.has(processDataKey)) return;
+
+    displayedProcessDataKeys.add(processDataKey);
+    const toolCallId = `${subagentProcessData.toolCallId || "subagent"}-show-process-data-${index + 1}`;
+    appendToolCallToAssistantMessage(state, subagentProcessData.toolCallId, {
+      type: "tool-call",
+      toolCallId,
+      toolName: SHOW_PROCESS_DATA_TOOL_NAME,
+      input: data
+    });
+    state.messages.push({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId,
+          toolName: SHOW_PROCESS_DATA_TOOL_NAME,
+          output: {
+            type: "json",
+            value: true
+          }
+        }
+      ]
+    });
+  });
+  logTritreeAiResponse("main-agent", "messages-after-subagent-result", {
+    messageCount: state.messages.length,
+    messages: state.messages,
+    toolCallId: subagentProcessData.toolCallId,
+    toolName: subagentProcessData.toolName
+  });
+  return true;
+}
+
+function subagentProcessDataFromStreamChunk(chunk: unknown) {
+  if (!isObjectRecord(chunk)) return null;
+
+  const chunkType = typeof chunk.type === "string" ? chunk.type : "";
+  if (chunkType !== "tool-result" && chunkType !== "tool-output" && chunkType !== "tool-execution-end") return null;
+
+  const payload = isObjectRecord(chunk.payload) ? chunk.payload : chunk;
+  const toolName = toolNameFromPayload(payload);
+  if (!isSubagentToolName(toolName)) return null;
+
+  const output = unwrapRuntimeToolOutput(valueFromRuntimePayload(payload, "result", "output", "toolOutput"));
+  if (!isObjectRecord(output)) return null;
+
+  const rawProcessData = Array.isArray(output.displayedProcessData)
+    ? output.displayedProcessData
+    : Array.isArray(output.processData)
+      ? output.processData
+      : null;
+  if (!rawProcessData) return null;
+
+  const items = rawProcessData.flatMap((item) => {
+    const parsed = ShowProcessDataInputSchema.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  });
+  if (items.length === 0) return null;
+
+  return {
+    items,
+    toolCallId: stringFromRuntimePayload(payload, "toolCallId", "id") || toolName,
+    toolName
+  };
+}
+
+function rewriteToolResultToTrue(state: AgentMessageHistoryState, toolCallId: string, toolName: string) {
+  for (let messageIndex = state.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = state.messages[messageIndex];
+    if (message.role !== "tool" || !Array.isArray(message.content)) continue;
+
+    for (const part of message.content) {
+      if (!isObjectRecord(part)) continue;
+      if (part.toolCallId !== toolCallId || part.toolName !== toolName) continue;
+      part.output = { type: "json", value: true };
+      return;
+    }
+  }
+}
+
+function appendToolCallToAssistantMessage(
+  state: AgentMessageHistoryState,
+  parentToolCallId: string,
+  toolCall: Record<string, unknown>
+) {
+  const messageIndex = state.toolCallIndexesById.get(parentToolCallId);
+  const message = messageIndex === undefined ? null : state.messages[messageIndex];
+  if (message?.role === "assistant" && Array.isArray(message.content)) {
+    message.content.push(toolCall);
+    return;
+  }
+
+  state.messages.push({
+    role: "assistant",
+    content: [toolCall]
+  });
+}
+
+function processDataDisplayKey(data: ProcessDataDisplay) {
+  return JSON.stringify(data);
+}
+
+function unwrapRuntimeToolOutput(output: unknown) {
+  const parsed = parseMaybeJson(output);
+  if (isObjectRecord(parsed) && parsed.type === "json" && Object.prototype.hasOwnProperty.call(parsed, "value")) {
+    return parsed.value;
+  }
+  return parsed;
+}
+
+function valueFromRuntimePayload(payload: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) return payload[key];
+  }
+  return undefined;
+}
+
+function stringFromRuntimePayload(payload: Record<string, unknown>, ...keys: string[]) {
+  const value = valueFromRuntimePayload(payload, ...keys);
+  return typeof value === "string" ? value : "";
 }
 
 async function streamRuntimeToolsOnce<TPartial, TOutput>({
@@ -188,6 +327,8 @@ async function consumeRuntimeReActStream<TPartial>(
   let previousProgressSegmentKind: ProgressSegmentKind | null = null;
   let rawText = "";
   let submittedOutput: unknown = undefined;
+  const displayedProcessDataKeys = new Set<string>();
+  const ignoredProcessDataToolCallIds = new Set<string>();
   const agentMessageHistoryState: AgentMessageHistoryState = {
     argsById: new Map(),
     messages: [],
@@ -229,7 +370,22 @@ async function consumeRuntimeReActStream<TPartial>(
         const reasoningDelta = hasSeenFinalSubmitOutput ? "" : reasoningDeltaFromStreamChunk(chunk);
         const toolProgressDelta =
           toolProgressDeltaFromStreamChunk(chunk, options.toolLabels) || toolCallDeltaProgressFromStreamChunk(chunk, toolCallDeltaState);
-        collectAgentMessageFromStreamChunk(chunk, agentMessageHistoryState);
+        const chunkPayloadForLog = isObjectRecord(chunk) && isObjectRecord((chunk as Record<string, unknown>).payload)
+          ? (chunk as Record<string, unknown>).payload as Record<string, unknown>
+          : isObjectRecord(chunk) ? chunk as Record<string, unknown> : {};
+        const chunkToolNameForLog = toolNameFromPayload(chunkPayloadForLog);
+        const chunkToolCallIdForLog = stringFromRuntimePayload(chunkPayloadForLog, "toolCallId", "id") || chunkToolNameForLog;
+        const skipDuplicateProcessDataMessage =
+          chunkToolNameForLog === SHOW_PROCESS_DATA_TOOL_NAME && ignoredProcessDataToolCallIds.has(chunkToolCallIdForLog);
+        const duplicateProcessDataKey = processData ? processDataDisplayKey(processData) : "";
+        const isDuplicateProcessData = Boolean(processData && displayedProcessDataKeys.has(duplicateProcessDataKey));
+        if (isDuplicateProcessData && chunkToolNameForLog === SHOW_PROCESS_DATA_TOOL_NAME) {
+          ignoredProcessDataToolCallIds.add(chunkToolCallIdForLog);
+        }
+        if (!skipDuplicateProcessDataMessage && !isDuplicateProcessData) {
+          collectAgentMessageFromStreamChunk(chunk, agentMessageHistoryState);
+        }
+        synthesizeSubagentProcessDataMessages(chunk, agentMessageHistoryState, displayedProcessDataKeys);
         const hasToolActivity = Boolean(toolProgressDelta);
         const textPolicy = runtimeTextDeltaPolicy(textDelta, rawText, "");
         const formattedProgressSegments = [
@@ -243,10 +399,6 @@ async function consumeRuntimeReActStream<TPartial>(
         ).delta;
         const partial = structuredObjectFromStreamChunk(chunk);
 
-        const chunkPayloadForLog = isObjectRecord(chunk) && isObjectRecord((chunk as Record<string, unknown>).payload)
-          ? (chunk as Record<string, unknown>).payload as Record<string, unknown>
-          : isObjectRecord(chunk) ? chunk as Record<string, unknown> : {};
-        const chunkToolNameForLog = toolNameFromPayload(chunkPayloadForLog);
         logTritreeAiDebug("react-stream", "chunk", {
           type: streamChunkTypeForLog(chunk),
           keys: streamChunkKeysForLog(chunk),
@@ -268,7 +420,11 @@ async function consumeRuntimeReActStream<TPartial>(
         emitProgressSegments(formattedProgressSegments);
 
         if (processData) {
-          options.onProcessData?.(processData);
+          const processDataKey = processDataDisplayKey(processData);
+          if (!displayedProcessDataKeys.has(processDataKey)) {
+            displayedProcessDataKeys.add(processDataKey);
+            options.onProcessData?.(processData);
+          }
         }
 
         rawText += textDelta;

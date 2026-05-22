@@ -37,10 +37,11 @@ describe("subagent templates", () => {
     expect(template.title).toBe("搜索资料");
     expect([template.description, template.expectedOutput, template.prompt].join("\n")).not.toMatch(/\p{Script=Han}/u);
     expect(template.prompt).toContain("You are the material-search subagent");
+    expect(template.prompt).toContain("Submit the organized material through show_process_data");
     expect(template.prompt).toContain("Leave decisions about whether to continue");
   });
 
-  it("requires source URLs so the main agent can render clickable process materials", () => {
+  it("requires source URLs and direct process data submission", () => {
     const template = DEFAULT_SUBAGENT_TEMPLATES[0];
     const combined = [template.expectedOutput, template.prompt].join("\n");
 
@@ -50,5 +51,6 @@ describe("subagent templates", () => {
       expect(combined).toContain("multiple source URLs");
       expect(combined).toContain("Every source-backed item");
       expect(combined).toContain("not only source names");
+      expect(combined).not.toContain("pass them to show_process_data");
     });
 });

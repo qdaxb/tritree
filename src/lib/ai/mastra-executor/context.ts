@@ -62,6 +62,7 @@ export async function executionContextForDirectorParts(
     ? createSubagentRuntimeTools({
         contextSource: parts,
         env,
+        onProcessData: toolPolicy.onProcessData,
         progressBridge: toolPolicy.progressBridge,
         toolLabels,
         tools: subagentTools

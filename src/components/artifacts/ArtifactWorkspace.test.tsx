@@ -391,8 +391,85 @@ describe("ArtifactWorkspace", () => {
       "artifact-workspace__process--generating"
     );
     expect(screen.getByTestId("social-post-renderer").closest(".artifact-workspace__content")).toHaveClass(
+      "artifact-workspace__content--stale"
+    );
+    expect(screen.getByTestId("social-post-renderer").closest(".artifact-workspace__content")).not.toHaveClass(
       "artifact-workspace__content--generating"
     );
+  });
+
+  it("mutes the previous artifact when the current round has no process data or draft", () => {
+    const social = socialPostArtifact();
+
+    renderWorkspace({
+      artifacts: [social],
+      currentNode: analysisNode({ sourceArtifactIds: [social.id] }),
+      selectedArtifactId: social.id
+    });
+
+    const staleContent = screen.getByTestId("social-post-renderer").closest(".artifact-workspace__content");
+
+    expect(staleContent).toHaveClass("artifact-workspace__content--stale");
+    expect(staleContent).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("clears the previous artifact when the current round has process data", () => {
+    const social = socialPostArtifact();
+
+    renderWorkspace({
+      artifacts: [social],
+      currentNode: analysisNode({
+        sourceArtifactIds: [social.id],
+        agentMessages: [
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "display-1",
+                toolName: "show_process_data",
+                output: {
+                  type: "json",
+                  value: {
+                    title: "本轮参考",
+                    sourceToolCallIds: ["tool-1"],
+                    items: [{ title: "当前材料", subtitle: "只展示当前轮内容" }]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }),
+      selectedArtifactId: social.id
+    });
+
+    expect(screen.getByRole("heading", { name: "过程材料" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "本轮参考" })).toBeInTheDocument();
+    expect(screen.getByText("当前材料")).toBeInTheDocument();
+    expect(screen.queryByTestId("social-post-renderer")).not.toBeInTheDocument();
+  });
+
+  it("mutes previous process materials when the current round has no process data or draft", () => {
+    renderWorkspace({
+      artifacts: [],
+      currentNode: analysisNode({ sourceArtifactIds: [] }),
+      selectedArtifactId: null,
+      staleProcessMaterials: [
+        {
+          title: "上一轮材料",
+          sourceToolCallIds: ["tool-1"],
+          items: [{ title: "上一条参考", subtitle: "沿用上一轮状态" }]
+        }
+      ]
+    });
+
+    const staleMaterials = screen.getByRole("heading", { name: "过程材料" }).closest(".artifact-workspace__materials");
+
+    expect(screen.getByRole("heading", { name: "上一轮材料" })).toBeInTheDocument();
+    expect(screen.getByText("上一条参考")).toBeInTheDocument();
+    expect(staleMaterials).toHaveClass("artifact-workspace__materials--stale");
+    expect(staleMaterials).toHaveAttribute("aria-disabled", "true");
   });
 
   it("shows options-stage progress and tool-call thinking", () => {
@@ -421,7 +498,7 @@ describe("ArtifactWorkspace", () => {
     renderWorkspace({
       artifacts: [social],
       currentNode: {
-        ...analysisNode({
+        ...artifactNode(social.id, {
           agentMessages: [
             {
               role: "assistant",
@@ -493,6 +570,33 @@ describe("ArtifactWorkspace", () => {
     expect(screen.getByText("[子代理] 搜索资料：查询微博 x3").closest("li")).toHaveClass(
       "artifact-workspace__thinking-tool--calling"
     );
+  });
+
+  it("keeps generated progress row keys separate from text row positions", () => {
+    const social = socialPostArtifact();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const thinkingText = [
+      ...Array.from({ length: 9 }, (_, index) => `[工具] 调用 tool-${index + 1}`),
+      "普通思考文本",
+      "[工具] 调用 tool-10"
+    ].join("\n");
+
+    renderWorkspace({
+      artifacts: [social],
+      currentNode: artifactNode(social.id),
+      generationStage: "artifact",
+      isBusy: true,
+      isGenerating: true,
+      selectedArtifactId: social.id,
+      thinkingText
+    });
+
+    const emittedDuplicateKeyWarning = consoleError.mock.calls.some((args) =>
+      args.join(" ").includes("Encountered two children with the same key")
+    );
+    consoleError.mockRestore();
+
+    expect(emittedDuplicateKeyWarning).toBe(false);
   });
 
   it("scrolls the progress body to the latest thinking record", () => {
@@ -625,6 +729,60 @@ describe("ArtifactWorkspace", () => {
       expect(screen.getByText("这些材料用于帮助选择下一步参考角度。")).toBeInTheDocument();
   });
 
+  it("preserves line breaks in submitted process material text", () => {
+    const social = socialPostArtifact();
+
+    renderWorkspace({
+      artifacts: [social],
+      currentNode: artifactNode(social.id, {
+        agentMessages: [
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "display-1",
+                toolName: "show_process_data",
+                output: {
+                  type: "json",
+                  value: {
+                    title: "参考材料",
+                    sourceToolCallIds: ["tool-1"],
+                    items: [
+                      {
+                        title: "参考条目 A",
+                        subtitle: "第一行结论\n第二行结论",
+                        meta: "可信度：高\n来源：官方"
+                      }
+                    ],
+                    note: "第一条说明\n第二条说明"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }),
+      selectedArtifactId: social.id
+    });
+
+    const materialText = (text: string) => screen.getByText((_, element) => element?.textContent === text);
+    expect(materialText("第一条说明\n第二条说明")).toBeInTheDocument();
+    expect(materialText("第一行结论\n第二行结论")).toBeInTheDocument();
+    expect(materialText("可信度：高\n来源：官方")).toBeInTheDocument();
+
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const materialNoteRule = css.match(/\.artifact-workspace__material-note\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const materialItemBodyRule =
+      css.match(/\.artifact-workspace__material-item p\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const materialItemMetaRule =
+      css.match(/\.artifact-workspace__material-item > span\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(materialNoteRule).toContain("white-space: pre-wrap");
+    expect(materialItemBodyRule).toContain("white-space: pre-wrap");
+    expect(materialItemMetaRule).toContain("white-space: pre-wrap");
+  });
+
   it("orders artifact content and process materials by update time", () => {
     const social = socialPostArtifact({
       updatedAt: "2026-05-18T00:00:00.000Z"
@@ -632,7 +790,7 @@ describe("ArtifactWorkspace", () => {
 
     renderWorkspace({
       artifacts: [social],
-      currentNode: analysisNode({
+      currentNode: artifactNode(social.id, {
         createdAt: "2026-05-18T00:10:00.000Z",
         agentMessages: [
           {
@@ -667,7 +825,7 @@ describe("ArtifactWorkspace", () => {
       updatedAt: "2026-05-18T00:05:00.000Z"
     });
     const node = {
-      ...analysisNode({
+      ...artifactNode(social.id, {
         createdAt: "2026-05-18T00:00:00.000Z",
         agentMessages: [
           {

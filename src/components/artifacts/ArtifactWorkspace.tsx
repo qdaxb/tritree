@@ -53,6 +53,7 @@ export type ArtifactWorkspaceProps = {
   renderComparisonInline?: boolean;
   selectedArtifactId: string | null;
   scrollBodyRef?: Ref<HTMLDivElement>;
+  staleProcessMaterials?: ProcessMaterial[];
   streamingProcessMaterials?: ProcessMaterial[];
   thinkingText?: string;
 };
@@ -79,6 +80,7 @@ export function ArtifactWorkspace({
   renderComparisonInline = true,
   selectedArtifactId,
   scrollBodyRef,
+  staleProcessMaterials = [],
   streamingProcessMaterials = [],
   thinkingText
 }: ArtifactWorkspaceProps) {
@@ -86,24 +88,38 @@ export function ArtifactWorkspace({
     ? artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? null
     : null;
   const processBodyRef = useRef<HTMLDivElement>(null);
-  const previousArtifact = selectedArtifact ? previousArtifactForRenderer(selectedArtifact, artifacts, currentNode) : null;
-  const selectedManifest = selectedArtifact ? getArtifactClientManifest(selectedArtifact.type) : null;
-  const SelectedRenderer = selectedManifest ? getArtifactRenderer(selectedManifest.rendererKey) : null;
   const trimmedThinkingText = thinkingText?.trim() ?? "";
   const canUseComparison = canCompareArtifacts || isComparisonMode;
-  const processMaterials = [...streamingProcessMaterials, ...processMaterialsForNode(currentNode)];
-  const isStreamingProcessMaterials = isBusy && streamingProcessMaterials.length > 0;
-  const isDraftGenerating = isBusy && generationStage === "artifact" && Boolean(selectedArtifact);
+  const currentProcessMaterials = [...streamingProcessMaterials, ...processMaterialsForNode(currentNode)];
+  const hasCurrentProcessMaterials = currentProcessMaterials.length > 0;
+  const selectedArtifactIsCurrent = selectedArtifact ? artifactBelongsToCurrentNode(selectedArtifact, currentNode) : false;
+  const hasCurrentArtifact = Boolean(selectedArtifact && selectedArtifactIsCurrent);
+  const shouldUseStaleProcessMaterials = Boolean(
+    !isComparisonMode && !hasCurrentProcessMaterials && !hasCurrentArtifact && staleProcessMaterials.length > 0
+  );
+  const processMaterials = shouldUseStaleProcessMaterials ? staleProcessMaterials : currentProcessMaterials;
+  const isStreamingProcessMaterials = !shouldUseStaleProcessMaterials && isBusy && streamingProcessMaterials.length > 0;
+  const shouldShowStaleArtifact = Boolean(
+    selectedArtifact && !selectedArtifactIsCurrent && !hasCurrentProcessMaterials && !isComparisonMode
+  );
+  const displayArtifact =
+    selectedArtifact && (selectedArtifactIsCurrent || shouldShowStaleArtifact) ? selectedArtifact : null;
+  const previousArtifact = displayArtifact ? previousArtifactForRenderer(displayArtifact, artifacts, currentNode) : null;
+  const selectedManifest = displayArtifact ? getArtifactClientManifest(displayArtifact.type) : null;
+  const SelectedRenderer = selectedManifest ? getArtifactRenderer(selectedManifest.rendererKey) : null;
+  const isDraftGenerating = isBusy && generationStage === "artifact" && Boolean(displayArtifact) && !shouldShowStaleArtifact;
   const processTitle =
     generationStage === "artifact"
       ? "AI 正在思考下一版产物..."
       : generationStage === "options"
         ? "AI 正在生成下一步选项..."
         : "";
-  const contentUpdatedAt = selectedArtifact
-    ? timestampFromIso(selectedArtifact.updatedAt, timestampFromIso(selectedArtifact.createdAt))
+  const contentUpdatedAt = displayArtifact
+    ? timestampFromIso(displayArtifact.updatedAt, timestampFromIso(displayArtifact.createdAt))
     : LATEST_TIMELINE_TIME;
-  const processMaterialsUpdatedAt = isStreamingProcessMaterials
+  const processMaterialsUpdatedAt = shouldUseStaleProcessMaterials
+    ? 0
+    : isStreamingProcessMaterials
     ? LATEST_TIMELINE_TIME
     : timestampFromIso(currentNode?.updatedAt, timestampFromIso(currentNode?.createdAt, 0));
   const shouldRenderInlineComparison = isComparisonMode && renderComparisonInline;
@@ -114,22 +130,33 @@ export function ArtifactWorkspace({
       comparisonSelectionCount={comparisonSelectionCount}
       isBusy={isBusy}
     />
-  ) : selectedArtifact ? (
+  ) : displayArtifact ? (
     SelectedRenderer ? (
       <SelectedRenderer
-        artifact={selectedArtifact}
-        isBusy={isBusy}
-        onAction={(actionId, input) => onAction(actionId, selectedArtifact, input)}
-        onSave={(payload) => onSave({ ...selectedArtifact, payload: payload ?? selectedArtifact.payload })}
+        artifact={displayArtifact}
+        isBusy={isBusy || shouldShowStaleArtifact}
+        onAction={shouldShowStaleArtifact ? undefined : (actionId, input) => onAction(actionId, displayArtifact, input)}
+        onSave={
+          shouldShowStaleArtifact
+            ? undefined
+            : (payload) => onSave({ ...displayArtifact, payload: payload ?? displayArtifact.payload })
+        }
         previousArtifact={previousArtifact}
         publishPlatforms={publishPlatforms}
       />
     ) : (
-      <ArtifactFallback artifact={selectedArtifact} />
+      <ArtifactFallback artifact={displayArtifact} />
     )
   ) : null;
+  const contentClassName = [
+    "artifact-workspace__content",
+    isDraftGenerating ? "artifact-workspace__content--generating" : "",
+    shouldShowStaleArtifact ? "artifact-workspace__content--stale" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
   const contentBlock = content ? (
-    <div className={`artifact-workspace__content${isDraftGenerating ? " artifact-workspace__content--generating" : ""}`}>
+    <div aria-disabled={shouldShowStaleArtifact ? true : undefined} className={contentClassName}>
       {content}
     </div>
   ) : null;
@@ -139,7 +166,13 @@ export function ArtifactWorkspace({
           id: "materials",
           sortTime: processMaterialsUpdatedAt,
           tiePriority: 0,
-          element: <ProcessMaterials isStreaming={isStreamingProcessMaterials} materials={processMaterials} />
+          element: (
+            <ProcessMaterials
+              isStale={shouldUseStaleProcessMaterials}
+              isStreaming={isStreamingProcessMaterials}
+              materials={processMaterials}
+            />
+          )
         }
       : null,
     contentBlock
@@ -235,6 +268,11 @@ function timestampFromIso(value: string | null | undefined, fallback = 0) {
   if (!value) return fallback;
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : fallback;
+}
+
+function artifactBelongsToCurrentNode(artifact: Artifact, currentNode: TreeNode | null) {
+  if (!currentNode) return true;
+  return currentNode.producedArtifactId === artifact.id || artifact.createdByNodeId === currentNode.id;
 }
 
 type ToolCallEntry = {
@@ -337,7 +375,7 @@ function ThinkingTextLines({ text }: { text: string }) {
         if (line.kind === "tool" || line.kind === "subagent") {
           return (
             <li
-              key={line.id}
+              key={`progress-${line.id}`}
               className={`artifact-workspace__thinking-tool artifact-workspace__thinking-tool--${line.status}`}
             >
               {line.status === "done" ? (
@@ -356,7 +394,7 @@ function ThinkingTextLines({ text }: { text: string }) {
         }
         const textLine = line as OtherLine;
         return (
-          <li key={index} className="artifact-workspace__thinking-text">
+          <li key={`text-${index}`} className="artifact-workspace__thinking-text">
             {textLine.text}
           </li>
         );
@@ -379,14 +417,28 @@ function previousArtifactForRenderer(selectedArtifact: Artifact, artifacts: Arti
   return null;
 }
 
-function ProcessMaterials({ isStreaming, materials }: { isStreaming: boolean; materials: ProcessMaterial[] }) {
+function ProcessMaterials({
+  isStale,
+  isStreaming,
+  materials
+}: {
+  isStale: boolean;
+  isStreaming: boolean;
+  materials: ProcessMaterial[];
+}) {
   const totalItemCount = materials.reduce((count, material) => count + material.items.length, 0);
+  const className = [
+    "artifact-workspace__materials",
+    isStreaming ? "artifact-workspace__materials--streaming artifact-workspace__materials--generating" : "",
+    isStale ? "artifact-workspace__materials--stale" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <section
-      className={`artifact-workspace__materials${
-        isStreaming ? " artifact-workspace__materials--streaming artifact-workspace__materials--generating" : ""
-      }`}
+      aria-disabled={isStale ? true : undefined}
+      className={className}
       aria-labelledby="artifact-workspace-materials-title"
     >
       <div className="artifact-workspace__materials-header">
@@ -532,7 +584,7 @@ function ArtifactPreview({
   );
 }
 
-function processMaterialsForNode(node: TreeNode | null): ProcessMaterial[] {
+export function processMaterialsForNode(node: TreeNode | null): ProcessMaterial[] {
   if (!node) return [];
 
   const seen = new Set<string>();

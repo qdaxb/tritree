@@ -258,6 +258,7 @@ export async function streamTreeTurn({
 }): Promise<DirectorTurnOutput & DirectorAgentTrace> {
   const progressBridge = createRuntimeProgressBridge();
   const executionContext = await executionContextForDirectorParts(parts, env, context, Boolean(treeTurnAgent), {
+    onProcessData,
     progressBridge
   });
   const { agentContext, toolLabels, tools } = executionContext;
@@ -352,6 +353,7 @@ export async function streamTreeArtifact({
 }): Promise<DirectorArtifactOutput & DirectorAgentTrace> {
   const progressBridge = createRuntimeProgressBridge();
   const executionContext = await executionContextForDirectorParts(parts, env, context, Boolean(treeArtifactAgent), {
+    onProcessData,
     progressBridge
   });
   const { agentContext, toolLabels, tools } = executionContext;
@@ -458,6 +460,7 @@ export async function streamTreeOptions({
 }): Promise<DirectorOptionsOutput & DirectorAgentTrace> {
   const progressBridge = createRuntimeProgressBridge();
   const executionContext = await executionContextForDirectorParts(parts, env, context, Boolean(treeOptionsAgent), {
+    onProcessData,
     progressBridge
   });
   const { agentContext, toolLabels, tools } = executionContext;

@@ -441,9 +441,11 @@ describe("tree director compatibility generators", () => {
       };
     });
 
+    const onProcessData = vi.fn();
     await streamTreeOptions({
       parts: directorParts,
-      env: { KIMI_API_KEY: "token" }
+      env: { KIMI_API_KEY: "token" },
+      onProcessData
     });
 
     expect(mocks.createMcpRuntimeTools).toHaveBeenCalledWith(
@@ -457,6 +459,7 @@ describe("tree director compatibility generators", () => {
           run_skill_command: runSkillCommand,
           filesystem_read_file: readFile
         },
+        onProcessData,
         toolLabels: {
           run_skill_command: "Skill 命令",
           filesystem_read_file: "读取文件"
@@ -2386,6 +2389,129 @@ describe("tree director compatibility generators", () => {
           toolCallId: "display-1",
           toolName: "show_process_data",
           input: displayedData
+        }
+      ]
+    });
+  });
+
+  it("does not emit process data again when the main agent replays displayed subagent process data", async () => {
+    const runSkillCommand = {
+      id: "run_skill_command",
+      description: "Run an installed skill command.",
+      execute: vi.fn()
+    };
+    const displayedData = {
+      title: "子代理材料",
+      sourceToolCallIds: ["search-1"],
+      items: [{ title: "资料 A", subtitle: "可用于正文", url: "https://example.com/a", urls: ["https://example.com/a"] }]
+    };
+    const finalObject = {
+      roundIntent: "你想围绕哪个参考方向写？",
+      options: [
+        { id: "a", label: "方向 A", description: "围绕参考条目 A。", impact: "更容易形成具体切入。", kind: "explore" },
+        { id: "b", label: "方向 B", description: "围绕参考条目 B。", impact: "更适合观点输出。", kind: "deepen" },
+        { id: "c", label: "方向 C", description: "围绕参考条目 C。", impact: "更轻松。", kind: "reframe" }
+      ]
+    };
+    const stream = vi.fn(async () => ({
+      fullStream: async function* () {
+        yield {
+          type: "tool-result",
+          payload: {
+            toolCallId: "subagent-1",
+            toolName: "run_subagent_template",
+            result: {
+              ok: true,
+              displayedProcessData: [displayedData],
+              result: "搜索资料已完成，结果已经使用 show_process_data 工具传递，无需再次调用 show_process_data。",
+              showProcessDataAlreadyDisplayed: true,
+              templateId: "material-search",
+              title: "搜索资料"
+            }
+          }
+        };
+        yield {
+          type: "tool-call",
+          payload: {
+            toolCallId: "display-1",
+            toolName: "show_process_data",
+            args: displayedData
+          }
+        };
+        yield {
+          type: "tool-call",
+          payload: {
+            toolCallId: "submit-1",
+            toolName: "submit_tree_options",
+            args: finalObject
+          }
+        };
+      },
+      object: Promise.resolve(undefined)
+    }));
+    mocks.createSkillRuntimeTools.mockResolvedValueOnce({
+      toolSummaries: ["run_skill_command: run an installed Skill command."],
+      tools: { run_skill_command: runSkillCommand }
+    });
+    mocks.agentConstructor.mockImplementationOnce(function Agent(options) {
+      return {
+        options,
+        stream,
+        generate: vi.fn()
+      };
+    });
+    const processDataEvents: unknown[] = [];
+
+    const output = await streamTreeOptions({
+      parts: directorParts,
+      env: { KIMI_API_KEY: "token" },
+      onProcessData: (data) => processDataEvents.push(data)
+    });
+
+    expect(output).toMatchObject(finalObject);
+    expect(processDataEvents).toEqual([]);
+    expect(output.agentMessages).toContainEqual({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "subagent-1",
+          toolName: "run_subagent_template",
+          output: {
+            type: "json",
+            value: true
+          }
+        }
+      ]
+    });
+    expect(output.agentMessages).toContainEqual({
+      role: "assistant",
+      content: [
+        {
+          type: "tool-call",
+          toolCallId: "subagent-1",
+          toolName: "run_subagent_template",
+          input: null
+        },
+        {
+          type: "tool-call",
+          toolCallId: "subagent-1-show-process-data-1",
+          toolName: "show_process_data",
+          input: displayedData
+        }
+      ]
+    });
+    expect(output.agentMessages).toContainEqual({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "subagent-1-show-process-data-1",
+          toolName: "show_process_data",
+          output: {
+            type: "json",
+            value: true
+          }
         }
       ]
     });

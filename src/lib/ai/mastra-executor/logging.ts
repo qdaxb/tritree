@@ -33,6 +33,7 @@ export function logMastraPrompt(
     `[treeable:mastra-prompt:${kind}]`,
     JSON.stringify(
       {
+        context,
         instructions,
         messages
       },
