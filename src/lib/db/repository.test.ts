@@ -257,6 +257,8 @@ describe("Treeable repository", () => {
 
     const state = repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
 
+    expect(state.session.title).toBe("写一条关于 AI 协作的短内容");
+    expect(repo.getSessionState(user.id, state.session.id)?.session.title).toBe("写一条关于 AI 协作的短内容");
     expect(state.currentArtifact?.type).toBe("social-post");
     expect(state.currentArtifact?.payload).toEqual({
       title: "种子念头",

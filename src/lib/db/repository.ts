@@ -1273,6 +1273,7 @@ export function createTreeableRepository(
     rootMemoryId,
     artifactTypeId,
     enabledSkillIds,
+    sessionTitle,
     parent,
     roundIntent,
     artifact
@@ -1281,6 +1282,7 @@ export function createTreeableRepository(
     rootMemoryId: string;
     artifactTypeId: string;
     enabledSkillIds?: string[];
+    sessionTitle?: string;
     parent: {
       session: SessionRow;
       node: TreeNode;
@@ -1296,7 +1298,8 @@ export function createTreeableRepository(
     const nextRoundIndex = parent ? parent.node.roundIndex + 1 : 1;
     const sourceArtifactIds = artifact?.sourceArtifactIds ?? [];
     const artifactTitle = artifactTreeTitle(artifact);
-    const sessionTitle = artifactTitle || parent?.session.title || roundIntent || "Untitled Tree";
+    const explicitSessionTitle = sessionTitle?.trim();
+    const resolvedSessionTitle = explicitSessionTitle || artifactTitle || parent?.session.title || roundIntent || "Untitled Tree";
 
     return withTransaction(db, () => {
       if (parent) {
@@ -1307,7 +1310,7 @@ export function createTreeableRepository(
             INSERT INTO sessions (id, user_id, root_memory_id, artifact_type_id, title, status, current_node_id, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           `
-        ).run(sessionId, userId, rootMemoryId, artifactTypeId, sessionTitle, "active", nodeId, timestamp, timestamp);
+        ).run(sessionId, userId, rootMemoryId, artifactTypeId, resolvedSessionTitle, "active", nodeId, timestamp, timestamp);
       }
 
       db.prepare(
@@ -1371,7 +1374,7 @@ export function createTreeableRepository(
             SET current_node_id = ?, title = ?, status = ?, updated_at = ?
             WHERE id = ? AND user_id = ?
           `
-        ).run(nodeId, sessionTitle, "active", timestamp, sessionId, userId);
+        ).run(nodeId, resolvedSessionTitle, "active", timestamp, sessionId, userId);
       } else {
         saveSessionEnabledSkills(sessionId, userId, enabledSkillIds ?? defaultEnabledSkillIds(), timestamp);
       }
@@ -1397,6 +1400,7 @@ export function createTreeableRepository(
       rootMemoryId,
       artifactTypeId: plugin.id,
       enabledSkillIds,
+      sessionTitle: root.preferences.seed,
       parent: null,
       roundIntent: seedPayload ? plugin.summarizeForTree(seedPayload) : "种子念头",
       artifact: seedPayload ? { type: plugin.id, payload: seedPayload, sourceArtifactIds: [] } : null
