@@ -513,7 +513,7 @@ describe("TreeCanvas", () => {
     );
   });
 
-  it("keeps long option copy readable through hover previews without leaving the three-card layout", () => {
+  it("keeps option cards compact without top hover previews or inline select hints", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const treeCanvasRule = css.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const treeShellRule = css.match(/\.tree-viewport-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -527,15 +527,16 @@ describe("TreeCanvas", () => {
     const optionHeaderRule =
       css.match(/\.branch-card--option:not\(\.branch-card--side\) \.branch-card__header\s*\{(?<body>[^}]+)\}/)
         ?.groups?.body ?? "";
+    const optionChoiceRule =
+      css.match(/\.branch-card--option:not\(\.branch-card--side\) \.branch-card__choice\s*\{(?<body>[^}]+)\}/)
+        ?.groups?.body ?? "";
     const copyRule =
       css.match(/\.branch-card--option:not\(\.branch-card--side\) \.branch-card__copy\s*\{(?<body>[^}]+)\}/)?.groups
         ?.body ?? "";
     const descriptionRule =
       css.match(/\.branch-card--option:not\(\.branch-card--side\) \.branch-card__description\s*\{(?<body>[^}]+)\}/)
         ?.groups?.body ?? "";
-    const selectHintRule = css.match(/\.branch-card__select-hint\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const previewRule = css.match(/\.branch-card__hover-preview\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const hoverPreviewRule = css.match(/\.branch-card:hover \.branch-card__hover-preview\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const optionHoverRule = css.match(/\.branch-card--option:hover\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
     expect(treeCanvasRule).toContain("min-height: 260px");
     expect(treeCanvasRule).toContain("grid-template-rows: minmax(260px, 1fr) auto");
@@ -548,14 +549,15 @@ describe("TreeCanvas", () => {
     expect(mainRule).toContain("overflow: visible");
     expect(cardRule).toContain("max-height: 176px");
     expect(optionChooseRule).toContain("height: 100%");
-    expect(optionHeaderRule).toContain("height: 100%");
-    expect(copyRule).toContain("grid-template-rows: auto minmax(0, 1fr) auto");
+    expect(optionHeaderRule).toContain("display: block");
+    expect(optionChoiceRule).toContain("position: absolute");
+    expect(optionChoiceRule).toContain("right: 10px");
+    expect(copyRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
     expect(descriptionRule).toContain("overflow: hidden");
-    expect(descriptionRule).toContain("-webkit-line-clamp: 5");
-    expect(selectHintRule).toContain("align-self: end");
-    expect(previewRule).toContain("position: absolute");
-    expect(previewRule).toContain("bottom: calc(100% + 8px)");
-    expect(hoverPreviewRule).toContain("display: block");
+    expect(descriptionRule).toContain("-webkit-line-clamp: 6");
+    expect(optionHoverRule).toContain("transform: none");
+    expect(css).not.toContain(".branch-card__select-hint");
+    expect(css).not.toContain(".branch-card__hover-preview");
   });
 
   it("uses the same visible local spinning border on streamed option cards without lighting the tray", () => {
@@ -570,7 +572,7 @@ describe("TreeCanvas", () => {
     expect(css).not.toContain(".tree-canvas--options-generating .branch-card--placeholder");
   });
 
-  it("only renders hover previews for option copy that may be truncated", () => {
+  it("does not render hover previews or visible select hints in option cards", () => {
     const { container, rerender } = render(
       <BranchOptionTray
         isBusy={false}
@@ -581,6 +583,7 @@ describe("TreeCanvas", () => {
     );
 
     expect(container.querySelector(".branch-card__hover-preview")).toBeNull();
+    expect(screen.queryByText("点击选择")).not.toBeInTheDocument();
 
     rerender(
       <BranchOptionTray
@@ -598,7 +601,8 @@ describe("TreeCanvas", () => {
       />
     );
 
-    expect(container.querySelectorAll(".branch-card__hover-preview")).toHaveLength(1);
+    expect(container.querySelector(".branch-card__hover-preview")).toBeNull();
+    expect(screen.queryByText("点击选择")).not.toBeInTheDocument();
   });
 
   it("caps long current questions so the three choices remain visible", () => {

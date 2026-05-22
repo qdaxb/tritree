@@ -55,7 +55,6 @@ type TreeLabelMode = "compact" | "detail";
 const CANVAS_HEIGHT = 380;
 const MIN_CANVAS_WIDTH = 320;
 const COMPACT_LABEL_LIMIT = 15;
-const OPTION_PREVIEW_COPY_LIMIT = 72;
 const SEED_ROOT_LABEL = "种子念头";
 const OPTION_GROUPS = { a: 0, b: 4, c: 8, custom: 2 };
 const OPTION_RANK = { a: 0, b: 1, c: 2, custom: 3 };
@@ -211,12 +210,6 @@ function displayBranchLabel(label: string) {
       .replace(/[“”"'`]/g, "")
       .trim() || "新方向"
   );
-}
-
-function shouldRenderBranchHoverPreview(label: string, description: string) {
-  const normalizedDescription = description.trim();
-  const totalLength = Array.from(`${label}${normalizedDescription}`).length;
-  return totalLength > OPTION_PREVIEW_COPY_LIMIT || normalizedDescription.includes("\n");
 }
 
 function treeGraphOptionSignature(option: BranchOption) {
@@ -1651,7 +1644,6 @@ function BranchOptionCard({
 }) {
   const displayLabel = displayBranchLabel(option.label);
   const choiceLabel = isCustomBranchOptionId(option.id) && variant === "side" ? "自定义" : option.id.toUpperCase();
-  const shouldShowHoverPreview = shouldRenderBranchHoverPreview(displayLabel, option.description);
 
   return (
     <div
@@ -1682,17 +1674,9 @@ function BranchOptionCard({
               {isPending ? " 生成中" : ""}
             </span>
             <span className="branch-card__description">{option.description}</span>
-            <span className="branch-card__select-hint">{isSelected ? "已选择" : "点击选择"}</span>
           </span>
         </span>
       </button>
-      {shouldShowHoverPreview ? (
-        <div aria-hidden="true" className="branch-card__hover-preview">
-          <p className="branch-card__hover-kicker">完整方向</p>
-          <strong>{displayLabel}</strong>
-          <p>{option.description}</p>
-        </div>
-      ) : null}
     </div>
   );
 }
