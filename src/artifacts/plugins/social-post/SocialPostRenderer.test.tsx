@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -60,6 +62,20 @@ function findTextNodeContaining(node: Node, text: string): Text | null {
 }
 
 describe("SocialPostRenderer", () => {
+  it("lets the social content fill the available artifact height", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const scrollRule = css.match(/\.social-post-panel__scroll\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const contentRule = css.match(/\.work-content\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const imagePromptRule = css.match(/\.image-prompt\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(scrollRule).toContain("display: grid");
+    expect(scrollRule).toContain("grid-template-rows: minmax(0, 1fr)");
+    expect(contentRule).toContain("min-height: 100%");
+    expect(contentRule).toContain("display: flex");
+    expect(contentRule).toContain("flex-direction: column");
+    expect(imagePromptRule).toContain("flex: 1 1 auto");
+  });
+
   it("renders social post body line breaks as separate paragraphs", () => {
     render(
       <SocialPostRenderer

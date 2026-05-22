@@ -131,59 +131,63 @@ export function ArtifactWorkspace({
       {headerPanel}
 
       <div className="artifact-workspace__body">
-        {hasNoArtifactForCurrentNode ? (
-          <div className="artifact-workspace__status" role="status">
-            本步未生成产物
-          </div>
-        ) : null}
-
-        {isBusy && generationStage ? (
-          <div aria-live="polite" className="artifact-workspace__process" role="status">
-            <div className="artifact-workspace__process-header">
-              <span className="artifact-workspace__process-dot" aria-hidden="true" />
-              <strong>{processTitle}</strong>
+        <div className="artifact-workspace__supplements">
+          {hasNoArtifactForCurrentNode ? (
+            <div className="artifact-workspace__status" role="status">
+              本步未生成产物
             </div>
-            <div className="artifact-workspace__process-body" ref={processBodyRef}>
-              {trimmedThinkingText ? (
-                <ThinkingTextLines text={trimmedThinkingText} />
-              ) : generationStage === "artifact" ? (
-                "正在生成草稿内容。"
-              ) : (
-                "正在生成可选择方向。"
-              )}
+          ) : null}
+
+          {isBusy && generationStage ? (
+            <div aria-live="polite" className="artifact-workspace__process" role="status">
+              <div className="artifact-workspace__process-header">
+                <span className="artifact-workspace__process-dot" aria-hidden="true" />
+                <strong>{processTitle}</strong>
+              </div>
+              <div className="artifact-workspace__process-body" ref={processBodyRef}>
+                {trimmedThinkingText ? (
+                  <ThinkingTextLines text={trimmedThinkingText} />
+                ) : generationStage === "artifact" ? (
+                  "正在生成草稿内容。"
+                ) : (
+                  "正在生成可选择方向。"
+                )}
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {processMaterials.length > 0 ? (
-          <ProcessMaterials isStreaming={isStreamingProcessMaterials} materials={processMaterials} />
-        ) : null}
+          {processMaterials.length > 0 ? (
+            <ProcessMaterials isStreaming={isStreamingProcessMaterials} materials={processMaterials} />
+          ) : null}
+        </div>
 
-        {isComparisonMode ? (
-          <ArtifactComparisonView
-            comparisonArtifacts={comparisonArtifacts}
-            comparisonLabels={comparisonLabels}
-            comparisonSelectionCount={comparisonSelectionCount}
-            isBusy={isBusy}
-          />
-        ) : selectedArtifact ? (
-          SelectedRenderer ? (
-            <SelectedRenderer
-              artifact={selectedArtifact}
+        <div className="artifact-workspace__content">
+          {isComparisonMode ? (
+            <ArtifactComparisonView
+              comparisonArtifacts={comparisonArtifacts}
+              comparisonLabels={comparisonLabels}
+              comparisonSelectionCount={comparisonSelectionCount}
               isBusy={isBusy}
-              onAction={(actionId, input) => onAction(actionId, selectedArtifact, input)}
-              onSave={(payload) => onSave({ ...selectedArtifact, payload: payload ?? selectedArtifact.payload })}
-              previousArtifact={previousArtifact}
-              publishPlatforms={publishPlatforms}
             />
+          ) : selectedArtifact ? (
+            SelectedRenderer ? (
+              <SelectedRenderer
+                artifact={selectedArtifact}
+                isBusy={isBusy}
+                onAction={(actionId, input) => onAction(actionId, selectedArtifact, input)}
+                onSave={(payload) => onSave({ ...selectedArtifact, payload: payload ?? selectedArtifact.payload })}
+                previousArtifact={previousArtifact}
+                publishPlatforms={publishPlatforms}
+              />
+            ) : (
+              <ArtifactFallback artifact={selectedArtifact} />
+            )
           ) : (
-            <ArtifactFallback artifact={selectedArtifact} />
-          )
-        ) : (
-          <div className="artifact-workspace__empty">
-            <p>还没有产物。</p>
-          </div>
-        )}
+            <div className="artifact-workspace__empty">
+              <p>还没有产物。</p>
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   );

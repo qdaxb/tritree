@@ -1421,6 +1421,63 @@ describe("TreeableApp", () => {
     expect(screen.getByTestId("live-artifact")).toBeInTheDocument();
   });
 
+  it("expands and restores the desktop artifact workspace", async () => {
+    installDesktopViewport();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    const expandButton = await screen.findByRole("button", { name: "展开右侧布局" });
+    const shell = screen.getByRole("main");
+
+    expect(shell).not.toHaveClass("app-shell--artifact-expanded");
+    expect(expandButton).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["full"]);
+
+    await userEvent.click(expandButton);
+
+    expect(shell).toHaveClass("app-shell--artifact-expanded");
+    expect(screen.getByRole("button", { name: "收起右侧布局" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("group", { name: "PC 树图控制" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开树图" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["options"]);
+
+    await userEvent.click(screen.getByRole("button", { name: "展开树图" }));
+
+    expect(screen.getByRole("button", { name: "收起树图" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["tree", "options"]);
+
+    await userEvent.click(screen.getByRole("button", { name: "收起右侧布局" }));
+
+    expect(shell).not.toHaveClass("app-shell--artifact-expanded");
+    expect(screen.queryByRole("group", { name: "PC 树图控制" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开右侧布局" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["full"]);
+  });
+
+  it("defines a wider desktop grid for the expanded artifact workspace", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const expandedShellRule = css.match(/\.app-shell--artifact-expanded\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const focusCanvasRule = css.match(/\.canvas-region--desktop-focus\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const treeToggleRule = css.match(/\.desktop-tree-toggle\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const desktopOptionsRule =
+      css.match(/\.app-shell--artifact-expanded \.tree-canvas--options \.branch-option-main\s*\{(?<body>[^}]+)\}/)
+        ?.groups?.body ?? "";
+
+    expect(expandedShellRule).toContain("grid-template-columns: minmax(320px, 0.6fr) minmax(520px, 1.4fr)");
+    expect(focusCanvasRule).toContain("grid-template-rows: minmax(0, 1fr)");
+    expect(treeToggleRule).toContain("position: absolute");
+    expect(treeToggleRule).toContain("top: 12px");
+    expect(desktopOptionsRule).toContain("grid-template-columns: 1fr");
+    expect(desktopOptionsRule).toContain("grid-auto-rows: max-content");
+    expect(desktopOptionsRule).toContain("align-content: start");
+  });
+
   it("defines mobile-only unified workspace visibility rules", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const defaultPanelRule = css.match(/\.mobile-panel\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";

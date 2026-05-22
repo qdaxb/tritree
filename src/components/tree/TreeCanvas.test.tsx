@@ -177,6 +177,40 @@ describe("TreeCanvas", () => {
     expect(tray.querySelector("foreignObject")).toBeNull();
   });
 
+  it("keeps a custom direction composer open at the bottom in vertical option mode", () => {
+    const onAddCustomOption = vi.fn();
+    render(
+      <BranchOptionTray
+        isBusy={false}
+        isCustomOptionInline
+        onAddCustomOption={onAddCustomOption}
+        onChoose={vi.fn()}
+        options={currentNode.options}
+        pendingChoice={null}
+        question="这次最需要先确认什么？"
+      />
+    );
+
+    const tray = screen.getByRole("group", { name: "回答当前问题" });
+    const customInput = within(tray).getByRole("textbox", { name: "自己写方向" });
+
+    expect(within(tray).queryByRole("button", { name: "自己写方向" })).not.toBeInTheDocument();
+    expect(customInput).toBeInTheDocument();
+
+    fireEvent.change(customInput, { target: { value: "从评论区提问开头" } });
+    fireEvent.click(within(tray).getByRole("button", { name: "发送" }));
+
+    expect(onAddCustomOption).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: "从评论区提问开头",
+        impact: "按用户自定义方向继续生成。",
+        kind: "reframe",
+        label: "从评论区提问开头"
+      })
+    );
+    expect(within(tray).getByRole("textbox", { name: "自己写方向" })).toHaveValue("");
+  });
+
   it("shows a completed panel instead of waiting option placeholders for terminal nodes", () => {
     const terminalNode: TreeNode = {
       ...currentNode,

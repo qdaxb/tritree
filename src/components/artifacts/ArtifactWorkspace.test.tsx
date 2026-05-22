@@ -220,6 +220,9 @@ describe("ArtifactWorkspace", () => {
 
   it("caps process materials so the draft keeps more vertical room", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const bodyRule = css.match(/\.artifact-workspace__body\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const supplementsRule = css.match(/\.artifact-workspace__supplements\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const contentRule = css.match(/\.artifact-workspace__content\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const materialsRule = css.match(/\.artifact-workspace__materials\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const streamingMaterialsRule =
       css.match(/\.artifact-workspace__materials--streaming\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -228,11 +231,23 @@ describe("ArtifactWorkspace", () => {
     const socialPostPanelRule =
       css.match(/\.social-post-panel\s*\{\s*flex: 1 1 auto;(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
-    expect(materialsRule).toContain("max-height: min(280px, 36dvh)");
+    expect(bodyRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
+    expect(bodyRule).toContain("overflow: hidden");
+    expect(supplementsRule).toContain("overflow: auto");
+    expect(contentRule).toContain("height: 100%");
+    expect(materialsRule).toContain("max-height: min(360px, 44dvh)");
     expect(materialsRule).toContain("overflow: hidden");
-    expect(streamingMaterialsRule).toContain("max-height: min(340px, 44dvh)");
+    expect(streamingMaterialsRule).toContain("max-height: min(420px, 52dvh)");
     expect(materialsListRule).toContain("overflow: auto");
     expect(socialPostPanelRule).toContain("min-height: 380px");
+  });
+
+  it("wraps the selected artifact in a stretchable content region", () => {
+    renderWorkspace();
+
+    const content = document.querySelector(".artifact-workspace__content");
+
+    expect(content).toContainElement(screen.getByTestId("social-post-renderer"));
   });
 
   it("renders the selected artifact without artifact tabs", () => {

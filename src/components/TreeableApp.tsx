@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { signOut } from "next-auth/react";
-import { ChevronDown, ChevronUp, FileText, GitBranch, LogOut, Plus, RotateCcw, UsersRound } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  GitBranch,
+  LogOut,
+  Maximize2,
+  Minimize2,
+  Plus,
+  RotateCcw,
+  UsersRound
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   ArtifactSchema,
@@ -495,6 +506,8 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
   const [streamingThinking, setStreamingThinking] = useState<StreamingThinkingEntry | null>(null);
   const [streamingProcessMaterials, setStreamingProcessMaterials] = useState<StreamingProcessMaterialsEntry | null>(null);
   const [artifactComparison, setArtifactComparison] = useState<ArtifactComparisonSelection | null>(null);
+  const [isArtifactPanelExpanded, setIsArtifactPanelExpanded] = useState(false);
+  const [isDesktopFocusTreeExpanded, setIsDesktopFocusTreeExpanded] = useState(false);
   const [isMobileTreeExpanded, setIsMobileTreeExpanded] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
@@ -551,8 +564,16 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     if (!isMobileLayout) {
       setIsMobileTreeExpanded(false);
       setIsAccountMenuOpen(false);
+    } else {
+      setIsArtifactPanelExpanded(false);
     }
   }, [isMobileLayout]);
+
+  useEffect(() => {
+    if (!isArtifactPanelExpanded || isMobileLayout) {
+      setIsDesktopFocusTreeExpanded(false);
+    }
+  }, [isArtifactPanelExpanded, isMobileLayout]);
 
   useEffect(() => {
     setIsAccountMenuOpen(false);
@@ -1689,6 +1710,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
       ? fullDisplayArtifacts.find((a) => a.id === effectiveSelectedArtifactId)?.type
       : null) ?? sessionState?.session.artifactTypeId ?? null;
   const selectedArtifactPublishPlatforms = artifactTypes.find((t) => t.id === selectedArtifactTypeId)?.publishPlatforms;
+  const isDesktopArtifactFocusLayout = isArtifactPanelExpanded && !isMobileLayout;
 
   const toastRetryAction = canRetryArtifactGeneration
     ? {
@@ -1796,8 +1818,39 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     );
   }
 
+  function renderDesktopFocusCanvas() {
+    return (
+      <section
+        className={`canvas-region canvas-region--desktop-focus${
+          isDesktopFocusTreeExpanded ? " canvas-region--desktop-focus-tree-open" : ""
+        }${isOptionsModuleGenerating ? " module--generating" : ""}`}
+      >
+        <div aria-label="PC 树图控制" className="desktop-tree-toggle" role="group">
+          <button
+            aria-expanded={isDesktopFocusTreeExpanded}
+            className="desktop-tree-toggle__button"
+            onClick={() => setIsDesktopFocusTreeExpanded((expanded) => !expanded)}
+            type="button"
+          >
+            <GitBranch aria-hidden="true" size={16} strokeWidth={2.4} />
+            <span>{isDesktopFocusTreeExpanded ? "收起树图" : "展开树图"}</span>
+            {isDesktopFocusTreeExpanded ? (
+              <ChevronUp aria-hidden="true" size={15} strokeWidth={2.5} />
+            ) : (
+              <ChevronDown aria-hidden="true" size={15} strokeWidth={2.5} />
+            )}
+          </button>
+        </div>
+        {isDesktopFocusTreeExpanded ? (
+          <div className="desktop-focus-tree-region">{renderTreeCanvas("tree")}</div>
+        ) : null}
+        <div className="desktop-focus-options-region">{renderTreeCanvas("options")}</div>
+      </section>
+    );
+  }
+
   return (
-    <main className="app-shell">
+    <main className={`app-shell${isArtifactPanelExpanded && !isMobileLayout ? " app-shell--artifact-expanded" : ""}`}>
       <header className="topbar">
         <div className="brand-mark" />
         <div>
@@ -1907,10 +1960,19 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
       {!isMobileLayout || isMobileTreeExpanded ? (
         <div
           aria-label={isMobileLayout ? "移动端树图" : undefined}
-          className={mobilePanelClassName("tree", isMobileLayout ? "mobile-panel--expanded" : undefined)}
+          className={mobilePanelClassName(
+            "tree",
+            isMobileLayout ? "mobile-panel--expanded" : isDesktopArtifactFocusLayout ? "mobile-panel--desktop-focus" : undefined
+          )}
           role={isMobileLayout ? "region" : undefined}
         >
-          <section className={`canvas-region${!isMobileLayout && isOptionsModuleGenerating ? " module--generating" : ""}`}>{renderTreeCanvas(isMobileLayout ? "tree" : "full")}</section>
+          {isDesktopArtifactFocusLayout ? (
+            renderDesktopFocusCanvas()
+          ) : (
+            <section className={`canvas-region${!isMobileLayout && isOptionsModuleGenerating ? " module--generating" : ""}`}>
+              {renderTreeCanvas(isMobileLayout ? "tree" : "full")}
+            </section>
+          )}
         </div>
       ) : null}
       <div className={mobilePanelClassName("artifact", isMobileLayout ? "mobile-panel--unified" : undefined)}>
@@ -1929,18 +1991,37 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
             generationStage={artifactGenerationStage}
             publishPlatforms={selectedArtifactPublishPlatforms}
             headerActions={
-              <button
-                aria-expanded={isSkillPanelOpen}
-                className="secondary-button"
-                disabled={isBusy || !sessionState}
-                onClick={() => {
-                  setIsSkillLibraryOpen(false);
-                  setIsSkillPanelOpen((open) => !open);
-                }}
-                type="button"
-              >
-                {enabledSkillIds.length} 个技能
-              </button>
+              <>
+                {!isMobileLayout ? (
+                  <button
+                    aria-label={isArtifactPanelExpanded ? "收起右侧布局" : "展开右侧布局"}
+                    aria-pressed={isArtifactPanelExpanded}
+                    className="artifact-layout-toggle"
+                    onClick={() => setIsArtifactPanelExpanded((expanded) => !expanded)}
+                    title={isArtifactPanelExpanded ? "收起右侧布局" : "展开右侧布局"}
+                    type="button"
+                  >
+                    {isArtifactPanelExpanded ? (
+                      <Minimize2 aria-hidden="true" size={14} strokeWidth={2.35} />
+                    ) : (
+                      <Maximize2 aria-hidden="true" size={14} strokeWidth={2.35} />
+                    )}
+                    <span>{isArtifactPanelExpanded ? "收起" : "展开"}</span>
+                  </button>
+                ) : null}
+                <button
+                  aria-expanded={isSkillPanelOpen}
+                  className="secondary-button"
+                  disabled={isBusy || !sessionState}
+                  onClick={() => {
+                    setIsSkillLibraryOpen(false);
+                    setIsSkillPanelOpen((open) => !open);
+                  }}
+                  type="button"
+                >
+                  {enabledSkillIds.length} 个技能
+                </button>
+              </>
             }
             headerPanel={
               isSkillPanelOpen && sessionState ? (

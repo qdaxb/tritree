@@ -688,6 +688,7 @@ export function TreeCanvas({
   const isTreeScrollable = branchLayout.width > canvasWidth + 1;
   const shouldShowTree = display !== "options";
   const shouldShowBranchControls = display !== "tree";
+  const shouldInlineCustomOption = display === "options" && !isMobileLayout;
   const nodeId = currentNode?.id ?? null;
   const isBranchGenerating = Boolean(pendingBranch);
   const graphCurrentNode = isBranchGenerating ? null : currentNode;
@@ -1233,6 +1234,7 @@ export function TreeCanvas({
       ) : shouldShowBranchControls && currentNode && !pendingBranch ? (
         <BranchOptionTray
           isBusy={isBusy}
+          isCustomOptionInline={shouldInlineCustomOption}
           onAddCustomOption={onAddCustomOption}
           onChoose={onChoose}
           onRegenerateOptions={onRegenerateOptions}
@@ -1332,6 +1334,7 @@ function BranchCompletePanel({
 }
 
 export function BranchOptionTray({
+  isCustomOptionInline = false,
   isBusy,
   onAddCustomOption,
   onChoose,
@@ -1341,6 +1344,7 @@ export function BranchOptionTray({
   question,
   visibleCount = options.length
 }: {
+  isCustomOptionInline?: boolean;
   isBusy: boolean;
   onAddCustomOption?: (option: BranchOption) => void;
   onChoose: (optionId: BranchOption["id"], note?: string, optionMode?: OptionGenerationMode) => void;
@@ -1389,7 +1393,7 @@ export function BranchOptionTray({
             onModeChange={setOptionMode}
             onRegenerateOptions={onRegenerateOptions}
           />
-          <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} />
+          {isCustomOptionInline ? null : <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} />}
         </div>
       ) : null}
       {selectedOption && primaryAllVisible ? (
@@ -1453,6 +1457,23 @@ export function BranchOptionTray({
             <RefreshCw aria-hidden="true" size={13} strokeWidth={2.4} />
             <span>重试生成选项</span>
           </button>
+        </div>
+      ) : null}
+      {isCustomOptionInline && primaryAllVisible ? (
+        <div className="branch-option-custom-input">
+          <MoreDirectionsCard
+            defaultEditing
+            disabled={isBusy}
+            fieldLabel="自己写方向"
+            formClassName="branch-side-form branch-side-form--inline"
+            headerLabel="自己写方向"
+            hideHeaderClose
+            isPersistent
+            onAddCustomOption={onAddCustomOption}
+            placeholder="输入你想补充的方向..."
+            submitLabel="发送"
+            textareaLabel="自己写方向"
+          />
         </div>
       ) : null}
     </div>
@@ -1714,10 +1735,13 @@ function BranchOptionComposer({
 
 function MoreDirectionsCard({
   buttonClassName = "branch-side-action",
+  defaultEditing = false,
   disabled,
   fieldLabel = "想让它怎么写？",
   formClassName = "branch-side-form",
   headerLabel = "自己写方向",
+  hideHeaderClose = false,
+  isPersistent = false,
   onAddCustomOption,
   placeholder = "例如：从评论区争议切入，语气更像朋友聊天",
   submitLabel = "添加",
@@ -1726,10 +1750,13 @@ function MoreDirectionsCard({
   triggerTitle = "写一个自己的方向"
 }: {
   buttonClassName?: string;
+  defaultEditing?: boolean;
   disabled: boolean;
   fieldLabel?: string;
   formClassName?: string;
   headerLabel?: string;
+  hideHeaderClose?: boolean;
+  isPersistent?: boolean;
   onAddCustomOption?: (option: BranchOption) => void;
   placeholder?: string;
   submitLabel?: string;
@@ -1737,7 +1764,7 @@ function MoreDirectionsCard({
   triggerLabel?: string;
   triggerTitle?: string;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(defaultEditing);
   const [content, setContent] = useState("");
   const trimmedContent = content.trim();
 
@@ -1779,6 +1806,10 @@ function MoreDirectionsCard({
       impact: "按用户自定义方向继续生成。",
       kind: "reframe"
     });
+    if (isPersistent) {
+      setContent("");
+      return;
+    }
     closeCustomOption();
   }
 
@@ -1786,9 +1817,11 @@ function MoreDirectionsCard({
     <div className={formClassName}>
       <div className="branch-side-form__header">
         <strong>{headerLabel}</strong>
-        <button aria-label={`关闭${headerLabel}`} disabled={disabled} onClick={closeCustomOption} type="button">
-          关闭
-        </button>
+        {hideHeaderClose ? null : (
+          <button aria-label={`关闭${headerLabel}`} disabled={disabled} onClick={closeCustomOption} type="button">
+            关闭
+          </button>
+        )}
       </div>
       <label className="branch-card__field">
         <span>{fieldLabel}</span>
