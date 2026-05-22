@@ -177,7 +177,7 @@ describe("TreeCanvas", () => {
     expect(tray.querySelector("foreignObject")).toBeNull();
   });
 
-  it("keeps a custom direction composer open at the bottom in vertical option mode", () => {
+  it("keeps a compact custom direction input at the bottom in vertical option mode", () => {
     const onAddCustomOption = vi.fn();
     render(
       <BranchOptionTray
@@ -193,12 +193,18 @@ describe("TreeCanvas", () => {
 
     const tray = screen.getByRole("group", { name: "回答当前问题" });
     const customInput = within(tray).getByRole("textbox", { name: "自己写方向" });
+    const sendButton = within(tray).getByRole("button", { name: "发送" });
 
     expect(within(tray).queryByRole("button", { name: "自己写方向" })).not.toBeInTheDocument();
+    expect(within(tray).queryByRole("button", { name: "关闭自己写方向" })).not.toBeInTheDocument();
+    expect(within(tray).queryByText("自己写方向")).not.toBeInTheDocument();
     expect(customInput).toBeInTheDocument();
+    expect(customInput.tagName).toBe("INPUT");
+    expect(sendButton).toBeDisabled();
 
     fireEvent.change(customInput, { target: { value: "从评论区提问开头" } });
-    fireEvent.click(within(tray).getByRole("button", { name: "发送" }));
+    expect(sendButton).toBeEnabled();
+    fireEvent.click(sendButton);
 
     expect(onAddCustomOption).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -375,6 +381,30 @@ describe("TreeCanvas", () => {
     expect(mobileRule).toContain("left: 12px");
   });
 
+  it("styles compact tree mode as a fitted overview instead of a scroll surface", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const compactCanvasRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--tree\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactViewportShellRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--tree \.tree-viewport-shell\s*\{(?<body>[^}]+)\}/)?.groups
+        ?.body ?? "";
+    const compactViewportRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--tree \.tree-viewport\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
+      "";
+    const compactSvgRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--tree \.mind-map-svg\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
+      "";
+
+    expect(compactCanvasRule).toContain("min-height: 84px");
+    expect(compactCanvasRule).toContain("grid-template-rows: minmax(0, 1fr)");
+    expect(compactViewportShellRule).toContain("min-height: 0");
+    expect(compactViewportRule).toContain("min-height: 0");
+    expect(compactViewportRule).toContain("overflow: hidden");
+    expect(compactViewportRule).toContain("scrollbar-width: none");
+    expect(compactSvgRule).toContain("width: 100%");
+    expect(compactSvgRule).toContain("height: 100%");
+  });
+
   it("does not reserve tree viewport space in options-only mode", () => {
     const { container } = render(
       <TreeCanvas
@@ -467,6 +497,7 @@ describe("TreeCanvas", () => {
     render(
       <BranchOptionTray
         isBusy={false}
+        isCustomOptionInline
         onChoose={vi.fn()}
         options={currentNode.options}
         pendingChoice={null}
@@ -483,7 +514,7 @@ describe("TreeCanvas", () => {
     );
   });
 
-  it("keeps long option copy readable through hover previews without leaving the three-card layout", () => {
+  it("keeps option cards compact without top hover previews or inline select hints", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const treeCanvasRule = css.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const treeShellRule = css.match(/\.tree-viewport-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -497,15 +528,16 @@ describe("TreeCanvas", () => {
     const optionHeaderRule =
       css.match(/\.branch-card--option:not\(\.branch-card--side\) \.branch-card__header\s*\{(?<body>[^}]+)\}/)
         ?.groups?.body ?? "";
+    const optionChoiceRule =
+      css.match(/\.branch-card--option:not\(\.branch-card--side\) \.branch-card__choice\s*\{(?<body>[^}]+)\}/)
+        ?.groups?.body ?? "";
     const copyRule =
       css.match(/\.branch-card--option:not\(\.branch-card--side\) \.branch-card__copy\s*\{(?<body>[^}]+)\}/)?.groups
         ?.body ?? "";
     const descriptionRule =
       css.match(/\.branch-card--option:not\(\.branch-card--side\) \.branch-card__description\s*\{(?<body>[^}]+)\}/)
         ?.groups?.body ?? "";
-    const selectHintRule = css.match(/\.branch-card__select-hint\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const previewRule = css.match(/\.branch-card__hover-preview\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const hoverPreviewRule = css.match(/\.branch-card:hover \.branch-card__hover-preview\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const optionHoverRule = css.match(/\.branch-card--option:hover\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
     expect(treeCanvasRule).toContain("min-height: 260px");
     expect(treeCanvasRule).toContain("grid-template-rows: minmax(260px, 1fr) auto");
@@ -518,14 +550,15 @@ describe("TreeCanvas", () => {
     expect(mainRule).toContain("overflow: visible");
     expect(cardRule).toContain("max-height: 176px");
     expect(optionChooseRule).toContain("height: 100%");
-    expect(optionHeaderRule).toContain("height: 100%");
-    expect(copyRule).toContain("grid-template-rows: auto minmax(0, 1fr) auto");
+    expect(optionHeaderRule).toContain("display: block");
+    expect(optionChoiceRule).toContain("position: absolute");
+    expect(optionChoiceRule).toContain("right: 10px");
+    expect(copyRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
     expect(descriptionRule).toContain("overflow: hidden");
-    expect(descriptionRule).toContain("-webkit-line-clamp: 5");
-    expect(selectHintRule).toContain("align-self: end");
-    expect(previewRule).toContain("position: absolute");
-    expect(previewRule).toContain("bottom: calc(100% + 8px)");
-    expect(hoverPreviewRule).toContain("display: block");
+    expect(descriptionRule).toContain("-webkit-line-clamp: 6");
+    expect(optionHoverRule).toContain("transform: none");
+    expect(css).not.toContain(".branch-card__select-hint");
+    expect(css).not.toContain(".branch-card__hover-preview");
   });
 
   it("uses the same visible local spinning border on streamed option cards without lighting the tray", () => {
@@ -540,7 +573,7 @@ describe("TreeCanvas", () => {
     expect(css).not.toContain(".tree-canvas--options-generating .branch-card--placeholder");
   });
 
-  it("only renders hover previews for option copy that may be truncated", () => {
+  it("does not render hover previews or visible select hints in option cards", () => {
     const { container, rerender } = render(
       <BranchOptionTray
         isBusy={false}
@@ -551,6 +584,7 @@ describe("TreeCanvas", () => {
     );
 
     expect(container.querySelector(".branch-card__hover-preview")).toBeNull();
+    expect(screen.queryByText("点击选择")).not.toBeInTheDocument();
 
     rerender(
       <BranchOptionTray
@@ -568,7 +602,8 @@ describe("TreeCanvas", () => {
       />
     );
 
-    expect(container.querySelectorAll(".branch-card__hover-preview")).toHaveLength(1);
+    expect(container.querySelector(".branch-card__hover-preview")).toBeNull();
+    expect(screen.queryByText("点击选择")).not.toBeInTheDocument();
   });
 
   it("caps long current questions so the three choices remain visible", () => {
@@ -613,7 +648,7 @@ describe("TreeCanvas", () => {
     expect(within(question as HTMLElement).getByText("基于当前稿，下一步怎么改？")).toBeInTheDocument();
   });
 
-  it("selects an option before showing the shared writing controls", () => {
+  it("keeps selected option state in the main list and merges writing controls into the bottom bar", () => {
     const onChoose = vi.fn();
     const longDescription =
       "把当前内容重构为面向第一次接触该主题的读者的实用内容，保留原有骨架，但增加背景解释、判断标准、行动建议和风险提醒。";
@@ -632,16 +667,16 @@ describe("TreeCanvas", () => {
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
     expect(onChoose).not.toHaveBeenCalled();
-    const focusPanel = screen.getByRole("group", { name: "已选方向" });
-    expect(focusPanel).toHaveClass("branch-option-focus");
-    expect(within(focusPanel).getByRole("button", { name: /A 具体场景/ })).toHaveClass("branch-card__choose");
+    expect(screen.queryByRole("group", { name: "已选方向" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "三个主选项" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /A 具体场景/ }).closest(".branch-card")).toHaveClass("branch-card--selected");
     expect(screen.getByText("已选 A")).toBeInTheDocument();
     expect(within(screen.getByRole("group", { name: "A 写作操作" })).queryByText("具体场景")).not.toBeInTheDocument();
     expect(within(screen.getByRole("group", { name: "A 写作操作" })).queryByText(longDescription)).not.toBeInTheDocument();
     expect(screen.getByLabelText("补充想法 A")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "A 按这个方向写" })).toBeInTheDocument();
-    expect(screen.getByText("还想补一句吗？")).toBeInTheDocument();
-    expect(within(screen.getByRole("group", { name: "其他方向" })).getByRole("button", { name: /切换到 B/ })).toBeInTheDocument();
+    expect(screen.getByLabelText("补充想法 A")).toHaveAttribute("placeholder", "还想补一句吗？");
+    expect(screen.queryByRole("group", { name: "其他方向" })).not.toBeInTheDocument();
     expect(screen.queryByText("更多备注")).not.toBeInTheDocument();
   });
 
@@ -671,6 +706,7 @@ describe("TreeCanvas", () => {
     render(
       <BranchOptionTray
         isBusy={false}
+        isCustomOptionInline
         onChoose={vi.fn()}
         options={currentNode.options}
         pendingChoice={null}
@@ -679,12 +715,14 @@ describe("TreeCanvas", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
-    expect(screen.getByRole("group", { name: "已选方向" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "已选方向" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "A 写作操作" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭写作操作" }));
 
     expect(screen.queryByRole("group", { name: "已选方向" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "A 写作操作" })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "三个主选项" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "自己写方向" })).toBeInTheDocument();
   });
 
   it("uses one tray-level direction range control for choosing option mode", () => {
@@ -736,12 +774,14 @@ describe("TreeCanvas", () => {
     expect(within(range).getByRole("button", { name: "平衡" })).toBeInTheDocument();
     expect(within(range).getByRole("button", { name: "专注" })).toBeInTheDocument();
     expect(screen.queryByText("兼顾延展和当前稿推进")).not.toBeInTheDocument();
+    const refreshButton = screen.getByRole("button", { name: "重新生成当前选项" });
+    expect(within(refreshButton).queryByText("重新生成当前选项")).not.toBeInTheDocument();
 
     fireEvent.click(within(range).getByRole("button", { name: "发散" }));
 
     expect(onRegenerateOptions).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "重新生成当前选项" }));
+    fireEvent.click(refreshButton);
 
     expect(onRegenerateOptions).toHaveBeenCalledWith("divergent");
   });
@@ -1183,6 +1223,67 @@ describe("TreeCanvas", () => {
     expect(seedElement?.querySelector(".force-labels")).toHaveTextContent("种子念头");
   });
 
+  it("keeps node titles but hides visual labels in compact tree mode", () => {
+    const { container } = render(
+      <TreeCanvas
+        currentNode={selectedNode}
+        isBusy={false}
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[currentNode, selectedNode]}
+        treeLabelMode="compact"
+      />
+    );
+
+    const seedElement = container.querySelector(".tree-node--seed-root");
+
+    expect(seedElement?.querySelector("title")).toHaveTextContent("种子念头");
+    expect(container.querySelectorAll(".force-labels")).toHaveLength(0);
+  });
+
+  it("renders compact tree mode as a non-scrollable overview", () => {
+    const selectedPath = buildLongSelectedPath(9);
+    const { container } = render(
+      <TreeCanvas
+        currentNode={selectedPath[selectedPath.length - 1]}
+        isBusy={false}
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={selectedPath}
+        treeLabelMode="compact"
+        treeNodes={selectedPath}
+      />
+    );
+
+    const viewport = screen.getByRole("region", { name: "长任务树图浏览区" });
+    const svg = container.querySelector(".mind-map-svg");
+
+    expect(screen.queryByRole("note", { name: "树图说明" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看较早节点" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "回到最新节点" })).not.toBeInTheDocument();
+    expect(container.querySelector(".tree-scroll-controls")).not.toBeInTheDocument();
+    expect(viewport).not.toHaveClass("tree-viewport--scrollable");
+    expect(svg).toHaveStyle({ height: "100%", minHeight: "0", width: "100%" });
+  });
+
+  it("shows visual node labels in detail tree mode", () => {
+    const { container } = render(
+      <TreeCanvas
+        currentNode={selectedNode}
+        isBusy={false}
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={[currentNode, selectedNode]}
+        treeLabelMode="detail"
+      />
+    );
+
+    const seedElement = container.querySelector(".tree-node--seed-root");
+
+    expect(seedElement?.querySelector("title")).toHaveTextContent("种子念头");
+    expect(seedElement?.querySelector(".force-labels")).toHaveTextContent("种子念头");
+  });
+
   it("shows a single loading leaf while the first seed generation is running", () => {
     const graph = createForceTreeGraph({
       currentNode: null,
@@ -1483,30 +1584,20 @@ describe("TreeCanvas", () => {
     expect(mobileRule).toContain("margin-left: 0");
   });
 
-  it("stacks the selected mobile option above the writing controls", () => {
+  it("uses the compact bottom writing bar for selected mobile options", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const mobileWorkspaceRule = css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)
       ?.groups?.body ?? "";
-    const focusRule =
-      mobileWorkspaceRule.match(/\.tree-canvas--options \.branch-option-focus\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const selectedCardRule =
-      mobileWorkspaceRule.match(
-        /\.tree-canvas--options \.branch-option-focus__selected \.branch-card--option:not\(\.branch-card--side\)\s*\{(?<body>[^}]+)\}/
-      )?.groups?.body ?? "";
     const composerRule =
-      mobileWorkspaceRule.match(/\.tree-canvas--options \.branch-option-focus__composer\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
-      "";
-    const composerCardRule =
-      mobileWorkspaceRule.match(
-        /\.tree-canvas--options \.branch-option-focus__composer \.branch-option-composer\s*\{(?<body>[^}]+)\}/
-      )?.groups?.body ?? "";
+      css.match(/\.branch-option-composer--inline\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactComposerRule =
+      mobileWorkspaceRule.match(/\.tree-canvas--options \.branch-option-composer--inline\s*\{(?<body>[^}]+)\}/)?.groups
+        ?.body ?? "";
 
-    expect(focusRule).toContain("grid-template-columns: 1fr");
-    expect(focusRule).toContain("grid-template-rows: auto");
-    expect(selectedCardRule).toContain("height: auto");
-    expect(composerRule).toContain("grid-column: auto");
-    expect(composerRule).toContain("grid-row: auto");
-    expect(composerCardRule).toContain("height: auto");
+    expect(composerRule).toContain("grid-template-columns: auto minmax(0, 1fr) auto auto");
+    expect(composerRule).toContain("box-shadow: none");
+    expect(compactComposerRule).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(mobileWorkspaceRule).not.toContain(".tree-canvas--options .branch-option-focus");
   });
 
   it("lets the full mobile options question expand the page height", () => {
@@ -1577,6 +1668,38 @@ describe("TreeCanvas", () => {
     expect(formRule).toContain("max-height: min(420px, calc(100dvh - 160px))");
     expect(formRule).toContain("overflow: auto");
     expect(formRule).toContain("background: #ffffff");
+  });
+
+  it("renders the inline custom direction as a compact input row", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const compactRule = css.match(/\.branch-side-form--compact\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactHeaderRule =
+      css.match(/\.branch-side-form--compact \.branch-side-form__header\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactFieldLabelRule =
+      css.match(/\.branch-side-form--compact \.branch-card__field > span\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const compactInputRule =
+      css.match(/\.branch-side-form--compact \.branch-card__field input\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(compactRule).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(compactRule).toContain("padding: 0");
+    expect(compactHeaderRule).toContain("display: none");
+    expect(compactFieldLabelRule).toContain("display: none");
+    expect(compactInputRule).toContain("min-height: 38px");
+  });
+
+  it("keeps the option mode controls and refresh icon on one compact row", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const controlsRule = css.match(/\.branch-option-tray__controls\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const wrapRule = css.match(/\.option-mode-control-wrap\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const modeButtonRule = css.match(/\.option-mode-control__button\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const refreshRule = css.match(/\.option-mode-refresh--icon\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(controlsRule).toContain("flex-wrap: nowrap");
+    expect(wrapRule).toContain("width: 100%");
+    expect(wrapRule).toContain("flex-wrap: nowrap");
+    expect(modeButtonRule).toContain("min-width: 46px");
+    expect(refreshRule).toContain("width: 34px");
+    expect(refreshRule).toContain("padding: 0");
   });
 
   it("keeps unselected historical options as grey folded side paths", () => {

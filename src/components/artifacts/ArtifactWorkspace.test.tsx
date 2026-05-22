@@ -218,8 +218,10 @@ describe("ArtifactWorkspace", () => {
     expect(screen.queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
   });
 
-  it("caps process materials so the draft keeps more vertical room", () => {
+  it("keeps the artifact header fixed while the workspace body scrolls", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const artifactRegionRule = css.match(/\.mobile-artifact-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const workspaceRule = css.match(/\.artifact-workspace\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const bodyRule = css.match(/\.artifact-workspace__body\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const supplementsRule = css.match(/\.artifact-workspace__supplements\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const contentRule = css.match(/\.artifact-workspace__content\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -230,20 +232,35 @@ describe("ArtifactWorkspace", () => {
       css.match(/\.artifact-workspace__materials-list\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const socialPostPanelRule =
       css.match(/\.social-post-panel\s*\{\s*flex: 1 1 auto;(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const socialPostScrollRule =
+      css.match(/\.social-post-panel__scroll\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
-    expect(bodyRule).toContain("grid-template-rows: auto minmax(min(320px, 45dvh), 1fr)");
-    expect(bodyRule).not.toContain("grid-template-rows: minmax(0, min(38dvh, 340px))");
-    expect(bodyRule).toContain("overflow: hidden");
+    expect(artifactRegionRule).toContain("display: block");
+    expect(artifactRegionRule).toContain("overflow-x: hidden");
+    expect(artifactRegionRule).toContain("overflow-y: hidden");
+    expect(workspaceRule).toContain("min-height: 0");
+    expect(workspaceRule).toContain("height: 100%");
+    expect(workspaceRule).toContain("display: flex");
+    expect(workspaceRule).toContain("flex-direction: column");
+    expect(workspaceRule).toContain("overflow: hidden");
+    expect(bodyRule).toContain("flex: 1 1 auto");
+    expect(bodyRule).toContain("grid-template-rows: auto auto");
+    expect(bodyRule).toContain("align-content: start");
+    expect(bodyRule).toContain("overflow-y: auto");
+    expect(bodyRule).toContain("overscroll-behavior: contain");
+    expect(bodyRule).toContain("scrollbar-gutter: stable");
     expect(supplementsRule).toContain("align-self: start");
-    expect(supplementsRule).toContain("max-height: min(38dvh, 340px)");
-    expect(supplementsRule).toContain("overflow: auto");
-    expect(contentRule).toContain("min-height: min(320px, 45dvh)");
-    expect(contentRule).toContain("height: 100%");
-    expect(materialsRule).toContain("max-height: min(280px, 30dvh)");
-    expect(materialsRule).toContain("overflow: hidden");
-    expect(streamingMaterialsRule).toContain("max-height: min(320px, 34dvh)");
-    expect(materialsListRule).toContain("overflow: auto");
-    expect(socialPostPanelRule).toContain("min-height: 380px");
+    expect(supplementsRule).not.toContain("max-height");
+    expect(supplementsRule).toContain("overflow: visible");
+    expect(contentRule).toContain("min-height: 0");
+    expect(contentRule).toContain("height: auto");
+    expect(materialsRule).not.toContain("max-height");
+    expect(materialsRule).toContain("overflow: visible");
+    expect(streamingMaterialsRule).not.toContain("max-height");
+    expect(materialsListRule).toContain("overflow: visible");
+    expect(socialPostPanelRule).toContain("min-height: 0");
+    expect(socialPostPanelRule).toContain("height: auto");
+    expect(socialPostScrollRule).toContain("overflow-y: visible");
   });
 
   it("keeps draft content scrollable inside the mobile artifact workspace", () => {
@@ -539,6 +556,43 @@ describe("ArtifactWorkspace", () => {
       expect(screen.getByText("方向 A")).toBeInTheDocument();
       expect(screen.getByText("#5 · 120万")).toBeInTheDocument();
       expect(screen.getByText("这些材料用于帮助选择下一步参考角度。")).toBeInTheDocument();
+  });
+
+  it("orders artifact content and process materials by update time", () => {
+    const social = socialPostArtifact({
+      updatedAt: "2026-05-18T00:00:00.000Z"
+    });
+
+    renderWorkspace({
+      artifacts: [social],
+      currentNode: analysisNode({
+        createdAt: "2026-05-18T00:10:00.000Z",
+        agentMessages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "display-1",
+                toolName: "show_process_data",
+                input: {
+                  title: "更新后的参考材料",
+                  sourceToolCallIds: ["tool-1"],
+                  items: [{ title: "最新参考条目", subtitle: "晚于当前社媒内容" }]
+                }
+              }
+            ]
+          }
+        ]
+      }),
+      selectedArtifactId: social.id
+    });
+
+    const contentBlock = screen.getByTestId("social-post-renderer");
+    const materialsBlock = screen.getByRole("heading", { name: "过程材料" }).closest(".artifact-workspace__materials");
+
+    expect(materialsBlock).toBeInstanceOf(HTMLElement);
+    expect(contentBlock.compareDocumentPosition(materialsBlock as HTMLElement)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("keeps process materials after the display tool returns only an acknowledgement", () => {

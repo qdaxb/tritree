@@ -59,7 +59,7 @@ const repositoryCreationRequestOptions: ConfiguredDefaults["creationRequestOptio
   { id: "default-find-topics", label: "找选题" },
   { id: "default-copy-polish", label: "文案润色" },
   { id: "default-review-proofread", label: "审稿及校对" },
-  { id: "default-short-weibo", label: "缩短到300字" }
+  { id: "default-short-weibo", label: "压缩到300字左右" }
 ];
 
 function writeDefaultsConfig({

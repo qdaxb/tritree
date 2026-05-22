@@ -47,12 +47,14 @@ type TreeCanvasProps = {
   onViewNode?: (nodeId: string) => void;
   optionsHeaderAction?: ReactNode;
   skills?: Skill[];
+  treeLabelMode?: TreeLabelMode;
 };
+
+type TreeLabelMode = "compact" | "detail";
 
 const CANVAS_HEIGHT = 380;
 const MIN_CANVAS_WIDTH = 320;
 const COMPACT_LABEL_LIMIT = 15;
-const OPTION_PREVIEW_COPY_LIMIT = 72;
 const SEED_ROOT_LABEL = "种子念头";
 const OPTION_GROUPS = { a: 0, b: 4, c: 8, custom: 2 };
 const OPTION_RANK = { a: 0, b: 1, c: 2, custom: 3 };
@@ -208,12 +210,6 @@ function displayBranchLabel(label: string) {
       .replace(/[“”"'`]/g, "")
       .trim() || "新方向"
   );
-}
-
-function shouldRenderBranchHoverPreview(label: string, description: string) {
-  const normalizedDescription = description.trim();
-  const totalLength = Array.from(`${label}${normalizedDescription}`).length;
-  return totalLength > OPTION_PREVIEW_COPY_LIMIT || normalizedDescription.includes("\n");
 }
 
 function treeGraphOptionSignature(option: BranchOption) {
@@ -659,7 +655,8 @@ export function TreeCanvas({
   onRegenerateOptions,
   onSelectComparisonNode,
   onViewNode,
-  optionsHeaderAction
+  optionsHeaderAction,
+  treeLabelMode = "detail"
 }: TreeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const treeViewportRef = useRef<HTMLDivElement>(null);
@@ -690,8 +687,13 @@ export function TreeCanvas({
   );
   const isTreeScrollable = branchLayout.width > canvasWidth + 1;
   const shouldShowTree = display !== "options";
+  const isCompactTreeOverview = shouldShowTree && treeLabelMode === "compact";
   const shouldShowBranchControls = display !== "tree";
   const shouldInlineCustomOption = display === "options" && !isMobileLayout;
+  const shouldShowTreeScrollControls = !isCompactTreeOverview && isTreeScrollable;
+  const treeSvgStyle = isCompactTreeOverview
+    ? { height: "100%", minHeight: 0, width: "100%" }
+    : { height: branchLayout.height, minHeight: 300, width: branchLayout.width };
   const nodeId = currentNode?.id ?? null;
   const isBranchGenerating = Boolean(pendingBranch);
   const graphCurrentNode = isBranchGenerating ? null : currentNode;
@@ -825,13 +827,15 @@ export function TreeCanvas({
   }, [currentNode?.id, currentPrimaryOptionCount, isOptionsGenerating]);
 
   useEffect(() => {
+    if (isCompactTreeOverview) return;
+
     if (isMobileLayout) {
       scrollTreeToRoot("auto");
       return;
     }
 
     scrollTreeToLatest("auto");
-  }, [branchLayout.height, branchLayout.width, isMobileLayout, nodeId, pendingBranch?.nodeId]);
+  }, [branchLayout.height, branchLayout.width, isCompactTreeOverview, isMobileLayout, nodeId, pendingBranch?.nodeId]);
 
   function scrollTreeToRoot(behavior: ScrollBehavior = "smooth") {
     const viewport = treeViewportRef.current;
@@ -876,6 +880,8 @@ export function TreeCanvas({
   }
 
   function handleTreeViewportKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (isCompactTreeOverview) return;
+
     if (event.key === "ArrowLeft") {
       event.preventDefault();
       scrollTreeBy(-180, 0);
@@ -898,6 +904,8 @@ export function TreeCanvas({
   }
 
   function handleTreeViewportPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (isCompactTreeOverview) return;
+
     const viewport = treeViewportRef.current;
     if (!viewport || event.button !== 0) return;
     if (isClickableTreePointerTarget(event.target)) return;
@@ -1100,7 +1108,7 @@ export function TreeCanvas({
 
     node
       .selectAll<SVGTextElement, ForceTreeNode>("text.force-labels")
-      .data((datum) => (datum.kind !== "loading" ? [datum] : []))
+      .data((datum) => (treeLabelMode === "detail" && datum.kind !== "loading" ? [datum] : []))
       .join(
         (enter) => enter.append("text").attr("class", "force-labels"),
         (update) => update,
@@ -1156,7 +1164,8 @@ export function TreeCanvas({
     onSelectComparisonNode,
     onViewNode,
     pendingBranch,
-    pendingChoice
+    pendingChoice,
+    treeLabelMode
   ]);
 
   return (
@@ -1165,7 +1174,8 @@ export function TreeCanvas({
         "tree-canvas",
         `tree-canvas--${display}`,
         generationStage?.stage === "options" && "tree-canvas--options-generating",
-        isComparisonMode && "tree-canvas--comparison"
+        isComparisonMode && "tree-canvas--comparison",
+        treeLabelMode === "compact" && "tree-canvas--compact"
       )}
       ref={containerRef}
     >
@@ -1175,8 +1185,8 @@ export function TreeCanvas({
             aria-label="长任务树图浏览区"
             className={clsx(
               "tree-viewport",
-              isTreeScrollable && "tree-viewport--scrollable",
-              isDraggingTree && "tree-viewport--dragging"
+              shouldShowTreeScrollControls && "tree-viewport--scrollable",
+              !isCompactTreeOverview && isDraggingTree && "tree-viewport--dragging"
             )}
             data-pan-axis="x"
             onClickCapture={handleTreeViewportClick}
@@ -1193,18 +1203,21 @@ export function TreeCanvas({
               aria-label="AI 内容方向示意图"
               className="mind-map-svg"
               height={branchLayout.height}
+              preserveAspectRatio="xMidYMid meet"
               ref={svgRef}
               role="img"
-              style={{ height: branchLayout.height, minHeight: 300, width: branchLayout.width }}
+              style={treeSvgStyle}
               viewBox={`0 0 ${branchLayout.width} ${branchLayout.height}`}
               width={branchLayout.width}
             />
           </div>
-          <TreeOperationHint
-            isExpanded={isOperationHintExpanded}
-            onToggle={toggleOperationHint}
-          />
-          {isTreeScrollable ? (
+          {isCompactTreeOverview ? null : (
+            <TreeOperationHint
+              isExpanded={isOperationHintExpanded}
+              onToggle={toggleOperationHint}
+            />
+          )}
+          {shouldShowTreeScrollControls ? (
             <div aria-label="树图浏览控制" className="tree-scroll-controls" role="group">
               <button
                 aria-label="查看较早节点"
@@ -1418,62 +1431,24 @@ export function BranchOptionTray({
           {isCustomOptionInline ? null : <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} />}
         </div>
       ) : null}
-      {selectedOption && primaryAllVisible ? (
-        <div aria-label="已选方向" className="branch-option-focus" role="group">
-          <div className="branch-option-focus__selected">
+      <div aria-label="三个主选项" className="branch-option-main branch-option-main--horizontal" role="group">
+        {PRIMARY_BRANCH_OPTION_IDS.map((optionId) => {
+          const option = primaryOptionById.get(optionId);
+          return option && visiblePrimaryOptionIds.has(optionId) ? (
             <BranchOptionCard
-              isBusy={isBusy}
-              isPending={pendingChoice === selectedOption.id}
-              isSelected
+              isBusy={isBusy || !primaryAllVisible}
+              isPending={pendingChoice === option.id}
+              isSelected={selectedOption?.id === option.id}
               isStreaming={isStreamingOptions}
-              onSelect={() => setSelectedOptionId(selectedOption.id)}
-              option={selectedOption}
+              key={option.id}
+              onSelect={() => setSelectedOptionId(option.id)}
+              option={option}
             />
-          </div>
-          <div className="branch-option-focus__composer">
-            <BranchOptionComposer
-              isBusy={isBusy}
-              note={optionNotes[selectedOption.id] ?? ""}
-              onChoose={onChoose}
-              onClose={() => setSelectedOptionId(null)}
-              onNoteChange={(note) => setOptionNotes((notes) => ({ ...notes, [selectedOption.id]: note }))}
-              option={selectedOption}
-              optionMode={optionMode}
-            />
-          </div>
-          <div aria-label="其他方向" className="branch-option-focus__others" role="group">
-            {PRIMARY_BRANCH_OPTION_IDS.filter((optionId) => optionId !== selectedOption.id).map((optionId) => {
-              const option = primaryOptionById.get(optionId);
-              return option ? (
-                <BranchOptionMiniButton
-                  isBusy={isBusy}
-                  key={option.id}
-                  onSelect={() => setSelectedOptionId(option.id)}
-                  option={option}
-                />
-              ) : null;
-            })}
-          </div>
-        </div>
-      ) : (
-        <div aria-label="三个主选项" className="branch-option-main branch-option-main--horizontal" role="group">
-          {PRIMARY_BRANCH_OPTION_IDS.map((optionId) => {
-            const option = primaryOptionById.get(optionId);
-            return option && visiblePrimaryOptionIds.has(optionId) ? (
-              <BranchOptionCard
-                isBusy={isBusy || !primaryAllVisible}
-                isPending={pendingChoice === option.id}
-                isStreaming={isStreamingOptions}
-                key={option.id}
-                onSelect={() => setSelectedOptionId(option.id)}
-                option={option}
-              />
-            ) : (
-              <BranchOptionPlaceholder key={optionId} optionId={optionId} />
-            );
-          })}
-        </div>
-      )}
+          ) : (
+            <BranchOptionPlaceholder key={optionId} optionId={optionId} />
+          );
+        })}
+      </div>
       {canRetryMissingOptions ? (
         <div className="branch-option-retry" role="status">
           <span>选项还没生成出来</span>
@@ -1483,15 +1458,28 @@ export function BranchOptionTray({
           </button>
         </div>
       ) : null}
-      {isCustomOptionInline && primaryAllVisible ? (
+      {selectedOption && primaryAllVisible ? (
+        <div className="branch-option-custom-input branch-option-custom-input--selected">
+          <BranchOptionComposer
+            isBusy={isBusy}
+            note={optionNotes[selectedOption.id] ?? ""}
+            onChoose={onChoose}
+            onClose={() => setSelectedOptionId(null)}
+            onNoteChange={(note) => setOptionNotes((notes) => ({ ...notes, [selectedOption.id]: note }))}
+            option={selectedOption}
+            optionMode={optionMode}
+          />
+        </div>
+      ) : isCustomOptionInline && primaryAllVisible ? (
         <div className="branch-option-custom-input">
           <MoreDirectionsCard
             defaultEditing
             disabled={isBusy}
             fieldLabel="自己写方向"
-            formClassName="branch-side-form branch-side-form--inline"
+            formClassName="branch-side-form branch-side-form--inline branch-side-form--compact"
             headerLabel="自己写方向"
             hideHeaderClose
+            isCompactInline
             isPersistent
             onAddCustomOption={onAddCustomOption}
             placeholder="输入你想补充的方向..."
@@ -1551,14 +1539,13 @@ function OptionModeControl({
       {onRegenerateOptions ? (
         <button
           aria-label="重新生成当前选项"
-          className="option-mode-refresh"
+          className="option-mode-refresh option-mode-refresh--icon"
           disabled={disabled}
           onClick={() => onRegenerateOptions(mode)}
           title="按当前发散度重新生成这三个选项"
           type="button"
         >
           <RefreshCw aria-hidden="true" size={13} strokeWidth={2.4} />
-          <span>重新生成当前选项</span>
         </button>
       ) : null}
     </div>
@@ -1631,7 +1618,6 @@ function BranchOptionCard({
 }) {
   const displayLabel = displayBranchLabel(option.label);
   const choiceLabel = isCustomBranchOptionId(option.id) && variant === "side" ? "自定义" : option.id.toUpperCase();
-  const shouldShowHoverPreview = shouldRenderBranchHoverPreview(displayLabel, option.description);
 
   return (
     <div
@@ -1662,44 +1648,10 @@ function BranchOptionCard({
               {isPending ? " 生成中" : ""}
             </span>
             <span className="branch-card__description">{option.description}</span>
-            <span className="branch-card__select-hint">{isSelected ? "已选择" : "点击选择"}</span>
           </span>
         </span>
       </button>
-      {shouldShowHoverPreview ? (
-        <div aria-hidden="true" className="branch-card__hover-preview">
-          <p className="branch-card__hover-kicker">完整方向</p>
-          <strong>{displayLabel}</strong>
-          <p>{option.description}</p>
-        </div>
-      ) : null}
     </div>
-  );
-}
-
-function BranchOptionMiniButton({
-  isBusy,
-  onSelect,
-  option
-}: {
-  isBusy: boolean;
-  onSelect: () => void;
-  option: BranchOption;
-}) {
-  const choiceLabel = option.id.toUpperCase();
-  const displayLabel = displayBranchLabel(option.label);
-
-  return (
-    <button
-      aria-label={`切换到 ${choiceLabel} ${displayLabel}`}
-      className="branch-option-mini"
-      disabled={isBusy}
-      onClick={onSelect}
-      type="button"
-    >
-      <span className="branch-option-mini__choice">{choiceLabel}</span>
-      <span className="branch-option-mini__label">{displayLabel}</span>
-    </button>
   );
 }
 
@@ -1723,7 +1675,21 @@ function BranchOptionComposer({
   const choiceLabel = option.id.toUpperCase();
 
   return (
-    <div aria-label={`${choiceLabel} 写作操作`} className="branch-option-composer" role="group">
+    <div aria-label={`${choiceLabel} 写作操作`} className="branch-option-composer branch-option-composer--inline" role="group">
+      <div className="branch-option-composer__summary">
+        <span>已选 {choiceLabel}</span>
+      </div>
+      <label className="branch-option-composer__note">
+        <span>还想补一句吗？</span>
+        <input
+          aria-label={`补充想法 ${choiceLabel}`}
+          disabled={isBusy}
+          onChange={(event) => onNoteChange(event.target.value)}
+          placeholder="还想补一句吗？"
+          type="text"
+          value={note}
+        />
+      </label>
       <button
         aria-label="关闭写作操作"
         className="branch-option-composer__close"
@@ -1733,20 +1699,6 @@ function BranchOptionComposer({
       >
         <X aria-hidden="true" size={14} strokeWidth={2.4} />
       </button>
-      <div className="branch-option-composer__summary">
-        <span>已选 {choiceLabel}</span>
-      </div>
-      <label className="branch-option-composer__note">
-        <span>还想补一句吗？</span>
-        <textarea
-          aria-label={`补充想法 ${choiceLabel}`}
-          disabled={isBusy}
-          onChange={(event) => onNoteChange(event.target.value)}
-          placeholder="例如：写得更犀利一点、少用术语、保留关键词"
-          rows={2}
-          value={note}
-        />
-      </label>
       <button
         aria-label={`${choiceLabel} 按这个方向写`}
         className="branch-option-composer__submit"
@@ -1754,7 +1706,7 @@ function BranchOptionComposer({
         onClick={() => onChoose(option.id, note.trim(), optionMode)}
         type="button"
       >
-        按这个方向写
+        发送
       </button>
     </div>
   );
@@ -1768,6 +1720,7 @@ function MoreDirectionsCard({
   formClassName = "branch-side-form",
   headerLabel = "自己写方向",
   hideHeaderClose = false,
+  isCompactInline = false,
   isPersistent = false,
   onAddCustomOption,
   placeholder = "例如：从评论区争议切入，语气更像朋友聊天",
@@ -1783,6 +1736,7 @@ function MoreDirectionsCard({
   formClassName?: string;
   headerLabel?: string;
   hideHeaderClose?: boolean;
+  isCompactInline?: boolean;
   isPersistent?: boolean;
   onAddCustomOption?: (option: BranchOption) => void;
   placeholder?: string;
@@ -1842,24 +1796,37 @@ function MoreDirectionsCard({
 
   return (
     <div className={formClassName}>
-      <div className="branch-side-form__header">
-        <strong>{headerLabel}</strong>
-        {hideHeaderClose ? null : (
-          <button aria-label={`关闭${headerLabel}`} disabled={disabled} onClick={closeCustomOption} type="button">
-            关闭
-          </button>
-        )}
-      </div>
+      {isCompactInline ? null : (
+        <div className="branch-side-form__header">
+          <strong>{headerLabel}</strong>
+          {hideHeaderClose ? null : (
+            <button aria-label={`关闭${headerLabel}`} disabled={disabled} onClick={closeCustomOption} type="button">
+              关闭
+            </button>
+          )}
+        </div>
+      )}
       <label className="branch-card__field">
-        <span>{fieldLabel}</span>
-        <textarea
-          aria-label={textareaLabel}
-          disabled={disabled}
-          onChange={(event) => setContent(event.target.value)}
-          placeholder={placeholder}
-          rows={3}
-          value={content}
-        />
+        {isCompactInline ? null : <span>{fieldLabel}</span>}
+        {isCompactInline ? (
+          <input
+            aria-label={textareaLabel}
+            disabled={disabled}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={placeholder}
+            type="text"
+            value={content}
+          />
+        ) : (
+          <textarea
+            aria-label={textareaLabel}
+            disabled={disabled}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={placeholder}
+            rows={3}
+            value={content}
+          />
+        )}
       </label>
       <button className="branch-card__confirm" disabled={disabled || !trimmedContent} onClick={addCustomOption} type="button">
         {submitLabel}
