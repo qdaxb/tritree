@@ -304,30 +304,29 @@ function parseThinkingLines(text: string): ThinkingLine[] {
     result.push({ kind: "text", text: line });
   }
 
-  return collapseRepeatedThinkingLines(result);
+  return numberRepeatedThinkingLines(result);
 }
 
-function collapseRepeatedThinkingLines(lines: ThinkingLine[]): ThinkingLine[] {
-  const collapsed: ThinkingLine[] = [];
+function numberRepeatedThinkingLines(lines: ThinkingLine[]): ThinkingLine[] {
+  const numbered: ThinkingLine[] = [];
+  let repeatedCount = 0;
+  let previousKey = "";
 
   for (const line of lines) {
-    const previous = collapsed[collapsed.length - 1];
-    if (
-      previous &&
-      previous.kind !== "text" &&
-      line.kind !== "text" &&
-      previous.kind === line.kind &&
-      previous.label === line.label
-    ) {
-      previous.count = (previous.count ?? 1) + 1;
-      previous.status = line.status;
+    if (line.kind === "text") {
+      numbered.push(line);
+      previousKey = "";
+      repeatedCount = 0;
       continue;
     }
 
-    collapsed.push(line);
+    const key = `${line.kind}:${line.label}`;
+    repeatedCount = key === previousKey ? repeatedCount + 1 : 1;
+    previousKey = key;
+    numbered.push(repeatedCount > 1 ? { ...line, count: repeatedCount } : line);
   }
 
-  return collapsed;
+  return numbered;
 }
 
 function ThinkingTextLines({ text }: { text: string }) {
@@ -350,7 +349,7 @@ function ThinkingTextLines({ text }: { text: string }) {
               )}
               <span>
                 {line.kind === "subagent" ? `[子代理] ${line.label}` : line.label}
-                {line.count && line.count > 1 ? ` x ${line.count}` : ""}
+                {line.count && line.count > 1 ? ` x${line.count}` : ""}
               </span>
             </li>
           );

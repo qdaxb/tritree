@@ -259,7 +259,9 @@ describe("subagent runtime tools", () => {
     expect(mockGenerate).not.toHaveBeenCalled();
     expect(progressSegments.flat()).toEqual([
       { delta: "先核查事实链。", kind: "text" },
+      { delta: "正在核查", kind: "text" },
       { delta: "\n[工具] 调用 search", kind: "tool" },
+      { delta: "事实链。", kind: "text" },
       { delta: "\n[工具] search 完成", kind: "tool" }
     ]);
   });

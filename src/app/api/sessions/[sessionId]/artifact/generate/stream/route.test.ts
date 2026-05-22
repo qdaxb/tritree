@@ -346,7 +346,7 @@ describe("POST /api/sessions/:sessionId/artifact/generate/stream", () => {
     expect(text.match(/"type":"artifact\.replace"/g)).toHaveLength(3);
   });
 
-  it("does not use the seed artifact to complete first-round streaming previews", async () => {
+  it("streams first-round partial previews without copying the seed artifact", async () => {
     const seedArtifact = {
       ...parentArtifact,
       payload: { title: "种子念头", body: state.rootMemory.preferences.seed, hashtags: [], imagePrompt: "" }
@@ -407,14 +407,17 @@ describe("POST /api/sessions/:sessionId/artifact/generate/stream", () => {
       .split("\n")
       .filter((line) => line.includes('"type":"artifact.replace"'));
 
-    expect(artifactReplaceLines).not.toEqual(
+    expect(artifactReplaceLines).toEqual(
       expect.arrayContaining([expect.stringContaining('"id":"streaming-node-2"')])
     );
     expect(artifactReplaceLines).not.toEqual(
       expect.arrayContaining([expect.stringContaining(state.rootMemory.preferences.seed)])
     );
+    expect(artifactReplaceLines).toEqual(
+      expect.arrayContaining([expect.stringContaining('"payload":{"title":"AI 生成标题","body":"","hashtags":[],"imagePrompt":""}')])
+    );
     expect(text).toContain('"id":"artifact-2"');
-    expect(artifactReplaceLines).toHaveLength(1);
+    expect(artifactReplaceLines).toHaveLength(2);
   });
 
   it("can finish the same main agent turn by submitting options", async () => {

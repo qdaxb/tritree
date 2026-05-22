@@ -260,7 +260,7 @@ function streamingArtifactForPartial({
   const sourceArtifact = sourceArtifactForStreaming(parentState, targetNode, plugin.id);
   const mergeSourceArtifact =
     sourceArtifact && !isSeedArtifactForState(parentState, sourceArtifact) ? sourceArtifact : null;
-  const payload = mergeStreamingPayload(mergeSourceArtifact, partialArtifact.payload);
+  const payload = mergeStreamingPayload(plugin.id, mergeSourceArtifact, partialArtifact.payload);
   const parsedPayload = plugin.payloadSchema.safeParse(payload);
   if (!parsedPayload.success) return null;
 
@@ -277,12 +277,18 @@ function streamingArtifactForPartial({
   };
 }
 
-function mergeStreamingPayload(sourceArtifact: Artifact | null, partialPayload: Record<string, unknown>) {
+function mergeStreamingPayload(artifactType: string, sourceArtifact: Artifact | null, partialPayload: Record<string, unknown>) {
   if (sourceArtifact && isRecord(sourceArtifact.payload)) {
     return { ...sourceArtifact.payload, ...partialPayload };
   }
 
-  return partialPayload;
+  return { ...emptyStreamingPayloadForType(artifactType), ...partialPayload };
+}
+
+function emptyStreamingPayloadForType(artifactType: string): Record<string, unknown> {
+  if (artifactType === "social-post") return { title: "", body: "", hashtags: [], imagePrompt: "" };
+  if (artifactType === "prd") return { title: "", markdown: "" };
+  return {};
 }
 
 function sourceArtifactForStreaming(parentState: SessionState, targetNode: TreeNode, artifactType: string) {

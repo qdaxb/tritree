@@ -684,7 +684,7 @@ describe("TreeCanvas", () => {
     );
 
     expect(screen.queryByLabelText("补充想法 A")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "A 按这个方向写" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "A 按这个方向继续" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
@@ -698,7 +698,7 @@ describe("TreeCanvas", () => {
     expect(within(composer).getByText(longDescription)).toBeInTheDocument();
     expect(within(composer).getByText("New angle")).toBeInTheDocument();
     expect(screen.getByLabelText("补充想法 A").tagName).toBe("TEXTAREA");
-    expect(screen.getByRole("button", { name: "A 按这个方向写" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "A 按这个方向继续" })).toBeInTheDocument();
     expect(within(composer).getByRole("button", { name: "关闭写作操作" })).toBeInTheDocument();
     expect(screen.getByLabelText("补充想法 A")).toHaveAttribute("placeholder", "还想补一句吗？");
     expect(screen.queryByRole("group", { name: "其他方向" })).not.toBeInTheDocument();
@@ -740,7 +740,7 @@ describe("TreeCanvas", () => {
     });
     expect(onChoose).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "A 按这个方向写" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 按这个方向继续" }));
 
     expect(onChoose).toHaveBeenCalledWith("a", "请用更尖锐一点的对比。", "balanced");
   });
@@ -794,7 +794,7 @@ describe("TreeCanvas", () => {
     expect(within(range).getByRole("button", { name: "发散" })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
-    fireEvent.click(screen.getByRole("button", { name: "A 按这个方向写" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 按这个方向继续" }));
 
     expect(onChoose).toHaveBeenCalledWith("a", "", "divergent");
   });
@@ -859,7 +859,7 @@ describe("TreeCanvas", () => {
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
 
     expect(screen.getByLabelText("补充想法 A")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "A 按这个方向写" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "A 按这个方向继续" })).toBeInTheDocument();
     expect(screen.getAllByRole("group", { name: "发散度" })).toHaveLength(1);
     expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
   });
@@ -992,7 +992,7 @@ describe("TreeCanvas", () => {
     fireEvent.click(within(range).getByRole("button", { name: "专注" }));
     fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
     expect(screen.queryByRole("group", { name: "A 生成倾向" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "A 按这个方向写" }));
+    fireEvent.click(screen.getByRole("button", { name: "A 按这个方向继续" }));
 
     expect(onChoose).toHaveBeenCalledWith("a", "", "focused");
     expect(within(screen.getByRole("group", { name: "方向控制" })).queryAllByText("专注")).toHaveLength(1);

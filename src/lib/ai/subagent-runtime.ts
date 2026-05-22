@@ -247,6 +247,7 @@ async function consumeSubagentFullStream(
     const textDelta = textDeltaFromStreamChunk(chunk);
     const segments: RuntimeProgressSegment[] = [
       { delta: reasoningDelta, kind: "text" as const },
+      { delta: textDelta, kind: "text" as const },
       { delta: toolProgressDelta, kind: "tool" as const }
     ].filter((segment) => segment.delta);
     if (segments.length > 0) onProgress?.(segments);

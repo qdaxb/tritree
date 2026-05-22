@@ -1815,13 +1815,13 @@ function BranchOptionComposer({
         <X aria-hidden="true" size={14} strokeWidth={2.4} />
       </button>
       <button
-        aria-label={`${choiceLabel} 按这个方向写`}
+        aria-label={`${choiceLabel} 按这个方向继续`}
         className="branch-option-composer__submit"
         disabled={isBusy}
         onClick={() => onChoose(option.id, note.trim(), optionMode)}
         type="button"
       >
-        按这个方向写
+        按这个方向继续
       </button>
     </div>
   );

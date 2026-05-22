@@ -462,7 +462,7 @@ describe("ArtifactWorkspace", () => {
     );
   });
 
-  it("collapses repeated adjacent progress rows for the same tool", () => {
+  it("keeps repeated adjacent progress rows and numbers later matches", () => {
     const social = socialPostArtifact();
 
     renderWorkspace({
@@ -481,11 +481,18 @@ describe("ArtifactWorkspace", () => {
       ].join("\n")
     });
 
-    expect(screen.getByText("[子代理] 搜索资料：查询微博 x 3")).toBeInTheDocument();
-    expect(screen.getByText("[子代理] 搜索资料：查询微博 x 3").closest("li")).toHaveClass(
+    expect(screen.getByText("[子代理] 搜索资料：查询微博")).toBeInTheDocument();
+    expect(screen.getByText("[子代理] 搜索资料：查询微博 x2")).toBeInTheDocument();
+    expect(screen.getByText("[子代理] 搜索资料：查询微博 x3")).toBeInTheDocument();
+    expect(screen.getByText("[子代理] 搜索资料：查询微博").closest("li")).toHaveClass(
+      "artifact-workspace__thinking-tool--done"
+    );
+    expect(screen.getByText("[子代理] 搜索资料：查询微博 x2").closest("li")).toHaveClass(
+      "artifact-workspace__thinking-tool--done"
+    );
+    expect(screen.getByText("[子代理] 搜索资料：查询微博 x3").closest("li")).toHaveClass(
       "artifact-workspace__thinking-tool--calling"
     );
-    expect(screen.queryAllByText("[子代理] 搜索资料：查询微博")).toHaveLength(0);
   });
 
   it("scrolls the progress body to the latest thinking record", () => {
