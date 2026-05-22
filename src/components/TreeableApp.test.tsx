@@ -29,6 +29,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
     onActivateBranch,
     onAddCustomOption,
     onChoose,
+    onOpenTree,
     onRegenerateOptions,
     onSelectComparisonNode,
     onViewNode,
@@ -46,6 +47,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
     onActivateBranch?: (nodeId: string, optionId: "a") => void;
     onAddCustomOption?: (option: { id: string; label: string; description: string; impact: string; kind: "reframe" }) => void;
     onChoose?: (optionId: "a") => void;
+    onOpenTree?: () => void;
     onRegenerateOptions?: (optionMode: "focused") => void;
     onSelectComparisonNode?: (nodeId: string) => void;
     onViewNode?: (nodeId: string) => void;
@@ -66,6 +68,7 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
       onActivateBranch,
       onAddCustomOption,
       onChoose,
+      onOpenTree,
       onRegenerateOptions,
       onSelectComparisonNode,
       onViewNode,
@@ -98,6 +101,9 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
         ) : null}
         {display !== "options" ? (
           <>
+            <button onClick={() => onOpenTree?.()} type="button">
+              open compact tree
+            </button>
             <button onClick={() => onActivateBranch?.("node-1", "a")} type="button">
               activate historical branch
             </button>
@@ -142,6 +148,21 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
 }));
 
 vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
+  ArtifactComparisonView: (props: {
+    comparisonArtifacts?: { from: Artifact; to: Artifact } | null;
+    comparisonLabels?: { from: string; to: string } | null;
+    comparisonSelectionCount?: number;
+  }) => (
+    <div data-testid="artifact-comparison-overlay">
+      <div data-testid="artifact-comparison-selection-count">{props.comparisonSelectionCount ?? 0}</div>
+      <div data-testid="artifact-comparison-artifacts">
+        {props.comparisonArtifacts ? `${props.comparisonArtifacts.from.id}->${props.comparisonArtifacts.to.id}` : "none"}
+      </div>
+      <div data-testid="artifact-comparison-labels">
+        {props.comparisonLabels ? `${props.comparisonLabels.from}->${props.comparisonLabels.to}` : "none"}
+      </div>
+    </div>
+  ),
   ArtifactWorkspace: (props: {
     artifacts: Artifact[];
     canCompareArtifacts?: boolean;
@@ -166,6 +187,7 @@ vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
     onSave?: (artifact: Artifact) => void | Promise<void>;
     onStartComparison?: () => void;
     onStopGeneration?: () => void;
+    renderComparisonInline?: boolean;
     scrollBodyRef?: React.Ref<HTMLDivElement>;
     selectedArtifactId: string | null;
     streamingProcessMaterials?: Array<{
@@ -197,6 +219,11 @@ vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
         {props.headerPanel}
         <div data-testid="artifact-workspace-selected">{props.selectedArtifactId ?? "none"}</div>
         <div data-testid="artifact-workspace-artifacts">{props.artifacts.map((artifact) => artifact.id).join("|")}</div>
+        {props.isComparisonMode && props.renderComparisonInline !== false ? (
+          <div data-testid="artifact-workspace-inline-comparison">
+            {props.comparisonArtifacts ? `${props.comparisonArtifacts.from.id}->${props.comparisonArtifacts.to.id}` : "none"}
+          </div>
+        ) : null}
         <div data-testid="live-artifact-generation-status">
           {generationStatus}
         </div>
@@ -677,6 +704,52 @@ describe("TreeableApp", () => {
     expect(screen.queryByRole("button", { name: "select artifact-prd" })).not.toBeInTheDocument();
   });
 
+  it("does not show the seed artifact before AI has generated content", async () => {
+    const seedArtifact = testSocialPostArtifact("artifact-seed", "node-seed", {
+      title: "种子念头",
+      body: rootMemory.preferences.seed,
+      hashtags: [],
+      imagePrompt: ""
+    });
+    const seedNode = {
+      ...artifactState().currentNode!,
+      id: "node-seed",
+      parentId: null,
+      parentOptionId: null,
+      producedArtifactId: seedArtifact.id,
+      sourceArtifactIds: [],
+      roundIndex: 1,
+      roundIntent: "种子念头"
+    };
+    const state = artifactState({
+      session: { ...artifactState().session, currentNodeId: seedNode.id },
+      currentNode: seedNode,
+      currentArtifact: seedArtifact,
+      artifacts: [seedArtifact],
+      nodeArtifacts: [{ nodeId: seedNode.id, artifact: seedArtifact }],
+      selectedPath: [],
+      treeNodes: [seedNode]
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ skills }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TreeableApp />);
+
+    expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
+    expect(artifactWorkspaceMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        artifacts: [seedArtifact],
+        selectedArtifactId: null,
+        artifact: null
+      })
+    );
+    expect(screen.getByTestId("artifact-workspace-selected")).toHaveTextContent("none");
+  });
+
   it("runs artifact actions from the selected artifact node", async () => {
     const analysisNode = {
       ...artifactState().currentNode!,
@@ -1027,8 +1100,9 @@ describe("TreeableApp", () => {
     });
 
     await vi.waitFor(() => {
-      expect(artifactBody.scrollTop).toBe(980);
+      expect(liveArtifactMock).toHaveBeenLastCalledWith(expect.objectContaining({ thinkingText: "正在整理过程材料" }));
     });
+    expect(artifactBody.scrollTop).toBe(980);
   });
 
   it("stops auto-scrolling the artifact region after the user scrolls it", async () => {
@@ -1567,11 +1641,11 @@ describe("TreeableApp", () => {
 
     expect(await screen.findByTestId("tree-canvas")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "移动端主面板" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "展开树图" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "移动端树图控制" })).not.toBeInTheDocument();
     expect(screen.getByTestId("live-artifact")).toBeInTheDocument();
   });
 
-  it("uses a permanent left artifact and right control desktop layout", async () => {
+  it("uses a permanent left artifact and right control desktop layout with tree popout", async () => {
     installDesktopViewport();
     const fetchMock = vi
       .fn()
@@ -1594,28 +1668,32 @@ describe("TreeableApp", () => {
     expect(shellChildren.indexOf(artifactPanel as Element)).toBeLessThan(shellChildren.indexOf(controlPanel));
     expect(document.querySelector(".desktop-control-region__header")).not.toBeNull();
     expect(screen.getByRole("heading", { name: "控制" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "展开控制区" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "展开控制区" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "展开树图" })).not.toBeInTheDocument();
     expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["tree", "options"]);
     expect(screen.getAllByTestId("canvas-tree-label-mode").map((item) => item.textContent)).toEqual([
       "compact",
       "compact"
     ]);
 
-    await userEvent.click(screen.getByRole("button", { name: "展开控制区" }));
+    await userEvent.click(screen.getByRole("button", { name: "open compact tree" }));
 
-    expect(shell).toHaveClass("app-shell--control-expanded");
-    expect(screen.getByRole("button", { name: "收起控制区" })).toHaveAttribute("aria-expanded", "true");
+    expect(shell).toHaveClass("app-shell--tree-expanded");
+    expect(shell).not.toHaveClass("app-shell--control-expanded");
+    expect(screen.queryByRole("dialog", { name: "树图" })).not.toBeInTheDocument();
+    expect(controlPanel.querySelector(".desktop-control-region")).toHaveClass("desktop-control-region--tree-expanded");
     expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["tree", "options"]);
     expect(screen.getAllByTestId("canvas-tree-label-mode").map((item) => item.textContent)).toEqual([
       "detail",
-      "detail"
+      "compact",
     ]);
 
-    await userEvent.click(screen.getByRole("button", { name: "收起控制区" }));
+    await userEvent.click(screen.getByRole("button", { name: "收起树图" }));
 
     expect(shell).toHaveClass("app-shell--artifact-focused");
+    expect(shell).not.toHaveClass("app-shell--tree-expanded");
     expect(shell).not.toHaveClass("app-shell--control-expanded");
-    expect(screen.getByRole("button", { name: "展开控制区" })).toHaveAttribute("aria-expanded", "false");
+    expect(controlPanel.querySelector(".desktop-control-region")).not.toHaveClass("desktop-control-region--tree-expanded");
     expect(screen.getAllByTestId("canvas-tree-label-mode").map((item) => item.textContent)).toEqual([
       "compact",
       "compact"
@@ -1625,19 +1703,29 @@ describe("TreeableApp", () => {
   it("defines desktop columns for left artifact and right control focus states", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const shellRule = css.match(/\.app-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const expandedShellRule = css.match(/\.app-shell--control-expanded\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const controlRegionRule = css.match(/\.desktop-control-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const controlToggleRule = css.match(/\.desktop-control-toggle\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const controlBodyRule = css.match(/\.desktop-control-region__body\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
-    const expandedControlBodyRule =
-      css.match(/\.app-shell--control-expanded \.desktop-control-region__body\s*\{(?<body>[^}]+)\}/)?.groups
+    const expandedShellRule = css.match(/\.app-shell--tree-expanded\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const expandedControlRule =
+      css.match(/\.desktop-control-region--tree-expanded \.desktop-control-region__body\s*\{(?<body>[^}]+)\}/)
+        ?.groups?.body ?? "";
+    const comparisonControlRule =
+      css.match(/\.desktop-control-region--comparison \.desktop-control-region__body\s*\{(?<body>[^}]+)\}/)
+        ?.groups?.body ?? "";
+    const treeShellRule = css.match(/\.desktop-control-region__tree-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const treeZoomRule = css.match(/\.tree-zoom-trigger\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const treeZoomTextRule = css.match(/\.tree-zoom-trigger span\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const treeZoomHoverRule =
+      css.match(/\.desktop-control-region__tree-shell:hover \.tree-zoom-trigger span\s*\{(?<body>[^}]+)\}/)?.groups
         ?.body ?? "";
+    const expandedTreeRule =
+      css.match(/\.desktop-control-region--tree-expanded \.desktop-control-region__tree \.tree-canvas--tree\s*\{(?<body>[^}]+)\}/)
+        ?.groups?.body ?? "";
     const desktopOptionsRule =
       css.match(/\.desktop-control-region__options \.tree-canvas--options \.branch-option-main\s*\{(?<body>[^}]+)\}/)
         ?.groups?.body ?? "";
 
     expect(shellRule).toContain("grid-template-columns: minmax(520px, 1.42fr) minmax(320px, 0.58fr)");
-    expect(expandedShellRule).toContain("grid-template-columns: minmax(320px, 0.72fr) minmax(520px, 1.28fr)");
     const controlHeaderRule = css.match(/\.desktop-control-region__header\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
     expect(controlRegionRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
@@ -1646,15 +1734,28 @@ describe("TreeableApp", () => {
     expect(controlRegionRule).toContain("border: 1px solid var(--line)");
     expect(controlHeaderRule).toContain("display: flex");
     expect(controlHeaderRule).toContain("justify-content: space-between");
-    expect(controlToggleRule).toContain("display: inline-flex");
-    expect(controlToggleRule).toContain("position: static");
+    expect(treeShellRule).toContain("position: relative");
+    expect(treeZoomRule).toContain("position: absolute");
+    expect(treeZoomRule).toContain("top: 10px");
+    expect(treeZoomRule).toContain("right: 10px");
+    expect(treeZoomRule).toContain("opacity: 1");
+    expect(treeZoomRule).toContain("pointer-events: none");
+    expect(treeZoomTextRule).toContain("max-width: 0");
+    expect(treeZoomTextRule).toContain("opacity: 0");
+    expect(treeZoomHoverRule).toContain("max-width: 8em");
+    expect(treeZoomHoverRule).toContain("opacity: 1");
+    expect(treeZoomRule).not.toContain("inset: 0");
     expect(controlBodyRule).toContain("grid-template-rows: minmax(84px, 0.14fr) minmax(0, 0.86fr)");
-    expect(expandedControlBodyRule).toContain("grid-template-rows: minmax(180px, 0.32fr) minmax(0, 0.68fr)");
+    expect(expandedShellRule).toContain("grid-template-columns: minmax(420px, 0.46fr) minmax(620px, 0.54fr)");
+    expect(expandedControlRule).toContain("grid-template-rows: minmax(360px, 0.58fr) minmax(0, 0.42fr)");
+    expect(comparisonControlRule).toContain("grid-template-rows: minmax(0, 1fr)");
+    expect(expandedTreeRule).toContain("height: 100%");
     expect(desktopOptionsRule).toContain("grid-template-columns: 1fr");
     expect(desktopOptionsRule).toContain("grid-auto-rows: max-content");
     expect(desktopOptionsRule).toContain("align-content: start");
+    expect(css).not.toContain(".tree-dialog-backdrop");
     expect(css).not.toContain(".app-shell--artifact-expanded");
-    expect(css).not.toContain(".desktop-tree-toggle");
+    expect(css).not.toContain("展开控制区");
   });
 
   it("defines mobile-only unified workspace visibility rules", () => {
@@ -2286,7 +2387,20 @@ describe("TreeableApp", () => {
 
     expect(await screen.findByTestId("live-artifact")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "start comparison" }));
-    expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("comparison mode");
+    const shell = screen.getByRole("main");
+    const controlRegion = screen.getByRole("region", { name: "桌面控制区" }).querySelector(".desktop-control-region");
+
+    expect(shell).toHaveClass("app-shell--tree-expanded");
+    expect(screen.queryByRole("dialog", { name: "文章对比" })).not.toBeInTheDocument();
+    expect(controlRegion).toHaveClass("desktop-control-region--tree-expanded");
+    expect(controlRegion).toHaveClass("desktop-control-region--comparison");
+    expect(screen.queryByTestId("artifact-comparison-overlay")).not.toBeInTheDocument();
+    expect(screen.getByTestId("artifact-workspace-inline-comparison")).toHaveTextContent(
+      "artifact-first->artifact-second"
+    );
+    expect(screen.getByRole("heading", { name: "对比" })).toBeInTheDocument();
+    expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["tree"]);
+    expect(screen.getAllByTestId("canvas-tree-label-mode").map((item) => item.textContent)).toEqual(["detail"]);
     expect(treeCanvasMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         comparisonNodeIds: { fromNodeId: "node-1", toNodeId: "node-2" }
@@ -2299,8 +2413,12 @@ describe("TreeableApp", () => {
           to: state.nodeArtifacts[1].artifact
         },
         comparisonSelectionCount: 2,
-        isComparisonMode: true
+        isComparisonMode: true,
+        renderComparisonInline: true
       })
+    );
+    expect(screen.getByTestId("artifact-workspace-inline-comparison")).toHaveTextContent(
+      "artifact-first->artifact-second"
     );
 
     await userEvent.click(screen.getByRole("button", { name: "select comparison node 3" }));
@@ -2315,8 +2433,12 @@ describe("TreeableApp", () => {
           to: expect.stringContaining("第 2 轮")
         }),
         comparisonSelectionCount: 2,
-        isComparisonMode: true
+        isComparisonMode: true,
+        renderComparisonInline: true
       })
+    );
+    expect(screen.getByTestId("artifact-workspace-inline-comparison")).toHaveTextContent(
+      "artifact-sibling->artifact-second"
     );
 
     await userEvent.click(screen.getByRole("button", { name: "select comparison node 1" }));
@@ -2331,8 +2453,12 @@ describe("TreeableApp", () => {
           to: expect.stringContaining("第 2 轮")
         }),
         comparisonSelectionCount: 2,
-        isComparisonMode: true
+        isComparisonMode: true,
+        renderComparisonInline: true
       })
+    );
+    expect(screen.getByTestId("artifact-workspace-inline-comparison")).toHaveTextContent(
+      "artifact-first->artifact-second"
     );
   });
 

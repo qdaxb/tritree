@@ -129,6 +129,7 @@ type TreeNodeRow = {
   agent_messages_json?: string;
   is_terminal?: number;
   created_at: string;
+  updated_at?: string;
 };
 
 type ArtifactRow = {
@@ -180,9 +181,14 @@ type CreationRequestOptionRow = {
 };
 
 const MAX_NODE_AGENT_MESSAGES_JSON_CHARS = 48000;
+const MAX_SESSION_TITLE_CHARS = 80;
 
 function now() {
   return new Date().toISOString();
+}
+
+function truncateSessionTitle(title: string) {
+  return Array.from(title.trim()).slice(0, MAX_SESSION_TITLE_CHARS).join("");
 }
 
 function parseJson<T>(value: string): T {
@@ -324,7 +330,8 @@ function toNode(row: TreeNodeRow): TreeNode {
     foldedOptions,
     agentMessages: parseAgentMessages(row.agent_messages_json),
     isTerminal: Boolean(row.is_terminal),
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at
   });
 }
 
@@ -1298,7 +1305,7 @@ export function createTreeableRepository(
     const nextRoundIndex = parent ? parent.node.roundIndex + 1 : 1;
     const sourceArtifactIds = artifact?.sourceArtifactIds ?? [];
     const artifactTitle = artifactTreeTitle(artifact);
-    const explicitSessionTitle = sessionTitle?.trim();
+    const explicitSessionTitle = truncateSessionTitle(sessionTitle ?? "");
     const resolvedSessionTitle = explicitSessionTitle || artifactTitle || parent?.session.title || roundIntent || "Untitled Tree";
 
     return withTransaction(db, () => {
@@ -1328,9 +1335,10 @@ export function createTreeableRepository(
             options_json,
             selected_option_id,
             folded_options_json,
-            created_at
+            created_at,
+            updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
       ).run(
         nodeId,
@@ -1345,6 +1353,7 @@ export function createTreeableRepository(
         "[]",
         null,
         "[]",
+        timestamp,
         timestamp
       );
 
@@ -1499,7 +1508,8 @@ export function createTreeableRepository(
               kind = ?,
               produced_artifact_id = ?,
               source_artifact_ids_json = ?,
-              agent_messages_json = ?
+              agent_messages_json = ?,
+              updated_at = ?
           WHERE id = ?
         `
       ).run(
@@ -1508,6 +1518,7 @@ export function createTreeableRepository(
         artifactId,
         JSON.stringify(sourceArtifactIds),
         agentMessagesJson,
+        timestamp,
         input.nodeId
       );
 
@@ -1557,10 +1568,10 @@ export function createTreeableRepository(
       db.prepare(
         `
           UPDATE tree_nodes
-          SET round_intent = ?, options_json = ?, agent_messages_json = ?
+          SET round_intent = ?, options_json = ?, agent_messages_json = ?, updated_at = ?
           WHERE id = ?
         `
-      ).run(output.roundIntent, JSON.stringify(output.options), agentMessagesJson, nodeId);
+      ).run(output.roundIntent, JSON.stringify(output.options), agentMessagesJson, timestamp, nodeId);
 
       db.prepare(
         `
@@ -1628,10 +1639,19 @@ export function createTreeableRepository(
               produced_artifact_id = ?,
               source_artifact_ids_json = ?,
               agent_messages_json = ?,
-              is_terminal = 1
+              is_terminal = 1,
+              updated_at = ?
           WHERE id = ?
         `
-      ).run(output.roundIntent, artifact ? "artifact" : "analysis", artifactId, JSON.stringify(sourceArtifactIds), agentMessagesJson, nodeId);
+      ).run(
+        output.roundIntent,
+        artifact ? "artifact" : "analysis",
+        artifactId,
+        JSON.stringify(sourceArtifactIds),
+        agentMessagesJson,
+        timestamp,
+        nodeId
+      );
 
       db.prepare(
         `
@@ -1734,10 +1754,10 @@ export function createTreeableRepository(
     db.prepare(
       `
         UPDATE tree_nodes
-        SET options_json = ?, selected_option_id = ?, folded_options_json = ?
+        SET options_json = ?, selected_option_id = ?, folded_options_json = ?, updated_at = ?
         WHERE id = ?
       `
-    ).run(JSON.stringify(options), selectedOptionId, JSON.stringify(folded), nodeId);
+    ).run(JSON.stringify(options), selectedOptionId, JSON.stringify(folded), timestamp, nodeId);
     db.prepare("DELETE FROM branch_history WHERE session_id = ? AND node_id = ?").run(sessionId, nodeId);
     for (const option of folded) {
       db.prepare(

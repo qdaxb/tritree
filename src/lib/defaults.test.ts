@@ -275,6 +275,7 @@ describe("defaults config loader", () => {
     );
     expect(systemSkillsById.get("system-writer")?.prompt).toContain("If the artifact type needs title, topics, or image prompt");
     expect(systemSkillsById.get("system-publisher")?.prompt).not.toContain("platform-rewrite");
+    expect(systemSkillsById.get("system-publisher")?.prompt).not.toMatch(/hook|钩子/i);
     for (const skill of defaults.systemSkills) {
       expect(skill.prompt).not.toContain("适合委托");
       expect(skill.prompt).not.toMatch(/\p{Script=Han}/u);

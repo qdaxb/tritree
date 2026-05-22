@@ -272,6 +272,30 @@ describe("Treeable repository", () => {
     expect(state).not.toHaveProperty("currentArtifactLegacy");
   });
 
+  it("stores only the first 80 characters of the initial session title", async () => {
+    const { dbPath, repo, user } = await createRepositoryHarness();
+    const longSeed = Array.from({ length: 100 }, (_, index) => `想法${index % 10}`).join("");
+    const expectedTitle = Array.from(longSeed).slice(0, 80).join("");
+    const root = repo.saveRootMemory(user.id, {
+      artifactTypeId: "social-post",
+      seed: longSeed,
+      creationRequest: "",
+      domains: ["Creation"],
+      tones: ["Sincere"],
+      styles: ["Opinion-driven"],
+      personas: ["Practitioner"]
+    });
+
+    const state = repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
+    const sqlite = new DatabaseSync(dbPath);
+    const row = sqlite.prepare("SELECT title FROM sessions WHERE id = ?").get(state.session.id) as { title: string };
+    sqlite.close();
+
+    expect(row.title).toBe(expectedTitle);
+    expect(state.session.title).toBe(expectedTitle);
+    expect(state.currentArtifact?.payload).toMatchObject({ body: longSeed });
+  });
+
   it("creates a no-artifact seed session when the plugin has no seed payload", async () => {
     const { repo, user } = await createRepositoryHarness();
     const root = repo.saveRootMemory(user.id, {
@@ -323,6 +347,7 @@ describe("Treeable repository", () => {
     expect(updated.currentNode?.roundIntent).toBe("选择差异化角度");
     expect(updated.currentNode?.options).toEqual(nextOptions);
     expect(JSON.stringify(updated.currentNode?.agentMessages)).toContain("records_listItems");
+    expect((updated.currentNode as { updatedAt?: string } | null)?.updatedAt).toBe(updated.session.updatedAt);
     expect(updated.currentArtifact).toEqual(state.currentArtifact);
   });
 

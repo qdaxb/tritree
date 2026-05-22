@@ -308,7 +308,8 @@ export const TreeNodeSchema = z.object({
   foldedOptions: z.array(BranchOptionSchema),
   agentMessages: z.array(AgentMessageSchema),
   isTerminal: z.boolean().optional(),
-  createdAt: z.string()
+  createdAt: z.string(),
+  updatedAt: z.string().optional()
 }).superRefine((node, context) => {
   if (node.kind === "artifact" && node.producedArtifactId === null) {
     context.addIssue({

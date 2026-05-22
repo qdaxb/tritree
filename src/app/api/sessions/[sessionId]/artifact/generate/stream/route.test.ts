@@ -346,6 +346,77 @@ describe("POST /api/sessions/:sessionId/artifact/generate/stream", () => {
     expect(text.match(/"type":"artifact\.replace"/g)).toHaveLength(3);
   });
 
+  it("does not use the seed artifact to complete first-round streaming previews", async () => {
+    const seedArtifact = {
+      ...parentArtifact,
+      payload: { title: "种子念头", body: state.rootMemory.preferences.seed, hashtags: [], imagePrompt: "" }
+    };
+    const seedState = {
+      ...state,
+      currentArtifact: null,
+      artifacts: [seedArtifact],
+      nodeArtifacts: [{ nodeId: "node-1", artifact: seedArtifact }]
+    };
+    const generatedArtifact = {
+      type: "social-post",
+      payload: { title: "AI 生成标题", body: "AI 生成正文", hashtags: ["#AI"], imagePrompt: "" },
+      sourceArtifactIds: ["artifact-1"]
+    };
+    const savedArtifact = {
+      id: "artifact-2",
+      version: 1,
+      createdByNodeId: "node-2",
+      createdAt: "2026-04-27T00:00:01.000Z",
+      updatedAt: "2026-04-27T00:00:01.000Z",
+      ...generatedArtifact
+    };
+    const finalState = {
+      ...seedState,
+      currentArtifact: savedArtifact,
+      artifacts: [...seedState.artifacts, savedArtifact],
+      nodeArtifacts: [...seedState.nodeArtifacts, { nodeId: "node-2", artifact: savedArtifact }],
+      currentNode: { ...childNode, kind: "artifact", producedArtifactId: "artifact-2" }
+    };
+    getRepositoryMock.mockReturnValue({
+      getSessionState: vi.fn().mockReturnValue(seedState),
+      updateNodeArtifact: vi.fn().mockReturnValue(finalState)
+    });
+    streamDirectorTurnMock.mockImplementation(async (_parts, options) => {
+      options.onText?.({
+        accumulatedText: "",
+        delta: "",
+        partialArtifact: { type: "social-post", payload: { title: "AI 生成标题" } }
+      });
+      return {
+        action: "artifact",
+        roundIntent: "生成第一版",
+        artifact: generatedArtifact
+      };
+    });
+
+    const response = await POST(
+      new Request("http://test.local/api/sessions/session-1/artifact/generate/stream", {
+        method: "POST",
+        body: JSON.stringify({ nodeId: "node-2" })
+      }),
+      { params: Promise.resolve({ sessionId: "session-1" }) }
+    );
+    const text = await response.text();
+    const artifactReplaceLines = text
+      .trim()
+      .split("\n")
+      .filter((line) => line.includes('"type":"artifact.replace"'));
+
+    expect(artifactReplaceLines).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('"id":"streaming-node-2"')])
+    );
+    expect(artifactReplaceLines).not.toEqual(
+      expect.arrayContaining([expect.stringContaining(state.rootMemory.preferences.seed)])
+    );
+    expect(text).toContain('"id":"artifact-2"');
+    expect(artifactReplaceLines).toHaveLength(1);
+  });
+
   it("can finish the same main agent turn by submitting options", async () => {
     const options = [
       { id: "a", label: "补背景", description: "先补背景。", impact: "减少误解。", kind: "explore" },

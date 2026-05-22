@@ -14,6 +14,7 @@ import {
   type SessionState,
   type TreeNode
 } from "@/lib/domain";
+import { isSeedArtifactForState } from "@/lib/seed-artifacts";
 import { encodeNdjson } from "@/lib/stream/ndjson";
 
 export const runtime = "nodejs";
@@ -257,7 +258,9 @@ function streamingArtifactForPartial({
   const plugin = getArtifactPlugin(partialArtifact.type);
   if (!plugin) return null;
   const sourceArtifact = sourceArtifactForStreaming(parentState, targetNode, plugin.id);
-  const payload = mergeStreamingPayload(sourceArtifact, partialArtifact.payload);
+  const mergeSourceArtifact =
+    sourceArtifact && !isSeedArtifactForState(parentState, sourceArtifact) ? sourceArtifact : null;
+  const payload = mergeStreamingPayload(mergeSourceArtifact, partialArtifact.payload);
   const parsedPayload = plugin.payloadSchema.safeParse(payload);
   if (!parsedPayload.success) return null;
 
@@ -265,9 +268,9 @@ function streamingArtifactForPartial({
   return {
     id: `streaming-${targetNode.id}`,
     type: plugin.id,
-    version: sourceArtifact ? sourceArtifact.version + 1 : 1,
+    version: mergeSourceArtifact ? mergeSourceArtifact.version + 1 : 1,
     payload: parsedPayload.data,
-    sourceArtifactIds: sourceArtifact ? [sourceArtifact.id] : [],
+    sourceArtifactIds: mergeSourceArtifact ? [mergeSourceArtifact.id] : [],
     createdByNodeId: targetNode.id,
     createdAt: timestamp,
     updatedAt: timestamp

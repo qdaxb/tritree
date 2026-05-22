@@ -9,10 +9,10 @@ import {
   GitBranch,
   LogOut,
   Maximize2,
-  Minimize2,
   Plus,
   RotateCcw,
-  UsersRound
+  UsersRound,
+  X
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -42,6 +42,7 @@ import { RootMemorySetup } from "@/components/root-memory/RootMemorySetup";
 import { SkillLibraryPanel } from "@/components/skills/SkillLibraryPanel";
 import { SkillPicker } from "@/components/skills/SkillPicker";
 import { TreeCanvas } from "@/components/tree/TreeCanvas";
+import { isSeedArtifactForNode, isSeedArtifactForState } from "@/lib/seed-artifacts";
 import { createNdjsonParser } from "@/lib/stream/ndjson";
 import { apiPath, appPath } from "@/lib/web-base-path";
 
@@ -87,6 +88,7 @@ type OptionsStreamEvent =
   | { type: "error"; error: string };
 type ArtifactComparisonEntry = { artifact: Artifact; label: string; nodeId: string };
 type ArtifactComparisonSelection = { fromNodeId: string | null; toNodeId: string | null };
+type TreeCanvasLabelMode = "compact" | "detail";
 
 const MOBILE_LAYOUT_QUERY = "(max-width: 980px)";
 
@@ -313,13 +315,23 @@ function artifactForNode(state: SessionState, nodeId: string | null) {
 
 function selectedArtifactIdForView(state: SessionState, viewNodeId: string | null) {
   const artifacts = state.artifacts ?? [];
-  const viewedArtifact = artifactForNode(state, viewNodeId);
-  if (viewedArtifact) return viewedArtifact.id;
-  if (viewNodeId && findTreeNode(state, viewNodeId)) {
-    return sourceArtifactForView(state, viewNodeId)?.id ?? null;
+  const viewedNode = viewNodeId ? findTreeNode(state, viewNodeId) : null;
+  const viewedArtifact = viewedNode ? artifactForNode(state, viewNodeId) : null;
+  if (viewedArtifact) {
+    return isSeedArtifactForNode(state, viewedNode, viewedArtifact) ? null : viewedArtifact.id;
   }
-  if (state.currentArtifact && artifacts.some((artifact) => artifact.id === state.currentArtifact?.id)) return state.currentArtifact.id;
-  return artifacts.at(-1)?.id ?? null;
+  if (viewNodeId && viewedNode) {
+    const sourceArtifact = sourceArtifactForView(state, viewNodeId);
+    return sourceArtifact && !isSeedArtifactForState(state, sourceArtifact) ? sourceArtifact.id : null;
+  }
+  if (
+    state.currentArtifact &&
+    artifacts.some((artifact) => artifact.id === state.currentArtifact?.id) &&
+    !isSeedArtifactForState(state, state.currentArtifact)
+  ) {
+    return state.currentArtifact.id;
+  }
+  return artifacts.filter((artifact) => !isSeedArtifactForState(state, artifact)).at(-1)?.id ?? null;
 }
 
 function sourceArtifactForView(state: SessionState, nodeId: string) {
@@ -506,7 +518,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
   const [streamingThinking, setStreamingThinking] = useState<StreamingThinkingEntry | null>(null);
   const [streamingProcessMaterials, setStreamingProcessMaterials] = useState<StreamingProcessMaterialsEntry | null>(null);
   const [artifactComparison, setArtifactComparison] = useState<ArtifactComparisonSelection | null>(null);
-  const [isControlPanelExpanded, setIsControlPanelExpanded] = useState(false);
+  const [isTreeExpanded, setIsTreeExpanded] = useState(false);
   const [isMobileTreeExpanded, setIsMobileTreeExpanded] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
@@ -567,10 +579,30 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     if (!isMobileLayout) {
       setIsMobileTreeExpanded(false);
       setIsAccountMenuOpen(false);
-    } else {
-      setIsControlPanelExpanded(false);
+      return;
     }
+
+    setIsTreeExpanded(false);
   }, [isMobileLayout]);
+
+  useEffect(() => {
+    if (!isTreeExpanded && !artifactComparison) return;
+
+    const collapseExpandedTreeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (artifactComparison) {
+        setArtifactComparison(null);
+        setIsTreeExpanded(false);
+        return;
+      }
+      setIsTreeExpanded(false);
+    };
+
+    window.addEventListener("keydown", collapseExpandedTreeOnEscape);
+    return () => {
+      window.removeEventListener("keydown", collapseExpandedTreeOnEscape);
+    };
+  }, [artifactComparison, isTreeExpanded]);
 
   useEffect(() => {
     setIsAccountMenuOpen(false);
@@ -1788,6 +1820,13 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
       ? fullDisplayArtifacts.find((a) => a.id === effectiveSelectedArtifactId)?.type
       : null) ?? sessionState?.session.artifactTypeId ?? null;
   const selectedArtifactPublishPlatforms = artifactTypes.find((t) => t.id === selectedArtifactTypeId)?.publishPlatforms;
+  const isDesktopTreeExpanded = !isMobileLayout && (isTreeExpanded || Boolean(artifactComparison));
+  const appShellClassName = `app-shell app-shell--artifact-focused${isDesktopTreeExpanded ? " app-shell--tree-expanded" : ""}${
+    artifactComparison ? " app-shell--comparison-expanded" : ""
+  }`;
+  const desktopControlRegionClassName = `desktop-control-region${
+    isDesktopTreeExpanded ? " desktop-control-region--tree-expanded" : ""
+  }${artifactComparison ? " desktop-control-region--comparison" : ""}`;
 
   const toastRetryAction = canRetryArtifactGeneration
     ? {
@@ -1837,6 +1876,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
         ? activeViewNode.parentId
         : previousComparisonNodeId(comparisonEntries, defaultToNodeId);
 
+    setIsTreeExpanded(true);
     setArtifactComparison({
       fromNodeId: defaultFromNodeId,
       toNodeId: defaultToNodeId
@@ -1845,6 +1885,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
 
   function cancelArtifactComparison() {
     setArtifactComparison(null);
+    setIsTreeExpanded(false);
   }
 
   function selectArtifactComparisonNode(nodeId: string) {
@@ -1868,13 +1909,21 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     });
   }
 
-  function renderTreeCanvas(display: "full" | "options" | "tree", optionsHeaderAction?: ReactNode) {
+  function renderTreeCanvas(
+    display: "full" | "options" | "tree",
+    optionsHeaderAction?: ReactNode,
+    treeLabelModeOverride?: TreeCanvasLabelMode
+  ) {
     const treeLabelMode =
-      !isMobileLayout && (display === "tree" || display === "options")
-        ? isControlPanelExpanded
+      treeLabelModeOverride ??
+      (!isMobileLayout && display === "tree"
+        ? isDesktopTreeExpanded
           ? "detail"
           : "compact"
-        : "detail";
+        : !isMobileLayout && display === "options"
+          ? "compact"
+          : "detail");
+    const canOpenCompactTree = !isMobileLayout && display === "tree" && treeLabelMode === "compact";
 
     return (
       <TreeCanvas
@@ -1890,6 +1939,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
         onActivateBranch={activateHistoricalBranch}
         onAddCustomOption={activeViewNodeId ? addAndChooseCustomOption : undefined}
         onChoose={chooseFromViewedNode}
+        onOpenTree={canOpenCompactTree ? () => setIsTreeExpanded(true) : undefined}
         onRegenerateOptions={canRefreshOptions ? regenerateOptionsForCurrentNode : undefined}
         onSelectComparisonNode={selectArtifactComparisonNode}
         onViewNode={(nodeId) => void viewNode(nodeId)}
@@ -1904,30 +1954,20 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     );
   }
 
-  function renderDesktopControlToggle() {
+  function renderTreeZoomTrigger() {
     return (
-      <button
-        aria-expanded={isControlPanelExpanded}
-        className="desktop-control-toggle"
-        onClick={() => setIsControlPanelExpanded((expanded) => !expanded)}
-        type="button"
+      <div
+        aria-hidden="true"
+        className="tree-zoom-trigger"
       >
-        {isControlPanelExpanded ? (
-          <Minimize2 aria-hidden="true" size={14} strokeWidth={2.35} />
-        ) : (
-          <Maximize2 aria-hidden="true" size={14} strokeWidth={2.35} />
-        )}
-        <span>{isControlPanelExpanded ? "收起控制区" : "展开控制区"}</span>
-      </button>
+        <Maximize2 aria-hidden="true" size={15} strokeWidth={2.35} />
+        <span>点击展开树图</span>
+      </div>
     );
   }
 
   return (
-    <main
-      className={`app-shell app-shell--artifact-focused${
-        isControlPanelExpanded && !isMobileLayout ? " app-shell--control-expanded" : ""
-      }`}
-    >
+    <main className={appShellClassName}>
       <header className="topbar">
         <div className="brand-mark" />
         <div>
@@ -2112,6 +2152,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
             onSave={saveArtifact}
             onStartComparison={startArtifactComparison}
             onStopGeneration={isBusy && generationStage ? stopActiveGeneration : undefined}
+            renderComparisonInline={true}
             selectedArtifactId={effectiveSelectedArtifactId}
             streamingProcessMaterials={activeProcessMaterials}
             thinkingText={activeThinking?.text}
@@ -2133,14 +2174,29 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
           className={mobilePanelClassName("tree", "mobile-panel--desktop-control")}
           role="region"
         >
-          <section className="desktop-control-region">
+          <section className={desktopControlRegionClassName}>
             <header className="desktop-control-region__header">
-              <h2>控制</h2>
-              {renderDesktopControlToggle()}
+              <h2>{artifactComparison ? "对比" : "控制"}</h2>
+              {isDesktopTreeExpanded ? (
+                <button
+                  aria-label={artifactComparison ? "退出对比" : "收起树图"}
+                  className="tree-panel-close"
+                  onClick={artifactComparison ? cancelArtifactComparison : () => setIsTreeExpanded(false)}
+                  type="button"
+                >
+                  <X aria-hidden="true" size={16} strokeWidth={2.35} />
+                  <span>{artifactComparison ? "退出对比" : "收起树图"}</span>
+                </button>
+              ) : null}
             </header>
             <div className="desktop-control-region__body">
-              <div className="desktop-control-region__tree">{renderTreeCanvas("tree")}</div>
-              <div className="desktop-control-region__options">{renderTreeCanvas("options")}</div>
+              <div className="desktop-control-region__tree desktop-control-region__tree-shell">
+                {renderTreeCanvas("tree")}
+                {isDesktopTreeExpanded ? null : renderTreeZoomTrigger()}
+              </div>
+              {artifactComparison ? null : (
+                <div className="desktop-control-region__options">{renderTreeCanvas("options")}</div>
+              )}
             </div>
           </section>
         </div>

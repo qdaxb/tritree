@@ -42,6 +42,7 @@ type TreeCanvasProps = {
   onActivateBranch?: (nodeId: string, optionId: BranchOption["id"]) => void;
   onAddCustomOption?: (option: BranchOption) => void;
   onChoose: (optionId: BranchOption["id"], note?: string, optionMode?: OptionGenerationMode) => void;
+  onOpenTree?: () => void;
   onRegenerateOptions?: (optionMode: OptionGenerationMode) => void;
   onSelectComparisonNode?: (nodeId: string) => void;
   onViewNode?: (nodeId: string) => void;
@@ -71,6 +72,11 @@ const CANVAS_RIGHT_PAD = 82;
 const INACTIVE_ROUTE_NODE_STEP = 118;
 const INACTIVE_ROUTE_DESCENDANT_X_STEP = 72;
 const INACTIVE_ROUTE_VERTICAL_STEP = SIDE_BRANCH_Y_SPREAD + 24;
+const COMPACT_TREE_VIEWBOX_MIN_WIDTH = 300;
+const COMPACT_TREE_VIEWBOX_MIN_HEIGHT = 150;
+const COMPACT_TREE_VIEWBOX_X_PAD = 46;
+const COMPACT_TREE_VIEWBOX_Y_PAD = 38;
+const COMPACT_TREE_Y_SPREAD = 48;
 
 type Point2 = [number, number];
 type RouteSide = -1 | 1;
@@ -129,6 +135,13 @@ type ForceTreeGraph = {
   nodes: ForceTreeNode[];
 };
 
+type SvgViewBox = {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
 export function getOptionBranchLayout(canvasWidth: number, historyNodeCount = 0, inactiveRouteDepth = 0): OptionBranchLayout {
   const viewportWidth = Math.max(MIN_CANVAS_WIDTH, Math.round(canvasWidth || 760));
   const progress = Math.min(Math.max((viewportWidth - 480) / 280, 0), 1);
@@ -168,6 +181,54 @@ export function getOptionBranchLayout(canvasWidth: number, historyNodeCount = 0,
     },
     width
   };
+}
+
+function defaultTreeViewBox(layout: OptionBranchLayout): SvgViewBox {
+  return { height: layout.height, width: layout.width, x: 0, y: 0 };
+}
+
+function compactTreeViewBox(graph: ForceTreeGraph, layout: OptionBranchLayout): SvgViewBox {
+  if (graph.nodes.length === 0) return defaultTreeViewBox(layout);
+
+  const bounds = graph.nodes.reduce(
+    (current, node) => {
+      const extent = compactNodeExtent(node);
+      return {
+        maxX: Math.max(current.maxX, node.targetX + extent),
+        maxY: Math.max(current.maxY, node.targetY + extent),
+        minX: Math.min(current.minX, node.targetX - extent),
+        minY: Math.min(current.minY, node.targetY - extent)
+      };
+    },
+    { maxX: -Infinity, maxY: -Infinity, minX: Infinity, minY: Infinity }
+  );
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  const width = Math.max(COMPACT_TREE_VIEWBOX_MIN_WIDTH, bounds.maxX - bounds.minX + COMPACT_TREE_VIEWBOX_X_PAD * 2);
+  const height = Math.max(COMPACT_TREE_VIEWBOX_MIN_HEIGHT, bounds.maxY - bounds.minY + COMPACT_TREE_VIEWBOX_Y_PAD * 2);
+
+  return {
+    height,
+    width,
+    x: centerX - width / 2,
+    y: centerY - height / 2
+  };
+}
+
+function compactNodeExtent(node: ForceTreeNode) {
+  const coreExtent = node.radius + (node.isArtifactFocused ? 11 : node.isArtifactChanged ? 0.8 : 0);
+  const spinnerExtent = node.kind === "loading" || node.generationStage ? 13 : 0;
+  const badgeExtent = nodeBadgeOrder(node).length > 0 ? 24 + (nodeBadgeOrder(node).length - 1) * 14 : 0;
+
+  return Math.max(coreExtent, spinnerExtent, badgeExtent);
+}
+
+function formatViewBox(viewBox: SvgViewBox) {
+  return [viewBox.x, viewBox.y, viewBox.width, viewBox.height].map(formatViewBoxNumber).join(" ");
+}
+
+function formatViewBoxNumber(value: number) {
+  return Number(value.toFixed(2)).toString();
 }
 
 function orderBranchOptions(options: BranchOption[]) {
@@ -375,6 +436,7 @@ function estimateInactiveRouteDepth(
 
 export function createForceTreeGraph({
   changedArtifactNodeIds = [],
+  compactLayout = false,
   comparisonNodeIds = null,
   currentNode,
   focusedNodeId = null,
@@ -388,6 +450,7 @@ export function createForceTreeGraph({
   visibleOptionCount = 3
 }: {
   changedArtifactNodeIds?: string[];
+  compactLayout?: boolean;
   comparisonNodeIds?: ComparisonNodeIds | null;
   currentNode: TreeNode | null;
   focusedNodeId?: string | null;
@@ -439,8 +502,13 @@ export function createForceTreeGraph({
     }
   });
   const optionYSpread = historyCount >= DENSE_ROUTE_MIN_HISTORY_COUNT ? DENSE_ROUTE_OPTION_Y_SPREAD : optionVerticalSpread(layout);
+  const foldedYSpread = compactLayout ? COMPACT_TREE_Y_SPREAD : SIDE_BRANCH_Y_SPREAD;
+  const visibleOptionYSpread = compactLayout ? COMPACT_TREE_Y_SPREAD : optionYSpread;
+  const visibleOptionYGap = compactLayout ? COMPACT_TREE_Y_SPREAD : TREE_LABEL_MIN_Y_GAP;
   function finishGraph(): ForceTreeGraph {
-    separateNearbyTreeLabels(nodes, layout.center[1]);
+    if (!compactLayout) {
+      separateNearbyTreeLabels(nodes, layout.center[1]);
+    }
     markGraphNodeStates(nodes, focusedNodeId, comparisonNodeIds, changedArtifactNodeIds, generationStage);
     return { links, nodes };
   }
@@ -525,7 +593,7 @@ export function createForceTreeGraph({
       const hasExistingBranch = childBranchKeys.has(branchKey(node.id, option.id));
       if (hasExistingBranch) return;
 
-      const foldedOffset = foldedOptionOffset(option.id, selectedOptionId ?? null, foldedIndex);
+      const foldedOffset = foldedOptionOffset(option.id, selectedOptionId ?? null, foldedIndex, foldedYSpread);
       const inactiveRouteSide = source.isInactiveRoute
         ? source.inactiveRouteSide ?? inactiveRouteSideFromY(source.targetY, layout.center[1], source.group)
         : routeSideFromOffset(foldedOffset);
@@ -545,7 +613,7 @@ export function createForceTreeGraph({
         option,
         radius: 4.8,
         targetX: foldedOptionTargetX(source, historyStep, layout, foldedIndex),
-        targetY: foldedOptionTargetY(source, foldedAnchorY, foldedOffset, foldedIndex, inactiveRouteSide)
+        targetY: foldedOptionTargetY(source, foldedAnchorY, foldedOffset, foldedIndex, inactiveRouteSide, foldedYSpread)
       });
       links.push({
         distance: 58,
@@ -588,7 +656,13 @@ export function createForceTreeGraph({
     const currentSource = nodeByIdFromNodes(nodes, currentSourceId);
 
     optionsToShow.forEach((option) => {
-      const [targetX, targetY] = optionPositionFromSource(layout, option.id, currentSource?.targetY ?? layout.center[1], optionYSpread);
+      const [targetX, targetY] = optionPositionFromSource(
+        layout,
+        option.id,
+        currentSource?.targetY ?? layout.center[1],
+        visibleOptionYSpread,
+        visibleOptionYGap
+      );
       nodes.push({
         group: optionGroup(option.id),
         id: `option-${option.id}`,
@@ -609,7 +683,8 @@ export function createForceTreeGraph({
         layout,
         loadingOptionId,
         currentSource?.targetY ?? layout.center[1],
-        optionYSpread
+        visibleOptionYSpread,
+        visibleOptionYGap
       );
       nodes.push({
         group: optionGroup(loadingOptionId),
@@ -652,6 +727,7 @@ export function TreeCanvas({
   onActivateBranch,
   onAddCustomOption,
   onChoose,
+  onOpenTree,
   onRegenerateOptions,
   onSelectComparisonNode,
   onViewNode,
@@ -691,9 +767,6 @@ export function TreeCanvas({
   const shouldShowBranchControls = display !== "tree";
   const shouldInlineCustomOption = display === "options" && !isMobileLayout;
   const shouldShowTreeScrollControls = !isCompactTreeOverview && isTreeScrollable;
-  const treeSvgStyle = isCompactTreeOverview
-    ? { height: "100%", minHeight: 0, width: "100%" }
-    : { height: branchLayout.height, minHeight: 300, width: branchLayout.width };
   const nodeId = currentNode?.id ?? null;
   const isBranchGenerating = Boolean(pendingBranch);
   const graphCurrentNode = isBranchGenerating ? null : currentNode;
@@ -720,6 +793,7 @@ export function TreeCanvas({
     () =>
       createForceTreeGraph({
         changedArtifactNodeIds,
+        compactLayout: isCompactTreeOverview,
         comparisonNodeIds,
         currentNode: stableGraphCurrentNode,
         focusedNodeId,
@@ -740,6 +814,7 @@ export function TreeCanvas({
       focusedNodeId,
       generationStage,
       stableGraphCurrentNode,
+      isCompactTreeOverview,
       isBusy,
       currentNodeHasChildren,
       pendingBranch,
@@ -748,6 +823,10 @@ export function TreeCanvas({
       treeNodes
     ]
   );
+  const treeViewBox = isCompactTreeOverview ? compactTreeViewBox(graph, branchLayout) : defaultTreeViewBox(branchLayout);
+  const treeSvgStyle = isCompactTreeOverview
+    ? { height: "100%", minHeight: 0, width: "100%" }
+    : { height: branchLayout.height, minHeight: 300, width: branchLayout.width };
 
   useEffect(() => {
     const element = containerRef.current;
@@ -959,11 +1038,18 @@ export function TreeCanvas({
     }
   }
 
-  function handleTreeViewportClick(event: ReactMouseEvent<HTMLDivElement>) {
+  function handleTreeViewportClickCapture(event: ReactMouseEvent<HTMLDivElement>) {
     if (!suppressNextClickRef.current) return;
     suppressNextClickRef.current = false;
     event.preventDefault();
     event.stopPropagation();
+  }
+
+  function handleTreeViewportClick(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!isCompactTreeOverview || !onOpenTree) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenTree();
   }
 
   useEffect(() => {
@@ -1040,6 +1126,13 @@ export function TreeCanvas({
       )
       .attr("transform", (datum) => `translate(${datum.targetX},${datum.targetY})`)
       .on("click", (event, datum) => {
+        if (isCompactTreeOverview) {
+          event.preventDefault();
+          event.stopPropagation();
+          onOpenTree?.();
+          return;
+        }
+
         if (isComparisonMode && datum.kind === "history" && datum.nodeId && !isBusy) {
           onSelectComparisonNode?.(datum.nodeId);
           return;
@@ -1157,10 +1250,12 @@ export function TreeCanvas({
     branchLayout,
     graph,
     isBusy,
+    isCompactTreeOverview,
     isComparisonMode,
     isRevealing,
     onActivateBranch,
     onChoose,
+    onOpenTree,
     onSelectComparisonNode,
     onViewNode,
     pendingBranch,
@@ -1175,7 +1270,8 @@ export function TreeCanvas({
         `tree-canvas--${display}`,
         generationStage?.stage === "options" && "tree-canvas--options-generating",
         isComparisonMode && "tree-canvas--comparison",
-        treeLabelMode === "compact" && "tree-canvas--compact"
+        treeLabelMode === "compact" && "tree-canvas--compact",
+        isCompactTreeOverview && onOpenTree && "tree-canvas--openable"
       )}
       ref={containerRef}
     >
@@ -1189,7 +1285,8 @@ export function TreeCanvas({
               !isCompactTreeOverview && isDraggingTree && "tree-viewport--dragging"
             )}
             data-pan-axis="x"
-            onClickCapture={handleTreeViewportClick}
+            onClick={handleTreeViewportClick}
+            onClickCapture={handleTreeViewportClickCapture}
             onKeyDown={handleTreeViewportKeyDown}
             onPointerCancel={finishTreeViewportDrag}
             onPointerDown={handleTreeViewportPointerDown}
@@ -1202,13 +1299,13 @@ export function TreeCanvas({
             <svg
               aria-label="AI 内容方向示意图"
               className="mind-map-svg"
-              height={branchLayout.height}
+              height={treeViewBox.height}
               preserveAspectRatio="xMidYMid meet"
               ref={svgRef}
               role="img"
               style={treeSvgStyle}
-              viewBox={`0 0 ${branchLayout.width} ${branchLayout.height}`}
-              width={branchLayout.width}
+              viewBox={formatViewBox(treeViewBox)}
+              width={treeViewBox.width}
             />
           </div>
           {isCompactTreeOverview ? null : (
@@ -1428,15 +1525,25 @@ export function BranchOptionTray({
             onModeChange={setOptionMode}
             onRegenerateOptions={onRegenerateOptions}
           />
-          {isCustomOptionInline ? null : <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} />}
+          {isCustomOptionInline || selectedOption ? null : (
+            <MoreDirectionsCard disabled={isBusy} onAddCustomOption={onAddCustomOption} />
+          )}
         </div>
       ) : null}
-      <div aria-label="三个主选项" className="branch-option-main branch-option-main--horizontal" role="group">
+      <div
+        aria-label="三个主选项"
+        className={clsx(
+          "branch-option-main",
+          "branch-option-main--horizontal",
+          selectedOption && "branch-option-main--selection-active"
+        )}
+        role="group"
+      >
         {PRIMARY_BRANCH_OPTION_IDS.map((optionId) => {
           const option = primaryOptionById.get(optionId);
           return option && visiblePrimaryOptionIds.has(optionId) ? (
             <BranchOptionCard
-              isBusy={isBusy || !primaryAllVisible}
+              isBusy={isBusy || !primaryAllVisible || Boolean(selectedOption)}
               isPending={pendingChoice === option.id}
               isSelected={selectedOption?.id === option.id}
               isStreaming={isStreamingOptions}
@@ -1673,20 +1780,28 @@ function BranchOptionComposer({
   optionMode: OptionGenerationMode;
 }) {
   const choiceLabel = option.id.toUpperCase();
+  const displayLabel = displayBranchLabel(option.label);
+  const trimmedDescription = option.description.trim();
+  const trimmedImpact = option.impact.trim();
 
   return (
     <div aria-label={`${choiceLabel} 写作操作`} className="branch-option-composer branch-option-composer--inline" role="group">
       <div className="branch-option-composer__summary">
-        <span>已选 {choiceLabel}</span>
+        <span className="branch-option-composer__summary-kicker">已选 {choiceLabel}</span>
+        <strong className="branch-option-composer__summary-title">{displayLabel}</strong>
+        {trimmedDescription ? (
+          <p className="branch-option-composer__summary-description">{trimmedDescription}</p>
+        ) : null}
+        {trimmedImpact ? <p className="branch-option-composer__summary-impact">{trimmedImpact}</p> : null}
       </div>
       <label className="branch-option-composer__note">
         <span>还想补一句吗？</span>
-        <input
+        <textarea
           aria-label={`补充想法 ${choiceLabel}`}
           disabled={isBusy}
           onChange={(event) => onNoteChange(event.target.value)}
           placeholder="还想补一句吗？"
-          type="text"
+          rows={3}
           value={note}
         />
       </label>
@@ -1706,7 +1821,7 @@ function BranchOptionComposer({
         onClick={() => onChoose(option.id, note.trim(), optionMode)}
         type="button"
       >
-        发送
+        按这个方向写
       </button>
     </div>
   );
@@ -2023,13 +2138,19 @@ function foldedOptionTargetY(
   foldedAnchorY: number,
   foldedOffset: number,
   foldedIndex: number,
-  inactiveRouteSide: RouteSide
+  inactiveRouteSide: RouteSide,
+  ySpread = SIDE_BRANCH_Y_SPREAD
 ) {
   if (source.isInactiveRoute) {
-    return source.targetY + inactiveRouteSide * SIDE_BRANCH_Y_SPREAD * (foldedIndex + 1);
+    return source.targetY + inactiveRouteSide * ySpread * (foldedIndex + 1);
   }
 
-  return separateFromVerticalAnchors(foldedAnchorY + foldedOffset, source.targetY, foldedAnchorY);
+  return separateFromVerticalAnchorsWithGap(
+    foldedAnchorY + foldedOffset,
+    Math.min(TREE_LABEL_MIN_Y_GAP, ySpread),
+    source.targetY,
+    foldedAnchorY
+  );
 }
 
 function inactiveRouteSideForNode(
@@ -2059,16 +2180,17 @@ function routeSideFromOffset(offset: number): RouteSide {
 function foldedOptionOffset(
   optionId: BranchOption["id"],
   selectedOptionId: BranchOption["id"] | null,
-  foldedIndex: number
+  foldedIndex: number,
+  ySpread = SIDE_BRANCH_Y_SPREAD
 ) {
   if (selectedOptionId) {
     const rankDistance = optionRank(optionId) - optionRank(selectedOptionId);
     if (rankDistance !== 0) {
-      return rankDistance * SIDE_BRANCH_Y_SPREAD;
+      return rankDistance * ySpread;
     }
   }
 
-  return foldedIndex % 2 === 0 ? -SIDE_BRANCH_Y_SPREAD : SIDE_BRANCH_Y_SPREAD;
+  return foldedIndex % 2 === 0 ? -ySpread : ySpread;
 }
 
 function optionVerticalSpread(layout: OptionBranchLayout) {
@@ -2083,22 +2205,27 @@ function optionPositionFromSource(
   layout: OptionBranchLayout,
   optionId: BranchOption["id"],
   sourceY: number,
-  spread: number
+  spread: number,
+  minGap = TREE_LABEL_MIN_Y_GAP
 ): Point2 {
   const positionKey = isPrimaryBranchOptionId(optionId) ? optionId : "custom";
 
   return [
     layout.positions[positionKey][0],
-    separateFromVerticalAnchors(sourceY + (optionRank(optionId) - OPTION_RANK.b) * spread, sourceY)
+    separateFromVerticalAnchorsWithGap(sourceY + (optionRank(optionId) - OPTION_RANK.b) * spread, minGap, sourceY)
   ];
 }
 
 function separateFromVerticalAnchors(targetY: number, ...anchors: number[]) {
+  return separateFromVerticalAnchorsWithGap(targetY, TREE_LABEL_MIN_Y_GAP, ...anchors);
+}
+
+function separateFromVerticalAnchorsWithGap(targetY: number, minGap: number, ...anchors: number[]) {
   return anchors.reduce((adjustedY, anchorY) => {
     const deltaY = adjustedY - anchorY;
-    if (Math.abs(deltaY) >= TREE_LABEL_MIN_Y_GAP) return adjustedY;
+    if (Math.abs(deltaY) >= minGap) return adjustedY;
     const direction = deltaY < 0 ? -1 : 1;
-    return anchorY + direction * TREE_LABEL_MIN_Y_GAP;
+    return anchorY + direction * minGap;
   }, targetY);
 }
 

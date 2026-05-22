@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const CURRENT_SCHEMA_VERSION = 13;
+const CURRENT_SCHEMA_VERSION = 14;
 const CONTENT_RESET_SCHEMA_VERSION = 12;
 const TREEABLE_CONTENT_TABLES = [
   "artifacts",
@@ -168,7 +168,8 @@ function createSchema(sqlite: DatabaseSync) {
       folded_options_json TEXT NOT NULL,
       agent_messages_json TEXT NOT NULL DEFAULT '[]',
       is_terminal INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS artifacts (
@@ -197,6 +198,10 @@ function createSchema(sqlite: DatabaseSync) {
   addColumnIfMissing(sqlite, "tree_nodes", "source_artifact_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   addColumnIfMissing(sqlite, "tree_nodes", "is_terminal", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "tree_nodes", "agent_messages_json", "TEXT NOT NULL DEFAULT '[]'");
+  const addedTreeNodeUpdatedAt = addColumnIfMissing(sqlite, "tree_nodes", "updated_at", "TEXT");
+  if (addedTreeNodeUpdatedAt) {
+    sqlite.exec("UPDATE tree_nodes SET updated_at = created_at WHERE updated_at IS NULL OR updated_at = '';");
+  }
   addColumnIfMissing(sqlite, "skills", "applies_to", "TEXT NOT NULL DEFAULT 'both'");
   addColumnIfMissing(sqlite, "skills", "sort_order", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "skills", "default_loaded", "INTEGER NOT NULL DEFAULT 1");
@@ -219,6 +224,7 @@ function createSchema(sqlite: DatabaseSync) {
 
 function addColumnIfMissing(sqlite: DatabaseSync, tableName: string, columnName: string, definition: string) {
   const columns = sqlite.prepare(`PRAGMA table_info(${tableName});`).all() as Array<{ name: string }>;
-  if (columns.some((column) => column.name === columnName)) return;
+  if (columns.some((column) => column.name === columnName)) return false;
   sqlite.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition};`);
+  return true;
 }

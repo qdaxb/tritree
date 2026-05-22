@@ -249,9 +249,14 @@ describe("ArtifactWorkspace", () => {
     expect(bodyRule).toContain("overflow-y: auto");
     expect(bodyRule).toContain("overscroll-behavior: contain");
     expect(bodyRule).toContain("scrollbar-gutter: stable");
-    expect(supplementsRule).toContain("align-self: start");
+    expect(supplementsRule).toContain("align-self: stretch");
+    expect(supplementsRule).toContain("flex: 0 0 auto");
+    expect(supplementsRule).toContain("margin-bottom: 8px");
+    expect(supplementsRule).toContain("width: 100%");
+    expect(supplementsRule).toContain("padding-right: 4px");
+    expect(supplementsRule).toContain("overflow-y: auto");
+    expect(supplementsRule).toContain("scrollbar-gutter: stable");
     expect(supplementsRule).not.toContain("max-height");
-    expect(supplementsRule).toContain("overflow: visible");
     expect(contentRule).toContain("min-height: 0");
     expect(contentRule).toContain("height: auto");
     expect(materialsRule).not.toContain("max-height");
@@ -293,6 +298,7 @@ describe("ArtifactWorkspace", () => {
   it("uses a visible local spinning border for active process, materials, and draft surfaces", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const spinKeyframes = css.match(/@keyframes active-surface-spin\s*\{(?<body>[\s\S]+?)\n\}/)?.groups?.body ?? "";
+    const processSurfaceRule = css.match(/\.artifact-workspace__process\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const processRule = css.match(/\.artifact-workspace__process--generating\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const processBorderRule =
       css.match(/\.artifact-workspace__process--generating::after\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -306,8 +312,11 @@ describe("ArtifactWorkspace", () => {
       css.match(/\.artifact-workspace__content--generating > \*::after\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
     expect(spinKeyframes).toContain("--active-surface-angle: 1turn");
+    expect(processSurfaceRule).toContain("border-color: rgba(14, 165, 233, 0.24)");
+    expect(processSurfaceRule).toContain("box-shadow: 0 8px 22px rgba(14, 165, 233, 0.07)");
     expect(processRule).toContain("position: relative");
     expect(processBorderRule).toContain("conic-gradient");
+    expect(processBorderRule).toContain("padding: 1px");
     expect(processBorderRule).toContain("animation: active-surface-spin 5s linear infinite");
     expect(materialsRule).toContain("position: relative");
     expect(materialsBorderRule).toContain("conic-gradient");
@@ -352,10 +361,12 @@ describe("ArtifactWorkspace", () => {
       selectedArtifactId: null
     });
 
-    expect(screen.getByText("本步未生成产物")).toBeInTheDocument();
+    expect(screen.queryByText("本步未生成产物")).not.toBeInTheDocument();
     expect(screen.queryByTestId("social-post-renderer")).not.toBeInTheDocument();
     expect(screen.queryByTestId("prd-renderer")).not.toBeInTheDocument();
-    expect(screen.getByText("还没有产物。")).toBeInTheDocument();
+    expect(screen.queryByText("还没有产物。")).not.toBeInTheDocument();
+    expect(document.querySelector(".artifact-workspace__status")).not.toBeInTheDocument();
+    expect(document.querySelector(".artifact-workspace__empty")).not.toBeInTheDocument();
   });
 
   it("keeps content visible and marks a no-artifact node", () => {
@@ -372,7 +383,7 @@ describe("ArtifactWorkspace", () => {
     });
 
     expect(screen.getByTestId("social-post-renderer")).toHaveTextContent("A short social post body.");
-    expect(screen.getByText("本步未生成产物")).toBeInTheDocument();
+    expect(screen.queryByText("本步未生成产物")).not.toBeInTheDocument();
     expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("AI 正在思考下一版产物..."))).toBe(true);
     expect(screen.getByText("正在分析当前版本")).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "产物" })).not.toHaveClass("module--generating");
@@ -400,6 +411,55 @@ describe("ArtifactWorkspace", () => {
     expect(screen.getByRole("status")).toHaveTextContent("AI 正在生成下一步选项...");
     expect(screen.getByRole("status")).toHaveTextContent("search");
     expect(screen.getByTestId("social-post-renderer")).toHaveTextContent("A short social post body.");
+  });
+
+  it("keeps the active progress block in normal layout above materials and content", () => {
+    const social = socialPostArtifact({
+      updatedAt: "2026-05-18T00:05:00.000Z"
+    });
+
+    renderWorkspace({
+      artifacts: [social],
+      currentNode: {
+        ...analysisNode({
+          agentMessages: [
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool-call",
+                  toolCallId: "display-1",
+                  toolName: "show_process_data",
+                  input: {
+                    title: "参考材料",
+                    sourceToolCallIds: ["tool-1"],
+                    items: [{ title: "参考条目 A", subtitle: "内容参考" }]
+                  }
+                }
+              ]
+            }
+          ]
+        }),
+        updatedAt: "2026-05-18T00:10:00.000Z"
+      } as TreeNode & { updatedAt: string },
+      generationStage: "options",
+      isBusy: true,
+      isGenerating: true,
+      selectedArtifactId: social.id,
+      thinkingText: "[工具] 调用 search"
+    });
+
+    const progressBlock = screen.getByText("AI 正在生成下一步选项...").closest(".artifact-workspace__supplements");
+    const materialsBlock = screen.getByRole("heading", { name: "过程材料" }).closest(".artifact-workspace__materials");
+    const contentBlock = screen.getByTestId("social-post-renderer");
+
+    expect(progressBlock).toBeInstanceOf(HTMLElement);
+    expect(materialsBlock).toBeInstanceOf(HTMLElement);
+    expect(document.querySelector(".artifact-workspace__body")).not.toContainElement(progressBlock as HTMLElement);
+    expect((progressBlock as HTMLElement).compareDocumentPosition(contentBlock)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect((progressBlock as HTMLElement).compareDocumentPosition(materialsBlock as HTMLElement)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
   });
 
   it("collapses repeated adjacent progress rows for the same tool", () => {
@@ -595,6 +655,47 @@ describe("ArtifactWorkspace", () => {
     expect(contentBlock.compareDocumentPosition(materialsBlock as HTMLElement)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  it("uses the persisted process materials update time after streaming finishes", () => {
+    const social = socialPostArtifact({
+      updatedAt: "2026-05-18T00:05:00.000Z"
+    });
+    const node = {
+      ...analysisNode({
+        createdAt: "2026-05-18T00:00:00.000Z",
+        agentMessages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "display-1",
+                toolName: "show_process_data",
+                input: {
+                  title: "更新后的参考材料",
+                  sourceToolCallIds: ["tool-1"],
+                  items: [{ title: "最新参考条目", subtitle: "晚于当前社媒内容" }]
+                }
+              }
+            ]
+          }
+        ]
+      }),
+      updatedAt: "2026-05-18T00:10:00.000Z"
+    } as TreeNode & { updatedAt: string };
+
+    renderWorkspace({
+      artifacts: [social],
+      currentNode: node,
+      selectedArtifactId: social.id
+    });
+
+    const contentBlock = screen.getByTestId("social-post-renderer");
+    const materialsBlock = screen.getByRole("heading", { name: "过程材料" }).closest(".artifact-workspace__materials");
+
+    expect(materialsBlock).toBeInstanceOf(HTMLElement);
+    expect(contentBlock.compareDocumentPosition(materialsBlock as HTMLElement)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it("keeps process materials after the display tool returns only an acknowledgement", () => {
     const social = socialPostArtifact();
 
@@ -718,6 +819,43 @@ describe("ArtifactWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "退出对比" }));
 
     expect(onCancelComparison).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders same-type artifact comparison as an inline diff from the first artifact to the second", () => {
+    const from = socialPostArtifact({
+      id: "artifact-social-from",
+      payload: {
+        title: "旧标题",
+        body: "第一句保留。旧句需要删掉。",
+        hashtags: ["旧话题"],
+        imagePrompt: "旧图"
+      }
+    });
+    const to = socialPostArtifact({
+      id: "artifact-social-to",
+      payload: {
+        title: "新标题",
+        body: "第一句保留。新句补充细节。",
+        hashtags: ["新话题"],
+        imagePrompt: "新图"
+      },
+      sourceArtifactIds: [from.id]
+    });
+
+    renderWorkspace({
+      artifacts: [from, to],
+      comparisonArtifacts: { from, to },
+      comparisonLabels: { from: "第 1 轮", to: "第 2 轮" },
+      comparisonSelectionCount: 2,
+      currentNode: artifactNode(to.id),
+      isComparisonMode: true,
+      selectedArtifactId: to.id
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("第 1 轮 -> 第 2 轮");
+    expect(screen.getByTestId("social-post-inline-diff")).toBeInTheDocument();
+    expect(document.querySelectorAll(".work-diff-token--added").length).toBeGreaterThan(0);
+    expect(document.querySelectorAll(".work-diff-token--removed").length).toBeGreaterThan(0);
   });
 
   it("shows raw payload fallback when plugin unavailable", () => {

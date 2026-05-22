@@ -50,6 +50,7 @@ export type ArtifactWorkspaceProps = {
   onStartComparison?: () => void;
   onStopGeneration?: () => void;
   publishPlatforms?: string[];
+  renderComparisonInline?: boolean;
   selectedArtifactId: string | null;
   scrollBodyRef?: Ref<HTMLDivElement>;
   streamingProcessMaterials?: ProcessMaterial[];
@@ -75,6 +76,7 @@ export function ArtifactWorkspace({
   onStartComparison,
   onStopGeneration,
   publishPlatforms,
+  renderComparisonInline = true,
   selectedArtifactId,
   scrollBodyRef,
   streamingProcessMaterials = [],
@@ -88,7 +90,6 @@ export function ArtifactWorkspace({
   const selectedManifest = selectedArtifact ? getArtifactClientManifest(selectedArtifact.type) : null;
   const SelectedRenderer = selectedManifest ? getArtifactRenderer(selectedManifest.rendererKey) : null;
   const trimmedThinkingText = thinkingText?.trim() ?? "";
-  const hasNoArtifactForCurrentNode = currentNode ? currentNode.producedArtifactId === null : false;
   const canUseComparison = canCompareArtifacts || isComparisonMode;
   const processMaterials = [...streamingProcessMaterials, ...processMaterialsForNode(currentNode)];
   const isStreamingProcessMaterials = isBusy && streamingProcessMaterials.length > 0;
@@ -104,36 +105,34 @@ export function ArtifactWorkspace({
     : LATEST_TIMELINE_TIME;
   const processMaterialsUpdatedAt = isStreamingProcessMaterials
     ? LATEST_TIMELINE_TIME
-    : timestampFromIso(currentNode?.createdAt, 0);
-  const contentBlock = (
+    : timestampFromIso(currentNode?.updatedAt, timestampFromIso(currentNode?.createdAt, 0));
+  const shouldRenderInlineComparison = isComparisonMode && renderComparisonInline;
+  const content = shouldRenderInlineComparison ? (
+    <ArtifactComparisonView
+      comparisonArtifacts={comparisonArtifacts}
+      comparisonLabels={comparisonLabels}
+      comparisonSelectionCount={comparisonSelectionCount}
+      isBusy={isBusy}
+    />
+  ) : selectedArtifact ? (
+    SelectedRenderer ? (
+      <SelectedRenderer
+        artifact={selectedArtifact}
+        isBusy={isBusy}
+        onAction={(actionId, input) => onAction(actionId, selectedArtifact, input)}
+        onSave={(payload) => onSave({ ...selectedArtifact, payload: payload ?? selectedArtifact.payload })}
+        previousArtifact={previousArtifact}
+        publishPlatforms={publishPlatforms}
+      />
+    ) : (
+      <ArtifactFallback artifact={selectedArtifact} />
+    )
+  ) : null;
+  const contentBlock = content ? (
     <div className={`artifact-workspace__content${isDraftGenerating ? " artifact-workspace__content--generating" : ""}`}>
-      {isComparisonMode ? (
-        <ArtifactComparisonView
-          comparisonArtifacts={comparisonArtifacts}
-          comparisonLabels={comparisonLabels}
-          comparisonSelectionCount={comparisonSelectionCount}
-          isBusy={isBusy}
-        />
-      ) : selectedArtifact ? (
-        SelectedRenderer ? (
-          <SelectedRenderer
-            artifact={selectedArtifact}
-            isBusy={isBusy}
-            onAction={(actionId, input) => onAction(actionId, selectedArtifact, input)}
-            onSave={(payload) => onSave({ ...selectedArtifact, payload: payload ?? selectedArtifact.payload })}
-            previousArtifact={previousArtifact}
-            publishPlatforms={publishPlatforms}
-          />
-        ) : (
-          <ArtifactFallback artifact={selectedArtifact} />
-        )
-      ) : (
-        <div className="artifact-workspace__empty">
-          <p>还没有产物。</p>
-        </div>
-      )}
+      {content}
     </div>
-  );
+  ) : null;
   const timelineBlockCandidates: Array<ArtifactTimelineBlock | null> = [
     processMaterials.length > 0
       ? {
@@ -143,16 +142,41 @@ export function ArtifactWorkspace({
           element: <ProcessMaterials isStreaming={isStreamingProcessMaterials} materials={processMaterials} />
         }
       : null,
-    {
-      id: "content",
-      sortTime: contentUpdatedAt,
-      tiePriority: 1,
-      element: contentBlock
-    }
+    contentBlock
+      ? {
+          id: "content",
+          sortTime: contentUpdatedAt,
+          tiePriority: 1,
+          element: contentBlock
+        }
+      : null
   ];
   const timelineBlocks = timelineBlockCandidates
     .filter((block): block is ArtifactTimelineBlock => block !== null)
     .sort((first, second) => first.sortTime - second.sortTime || first.tiePriority - second.tiePriority);
+  const supplementsBlock = isBusy && generationStage ? (
+    <div className="artifact-workspace__supplements">
+      <div
+        aria-live="polite"
+        className="artifact-workspace__process artifact-workspace__process--generating"
+        role="status"
+      >
+        <div className="artifact-workspace__process-header">
+          <span className="artifact-workspace__process-dot" aria-hidden="true" />
+          <strong>{processTitle}</strong>
+        </div>
+        <div className="artifact-workspace__process-body" ref={processBodyRef}>
+          {trimmedThinkingText ? (
+            <ThinkingTextLines text={trimmedThinkingText} />
+          ) : generationStage === "artifact" ? (
+            "正在生成草稿内容。"
+          ) : (
+            "正在生成可选择方向。"
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   useEffect(() => {
     if (!isBusy || !generationStage) return;
@@ -194,40 +218,9 @@ export function ArtifactWorkspace({
         </div>
       </header>
       {headerPanel}
+      {supplementsBlock}
 
       <div className="artifact-workspace__body" ref={scrollBodyRef}>
-        {hasNoArtifactForCurrentNode || (isBusy && generationStage) ? (
-          <div className="artifact-workspace__supplements">
-            {hasNoArtifactForCurrentNode ? (
-              <div className="artifact-workspace__status" role="status">
-                本步未生成产物
-              </div>
-            ) : null}
-
-            {isBusy && generationStage ? (
-              <div
-                aria-live="polite"
-                className="artifact-workspace__process artifact-workspace__process--generating"
-                role="status"
-              >
-                <div className="artifact-workspace__process-header">
-                  <span className="artifact-workspace__process-dot" aria-hidden="true" />
-                  <strong>{processTitle}</strong>
-                </div>
-                <div className="artifact-workspace__process-body" ref={processBodyRef}>
-                  {trimmedThinkingText ? (
-                    <ThinkingTextLines text={trimmedThinkingText} />
-                  ) : generationStage === "artifact" ? (
-                    "正在生成草稿内容。"
-                  ) : (
-                    "正在生成可选择方向。"
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
         {timelineBlocks.map((block) => (
           <div className="artifact-workspace__timeline-item" key={block.id}>
             {block.element}
@@ -472,7 +465,7 @@ function ProcessMaterialItemTitle({ item }: { item: ProcessMaterialItem }) {
   );
 }
 
-function ArtifactComparisonView({
+export function ArtifactComparisonView({
   comparisonArtifacts,
   comparisonLabels,
   comparisonSelectionCount,
@@ -500,25 +493,44 @@ function ArtifactComparisonView({
           {comparisonLabels.to}
         </div>
       ) : null}
-      <div className="artifact-comparison__grid">
-        <section className="artifact-comparison__pane">
-          <h3>{comparisonLabels?.from ?? "起点"}</h3>
-          <ArtifactPreview artifact={comparisonArtifacts.from} isBusy={isBusy} />
-        </section>
-        <section className="artifact-comparison__pane">
+      {comparisonArtifacts.from.type === comparisonArtifacts.to.type ? (
+        <section className="artifact-comparison__diff">
           <h3>{comparisonLabels?.to ?? "终点"}</h3>
-          <ArtifactPreview artifact={comparisonArtifacts.to} isBusy={isBusy} />
+          <ArtifactPreview artifact={comparisonArtifacts.to} isBusy={isBusy} previousArtifact={comparisonArtifacts.from} />
         </section>
-      </div>
+      ) : (
+        <div className="artifact-comparison__grid">
+          <section className="artifact-comparison__pane">
+            <h3>{comparisonLabels?.from ?? "起点"}</h3>
+            <ArtifactPreview artifact={comparisonArtifacts.from} isBusy={isBusy} />
+          </section>
+          <section className="artifact-comparison__pane">
+            <h3>{comparisonLabels?.to ?? "终点"}</h3>
+            <ArtifactPreview artifact={comparisonArtifacts.to} isBusy={isBusy} />
+          </section>
+        </div>
+      )}
     </div>
   );
 }
 
-function ArtifactPreview({ artifact, isBusy }: { artifact: Artifact; isBusy: boolean }) {
+function ArtifactPreview({
+  artifact,
+  isBusy,
+  previousArtifact = null
+}: {
+  artifact: Artifact;
+  isBusy: boolean;
+  previousArtifact?: Artifact | null;
+}) {
   const manifest = getArtifactClientManifest(artifact.type);
   const Renderer = manifest ? getArtifactRenderer(manifest.rendererKey) : null;
 
-  return Renderer ? <Renderer artifact={artifact} isBusy={isBusy} /> : <ArtifactFallback artifact={artifact} />;
+  return Renderer ? (
+    <Renderer artifact={artifact} isBusy={isBusy} previousArtifact={previousArtifact} />
+  ) : (
+    <ArtifactFallback artifact={artifact} />
+  );
 }
 
 function processMaterialsForNode(node: TreeNode | null): ProcessMaterial[] {

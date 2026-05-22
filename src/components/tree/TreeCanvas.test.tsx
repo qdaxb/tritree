@@ -405,6 +405,28 @@ describe("TreeCanvas", () => {
     expect(compactSvgRule).toContain("height: 100%");
   });
 
+  it("crops the compact tree svg to rendered graph bounds so nodes stay legible", () => {
+    const path = buildDenseSelectedPath(3);
+    render(
+      <TreeCanvas
+        currentNode={path.at(-1) ?? null}
+        display="tree"
+        isBusy={false}
+        onChoose={vi.fn()}
+        pendingChoice={null}
+        selectedPath={path}
+        treeLabelMode="compact"
+        treeNodes={path}
+      />
+    );
+
+    const svg = screen.getByRole("img", { name: "AI 内容方向示意图" });
+    const [, , width, height] = (svg.getAttribute("viewBox") ?? "").split(/\s+/).map(Number);
+
+    expect(width).toBeLessThan(760);
+    expect(height).toBeLessThan(260);
+  });
+
   it("does not reserve tree viewport space in options-only mode", () => {
     const { container } = render(
       <TreeCanvas
@@ -668,16 +690,37 @@ describe("TreeCanvas", () => {
 
     expect(onChoose).not.toHaveBeenCalled();
     expect(screen.queryByRole("group", { name: "已选方向" })).not.toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "三个主选项" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /A 具体场景/ }).closest(".branch-card")).toHaveClass("branch-card--selected");
-    expect(screen.getByText("已选 A")).toBeInTheDocument();
-    expect(within(screen.getByRole("group", { name: "A 写作操作" })).queryByText("具体场景")).not.toBeInTheDocument();
-    expect(within(screen.getByRole("group", { name: "A 写作操作" })).queryByText(longDescription)).not.toBeInTheDocument();
-    expect(screen.getByLabelText("补充想法 A")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "三个主选项" })).toHaveClass("branch-option-main--selection-active");
+    expect(screen.getByRole("button", { name: /B 实践经验/ })).toBeDisabled();
+    const composer = screen.getByRole("group", { name: "A 写作操作" });
+    expect(within(composer).getByText("已选 A")).toBeInTheDocument();
+    expect(within(composer).getByText("具体场景")).toBeInTheDocument();
+    expect(within(composer).getByText(longDescription)).toBeInTheDocument();
+    expect(within(composer).getByText("New angle")).toBeInTheDocument();
+    expect(screen.getByLabelText("补充想法 A").tagName).toBe("TEXTAREA");
     expect(screen.getByRole("button", { name: "A 按这个方向写" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "关闭写作操作" })).toBeInTheDocument();
     expect(screen.getByLabelText("补充想法 A")).toHaveAttribute("placeholder", "还想补一句吗？");
     expect(screen.queryByRole("group", { name: "其他方向" })).not.toBeInTheDocument();
     expect(screen.queryByText("更多备注")).not.toBeInTheDocument();
+  });
+
+  it("lets the user collapse the submit panel and choose a different option", () => {
+    render(
+      <BranchOptionTray
+        isBusy={false}
+        onChoose={vi.fn()}
+        options={currentNode.options}
+        pendingChoice={null}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /A 具体场景/ }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭写作操作" }));
+
+    expect(screen.queryByRole("group", { name: "A 写作操作" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "三个主选项" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /B 实践经验/ })).toBeEnabled();
   });
 
   it("submits supplemental requests from the shared writing controls", () => {
@@ -1266,6 +1309,53 @@ describe("TreeCanvas", () => {
     expect(svg).toHaveStyle({ height: "100%", minHeight: "0", width: "100%" });
   });
 
+  it("opens compact tree mode instead of activating individual nodes", () => {
+    const onActivateBranch = vi.fn();
+    const onChoose = vi.fn();
+    const onOpenTree = vi.fn();
+    const onViewNode = vi.fn();
+    const { container } = render(
+      <TreeCanvas
+        currentNode={selectedNodeWithFolded}
+        isBusy={false}
+        onActivateBranch={onActivateBranch}
+        onChoose={onChoose}
+        onOpenTree={onOpenTree}
+        onViewNode={onViewNode}
+        pendingChoice={null}
+        selectedPath={[currentNode, selectedNodeWithFolded]}
+        treeLabelMode="compact"
+      />
+    );
+
+    const historyNode = container.querySelector(".tree-node--history");
+
+    expect(container.querySelector(".tree-canvas")).toHaveClass("tree-canvas--openable");
+    expect(historyNode).toBeInTheDocument();
+
+    fireEvent.click(historyNode as Element);
+
+    expect(onOpenTree).toHaveBeenCalledTimes(1);
+    expect(onActivateBranch).not.toHaveBeenCalled();
+    expect(onChoose).not.toHaveBeenCalled();
+    expect(onViewNode).not.toHaveBeenCalled();
+  });
+
+  it("marks compact openable tree previews with pointer cursor styles", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const openableRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--openable\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const openableViewportRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--openable \.tree-viewport\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
+      "";
+    const openableNodeRule =
+      css.match(/\.tree-canvas--compact\.tree-canvas--openable \.tree-node\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(openableRule).toContain("cursor: pointer");
+    expect(openableViewportRule).toContain("cursor: pointer");
+    expect(openableNodeRule).toContain("cursor: pointer");
+  });
+
   it("shows visual node labels in detail tree mode", () => {
     const { container } = render(
       <TreeCanvas
@@ -1584,20 +1674,47 @@ describe("TreeCanvas", () => {
     expect(mobileRule).toContain("margin-left: 0");
   });
 
-  it("uses the compact bottom writing bar for selected mobile options", () => {
+  it("uses a calm selected-option submit panel with a raised note field", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const mobileWorkspaceRule = css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)
       ?.groups?.body ?? "";
     const composerRule =
       css.match(/\.branch-option-composer--inline\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const inlineTextareaRule =
+      css.match(/\.branch-option-composer--inline \.branch-option-composer__note textarea\s*\{(?<body>[^}]+)\}/)?.groups
+        ?.body ?? "";
     const compactComposerRule =
       mobileWorkspaceRule.match(/\.tree-canvas--options \.branch-option-composer--inline\s*\{(?<body>[^}]+)\}/)?.groups
         ?.body ?? "";
 
-    expect(composerRule).toContain("grid-template-columns: auto minmax(0, 1fr) auto auto");
-    expect(composerRule).toContain("box-shadow: none");
-    expect(compactComposerRule).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(composerRule).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(composerRule).toContain('"summary close"');
+    expect(composerRule).toContain('"note note"');
+    expect(composerRule).toContain('"submit submit"');
+    expect(inlineTextareaRule).toContain("min-height: 88px");
+    expect(composerRule).toContain("box-shadow: 0 8px 18px");
+    expect(compactComposerRule).toContain('"summary close"');
+    expect(compactComposerRule).toContain('"note note"');
+    expect(compactComposerRule).toContain('"submit submit"');
     expect(mobileWorkspaceRule).not.toContain(".tree-canvas--options .branch-option-focus");
+  });
+
+  it("overlays the submit panel without taking height from the option area", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const selectedInputRule =
+      css.match(/\.branch-option-custom-input--selected\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+    const scrimRule =
+      css.match(/\.branch-option-main--selection-active::after\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
+
+    expect(css).not.toContain(".branch-option-selection-summary");
+    expect(selectedInputRule).toContain("position: absolute");
+    expect(selectedInputRule).toContain("bottom: 0");
+    expect(selectedInputRule).toContain("z-index: 8");
+    expect(scrimRule).toContain("inset: 0");
+    expect(scrimRule).toContain("box-sizing: border-box");
+    expect(scrimRule).not.toContain("inset: -4px");
+    expect(scrimRule).toContain("pointer-events: none");
+    expect(scrimRule).toContain("backdrop-filter: blur(1.5px)");
   });
 
   it("lets the full mobile options question expand the page height", () => {

@@ -122,7 +122,8 @@ export const treeNodes = sqliteTable("tree_nodes", {
   foldedOptionsJson: text("folded_options_json").notNull(),
   agentMessagesJson: text("agent_messages_json").notNull().default("[]"),
   isTerminal: integer("is_terminal").notNull().default(0),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)
 });
 
 export const artifacts = sqliteTable("artifacts", {
