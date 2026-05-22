@@ -33,7 +33,8 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
     onSelectComparisonNode,
     onViewNode,
     optionsHeaderAction,
-    skills
+    skills,
+    treeLabelMode
   }: {
     changedArtifactNodeIds?: string[];
     comparisonNodeIds?: { fromNodeId: string | null; toNodeId: string | null } | null;
@@ -50,8 +51,11 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
     onViewNode?: (nodeId: string) => void;
     optionsHeaderAction?: ReactNode;
     skills?: Skill[];
-  }) =>
-    treeCanvasMock({
+    treeLabelMode?: "compact" | "detail";
+  }) => {
+    const exposesPrimaryTestIds = display !== "tree";
+
+    return treeCanvasMock({
       changedArtifactNodeIds,
       comparisonNodeIds,
       currentNode,
@@ -66,22 +70,32 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
       onSelectComparisonNode,
       onViewNode,
       optionsHeaderAction,
-      skills
+      skills,
+      treeLabelMode
     }) || (
-      <div data-testid="tree-canvas">
+      <div data-testid={exposesPrimaryTestIds ? "tree-canvas" : undefined}>
         {isBusy ? "choices disabled" : "choices enabled"}
         {isComparisonMode ? " comparison mode" : ""}
         <div data-testid="canvas-display">{display}</div>
-        <div data-testid="canvas-current-node">{currentNode?.id ?? "none"}</div>
-        <div data-testid="canvas-round-intent">{currentNode?.roundIntent ?? ""}</div>
-        <div data-testid="canvas-generation-stage">
-          {generationStage ? `${generationStage.nodeId}:${generationStage.stage}` : "idle"}
-        </div>
+        <div data-testid="canvas-tree-label-mode">{treeLabelMode ?? "detail"}</div>
+        {exposesPrimaryTestIds ? (
+          <>
+            <div data-testid="canvas-current-node">{currentNode?.id ?? "none"}</div>
+            <div data-testid="canvas-round-intent">{currentNode?.roundIntent ?? ""}</div>
+            <div data-testid="canvas-generation-stage">
+              {generationStage ? `${generationStage.nodeId}:${generationStage.stage}` : "idle"}
+            </div>
+          </>
+        ) : null}
         {display === "options" && optionsHeaderAction ? (
           <div data-testid="canvas-options-header-action">{optionsHeaderAction}</div>
         ) : null}
-        <div data-testid="canvas-options">{currentNode?.options.map((option) => option.label).join("|") ?? ""}</div>
-        <div data-testid="canvas-skills">{skills?.map((skill) => skill.title).join("|")}</div>
+        {exposesPrimaryTestIds ? (
+          <>
+            <div data-testid="canvas-options">{currentNode?.options.map((option) => option.label).join("|") ?? ""}</div>
+            <div data-testid="canvas-skills">{skills?.map((skill) => skill.title).join("|")}</div>
+          </>
+        ) : null}
         {display !== "options" ? (
           <>
             <button onClick={() => onActivateBranch?.("node-1", "a")} type="button">
@@ -123,7 +137,8 @@ vi.mock("@/components/tree/TreeCanvas", () => ({
           </>
         ) : null}
       </div>
-    )
+    );
+  }
 }));
 
 vi.mock("@/components/artifacts/ArtifactWorkspace", () => ({
@@ -1427,7 +1442,7 @@ describe("TreeableApp", () => {
     expect(screen.getByTestId("live-artifact")).toBeInTheDocument();
   });
 
-  it("expands and restores the desktop artifact workspace", async () => {
+  it("uses a permanent left artifact and right control desktop layout", async () => {
     installDesktopViewport();
     const fetchMock = vi
       .fn()
@@ -1438,33 +1453,42 @@ describe("TreeableApp", () => {
 
     render(<TreeableApp />);
 
-    const expandButton = await screen.findByRole("button", { name: "展开右侧布局" });
+    await screen.findByTestId("live-artifact");
     const shell = screen.getByRole("main");
+    const artifactPanel = document.querySelector(".mobile-panel--artifact");
+    const controlPanel = screen.getByRole("region", { name: "桌面控制区" });
+    const shellChildren = Array.from(shell.children);
 
-    expect(shell).not.toHaveClass("app-shell--artifact-expanded");
-    expect(expandButton).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["full"]);
-
-    await userEvent.click(expandButton);
-
-    expect(shell).toHaveClass("app-shell--artifact-expanded");
-    expect(screen.getByRole("button", { name: "收起右侧布局" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("group", { name: "PC 树图控制" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "展开树图" })).toHaveAttribute("aria-expanded", "false");
-    expect(within(screen.getByTestId("tree-canvas")).getByRole("group", { name: "PC 树图控制" })).toBeInTheDocument();
-    expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["options"]);
-
-    await userEvent.click(screen.getByRole("button", { name: "展开树图" }));
-
-    expect(screen.getByRole("button", { name: "收起树图" })).toHaveAttribute("aria-expanded", "true");
+    expect(shell).toHaveClass("app-shell--artifact-focused");
+    expect(shell).not.toHaveClass("app-shell--control-expanded");
+    expect(artifactPanel).not.toBeNull();
+    expect(shellChildren.indexOf(artifactPanel as Element)).toBeLessThan(shellChildren.indexOf(controlPanel));
+    expect(screen.getByRole("button", { name: "展开控制区" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["tree", "options"]);
+    expect(screen.getAllByTestId("canvas-tree-label-mode").map((item) => item.textContent)).toEqual([
+      "compact",
+      "compact"
+    ]);
 
-    await userEvent.click(screen.getByRole("button", { name: "收起右侧布局" }));
+    await userEvent.click(screen.getByRole("button", { name: "展开控制区" }));
 
-    expect(shell).not.toHaveClass("app-shell--artifact-expanded");
-    expect(screen.queryByRole("group", { name: "PC 树图控制" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "展开右侧布局" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["full"]);
+    expect(shell).toHaveClass("app-shell--control-expanded");
+    expect(screen.getByRole("button", { name: "收起控制区" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByTestId("canvas-display").map((item) => item.textContent)).toEqual(["tree", "options"]);
+    expect(screen.getAllByTestId("canvas-tree-label-mode").map((item) => item.textContent)).toEqual([
+      "detail",
+      "detail"
+    ]);
+
+    await userEvent.click(screen.getByRole("button", { name: "收起控制区" }));
+
+    expect(shell).toHaveClass("app-shell--artifact-focused");
+    expect(shell).not.toHaveClass("app-shell--control-expanded");
+    expect(screen.getByRole("button", { name: "展开控制区" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByTestId("canvas-tree-label-mode").map((item) => item.textContent)).toEqual([
+      "compact",
+      "compact"
+    ]);
   });
 
   it("defines a wider desktop grid for the expanded artifact workspace", () => {
@@ -3633,7 +3657,8 @@ describe("TreeableApp", () => {
       );
       expect(screen.getByTestId("canvas-generation-stage")).toHaveTextContent("node-1:options");
       expect(screen.getByTestId("canvas-options")).toBeEmptyDOMElement();
-      expect(screen.getByTestId("tree-canvas").closest(".canvas-region")).not.toHaveClass("module--generating");
+      expect(screen.getByTestId("tree-canvas").closest(".desktop-control-region__options")).toBeInTheDocument();
+      expect(screen.getByTestId("tree-canvas").closest(".module--generating")).not.toBeInTheDocument();
     });
 
     act(() => {
