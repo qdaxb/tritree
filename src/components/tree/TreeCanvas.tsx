@@ -3,15 +3,7 @@
 import * as d3 from "d3";
 import clsx from "clsx";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   isPrimaryBranchOptionId,
   type BranchOption,
@@ -36,6 +28,7 @@ import type {
 } from "./types";
 import { BranchCompletePanel, BranchOptionTray } from "./BranchOptionTray";
 import { TreeOperationHint } from "./TreeOperationHint";
+import { useTreeCanvasMeasurement, useTreeViewport } from "./useTreeViewport";
 export { BranchOptionButton, BranchOptionTray } from "./BranchOptionTray";
 export {
   compactBranchLabel,
@@ -117,22 +110,10 @@ export function TreeCanvas({
   optionsHeaderAction,
   treeLabelMode = "detail"
 }: TreeCanvasProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const treeViewportRef = useRef<HTMLDivElement>(null);
+  const { canvasWidth, containerRef } = useTreeCanvasMeasurement();
   const svgRef = useRef<SVGSVGElement>(null);
   const previousNodeIdRef = useRef<string | null>(null);
-  const dragStateRef = useRef<{
-    captured: boolean;
-    didDrag: boolean;
-    pointerId: number;
-    scrollLeft: number;
-    startX: number;
-    startY: number;
-  } | null>(null);
-  const suppressNextClickRef = useRef(false);
   const operationHintTouchedRef = useRef(false);
-  const [canvasWidth, setCanvasWidth] = useState(760);
-  const [isDraggingTree, setIsDraggingTree] = useState(false);
   const [isOperationHintExpanded, setIsOperationHintExpanded] = useState(!isMobileLayout);
   const [visibleOptionCount, setVisibleOptionCount] = useState(0);
   const renderedHistoryCount = useMemo(() => selectedPath.filter((node) => Boolean(node.id)).length, [selectedPath]);
@@ -144,13 +125,32 @@ export function TreeCanvas({
     () => getOptionBranchLayout(canvasWidth, renderedHistoryCount, inactiveRouteDepth),
     [canvasWidth, inactiveRouteDepth, renderedHistoryCount]
   );
-  const isTreeScrollable = branchLayout.width > canvasWidth + 1;
   const shouldShowTree = display !== "options";
   const isCompactTreeOverview = shouldShowTree && treeLabelMode === "compact";
   const shouldShowBranchControls = display !== "tree";
   const shouldInlineCustomOption = display === "options" && !isMobileLayout;
-  const shouldShowTreeScrollControls = !isCompactTreeOverview && isTreeScrollable;
   const nodeId = currentNode?.id ?? null;
+  const {
+    finishTreeViewportDrag,
+    handleTreeViewportClick,
+    handleTreeViewportClickCapture,
+    handleTreeViewportKeyDown,
+    handleTreeViewportPointerDown,
+    handleTreeViewportPointerMove,
+    isDraggingTree,
+    scrollTreeBy,
+    scrollTreeToLatest,
+    shouldShowTreeScrollControls,
+    treeViewportRef
+  } = useTreeViewport({
+    branchLayout,
+    canvasWidth,
+    isCompactTreeOverview,
+    isMobileLayout,
+    nodeId,
+    onOpenTree,
+    pendingBranchNodeId: pendingBranch?.nodeId ?? null
+  });
   const isBranchGenerating = Boolean(pendingBranch);
   const graphCurrentNode = isBranchGenerating ? null : currentNode;
   const isTerminalNode = currentNode?.isTerminal === true;
@@ -210,21 +210,6 @@ export function TreeCanvas({
   const treeSvgStyle = isCompactTreeOverview
     ? { height: "100%", minHeight: 0, width: "100%" }
     : { height: branchLayout.height, minHeight: 300, width: branchLayout.width };
-
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-
-    setCanvasWidth(element.clientWidth || 760);
-    if (typeof ResizeObserver === "undefined") return;
-
-    const resizeObserver = new ResizeObserver(([entry]) => {
-      setCanvasWidth(entry.contentRect.width);
-    });
-    resizeObserver.observe(element);
-
-    return () => resizeObserver.disconnect();
-  }, []);
 
   useEffect(() => {
     if (!operationHintTouchedRef.current) {
@@ -287,153 +272,6 @@ export function TreeCanvas({
       timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [currentNode?.id, currentPrimaryOptionCount, isOptionsGenerating]);
-
-  useEffect(() => {
-    if (isCompactTreeOverview) return;
-
-    if (isMobileLayout) {
-      scrollTreeToRoot("auto");
-      return;
-    }
-
-    scrollTreeToLatest("auto");
-  }, [branchLayout.height, branchLayout.width, isCompactTreeOverview, isMobileLayout, nodeId, pendingBranch?.nodeId]);
-
-  function scrollTreeToRoot(behavior: ScrollBehavior = "smooth") {
-    const viewport = treeViewportRef.current;
-    if (!viewport) return;
-
-    const top = Math.max(0, (viewport.scrollHeight - viewport.clientHeight) / 2);
-    if (typeof viewport.scrollTo === "function") {
-      viewport.scrollTo({ behavior, left: 0, top });
-      return;
-    }
-
-    viewport.scrollLeft = 0;
-    viewport.scrollTop = top;
-  }
-
-  function scrollTreeToLatest(behavior: ScrollBehavior = "smooth") {
-    const viewport = treeViewportRef.current;
-    if (!viewport) return;
-
-    const left = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-    const top = Math.max(0, (viewport.scrollHeight - viewport.clientHeight) / 2);
-    if (typeof viewport.scrollTo === "function") {
-      viewport.scrollTo({ behavior, left, top });
-      return;
-    }
-
-    viewport.scrollLeft = left;
-    viewport.scrollTop = top;
-  }
-
-  function scrollTreeBy(deltaX: number, deltaY: number) {
-    const viewport = treeViewportRef.current;
-    if (!viewport) return;
-
-    if (typeof viewport.scrollBy === "function") {
-      viewport.scrollBy({ behavior: "smooth", left: deltaX, top: deltaY });
-      return;
-    }
-
-    viewport.scrollLeft += deltaX;
-    viewport.scrollTop += deltaY;
-  }
-
-  function handleTreeViewportKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (isCompactTreeOverview) return;
-
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      scrollTreeBy(-180, 0);
-      return;
-    }
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      scrollTreeBy(180, 0);
-      return;
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      treeViewportRef.current?.scrollTo({ behavior: "smooth", left: 0 });
-      return;
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      scrollTreeToLatest();
-    }
-  }
-
-  function handleTreeViewportPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (isCompactTreeOverview) return;
-
-    const viewport = treeViewportRef.current;
-    if (!viewport || event.button !== 0) return;
-    if (isClickableTreePointerTarget(event.target)) return;
-
-    dragStateRef.current = {
-      captured: false,
-      didDrag: false,
-      pointerId: event.pointerId,
-      scrollLeft: viewport.scrollLeft,
-      startX: event.clientX,
-      startY: event.clientY
-    };
-  }
-
-  function handleTreeViewportPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    const viewport = treeViewportRef.current;
-    const dragState = dragStateRef.current;
-    if (!viewport || !dragState || dragState.pointerId !== event.pointerId) return;
-
-    const deltaX = event.clientX - dragState.startX;
-    const deltaY = event.clientY - dragState.startY;
-    const absX = Math.abs(deltaX);
-    const absY = Math.abs(deltaY);
-    if (!dragState.didDrag) {
-      if (absX <= 3 && absY <= 3) return;
-      if (absY > absX) {
-        dragStateRef.current = null;
-        setIsDraggingTree(false);
-        return;
-      }
-      dragState.didDrag = true;
-      setIsDraggingTree(true);
-      if (!dragState.captured && typeof event.currentTarget.setPointerCapture === "function") {
-        event.currentTarget.setPointerCapture(event.pointerId);
-        dragState.captured = true;
-      }
-    }
-    viewport.scrollLeft = dragState.scrollLeft - deltaX;
-    event.preventDefault();
-  }
-
-  function finishTreeViewportDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    const dragState = dragStateRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    suppressNextClickRef.current = dragState.didDrag;
-    dragStateRef.current = null;
-    setIsDraggingTree(false);
-    if (dragState.captured && typeof event.currentTarget.releasePointerCapture === "function") {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  }
-
-  function handleTreeViewportClickCapture(event: ReactMouseEvent<HTMLDivElement>) {
-    if (!suppressNextClickRef.current) return;
-    suppressNextClickRef.current = false;
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  function handleTreeViewportClick(event: ReactMouseEvent<HTMLDivElement>) {
-    if (!isCompactTreeOverview || !onOpenTree) return;
-    event.preventDefault();
-    event.stopPropagation();
-    onOpenTree();
-  }
 
   useEffect(() => {
     const svgElement = svgRef.current;
@@ -831,8 +669,4 @@ function linkStroke(link: ForceTreeLink, nodeById: Map<string, ForceTreeNode>, c
 
 function isPendingOption(datum: ForceTreeNode, pendingChoice: BranchOption["id"] | null) {
   return datum.kind === "option" && datum.option?.id === pendingChoice;
-}
-
-function isClickableTreePointerTarget(target: EventTarget | null) {
-  return target instanceof Element && Boolean(target.closest(".tree-node--clickable"));
 }
