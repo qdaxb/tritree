@@ -5,12 +5,12 @@ import { DatabaseSync } from "node:sqlite";
 import { nanoid } from "nanoid";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDatabase } from "./client";
-import { createTreeableRepository } from "./repository";
+import { createTritreeRepository } from "./repository";
 import type { BranchOption } from "@/lib/domain";
 import { DEFAULTS_CONFIG_PATH_ENV, type ConfiguredDefaults, type ConfiguredSystemSkill } from "@/lib/defaults";
 
 function testDbPath() {
-  return path.join(mkdtempSync(path.join(tmpdir(), "treeable-")), "test.sqlite");
+  return path.join(mkdtempSync(path.join(tmpdir(), "tritree-")), "test.sqlite");
 }
 
 const exampleDefaultsConfigPath = path.resolve("config/defaults.example.json");
@@ -73,7 +73,7 @@ function writeDefaultsConfig({
   return configPath;
 }
 
-type Repository = ReturnType<typeof createTreeableRepository>;
+type Repository = ReturnType<typeof createTritreeRepository>;
 
 const nextOptions: BranchOption[] = [
   { id: "a", label: "扩展案例", description: "补充一个真实情境。", impact: "内容更具体。", kind: "explore" },
@@ -94,7 +94,7 @@ async function createTestUser(repo: Repository, username: string, role: "admin" 
 
 async function createRepositoryHarness() {
   const dbPath = path.join(tmpdir(), `tritree-artifacts-${nanoid()}.sqlite`);
-  const repo = createTreeableRepository(dbPath, { skillInstallRoot: path.join(tmpdir(), `skills-${nanoid()}`) });
+  const repo = createTritreeRepository(dbPath, { skillInstallRoot: path.join(tmpdir(), `skills-${nanoid()}`) });
   const user = await repo.createUser({
     username: `user-${nanoid()}`,
     displayName: "Test User",
@@ -138,7 +138,7 @@ async function createSessionWithOptions(repo: Repository, userId: string, enable
   });
 }
 
-describe("Treeable repository", () => {
+describe("Tritree repository", () => {
   beforeEach(() => {
     vi.stubEnv(DEFAULTS_CONFIG_PATH_ENV, exampleDefaultsConfigPath);
   });
@@ -148,7 +148,7 @@ describe("Treeable repository", () => {
   });
 
   it("creates the first local user as the initial administrator", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
 
     expect(repo.hasUsers()).toBe(false);
 
@@ -168,7 +168,7 @@ describe("Treeable repository", () => {
   });
 
   it("verifies local password login without exposing inactive users", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "correct horse battery staple" });
     const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
 
@@ -183,7 +183,7 @@ describe("Treeable repository", () => {
   });
 
   it("manages users and protects the final active administrator", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
     const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
 
@@ -195,7 +195,7 @@ describe("Treeable repository", () => {
   });
 
   it("binds and deletes OIDC identities through the owning user", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
     const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
     const identity = repo.bindOidcIdentity(admin.id, {
@@ -215,7 +215,7 @@ describe("Treeable repository", () => {
   });
 
   it("isolates root memory and latest sessions by user", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const first = await createTestUser(repo, "first");
     const second = await createTestUser(repo, "second");
     const firstRoot = repo.saveRootMemory(first.id, {
@@ -586,7 +586,7 @@ describe("Treeable repository", () => {
   });
 
   it("lists, renames, and archives artifact sessions by user", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
     const otherUser = await createTestUser(repo, "other-writer");
     const older = await createSessionWithOptions(repo, user.id);
@@ -617,7 +617,7 @@ describe("Treeable repository", () => {
 
   it("preserves finished status in artifact summaries", async () => {
     const dbPath = testDbPath();
-    const repo = createTreeableRepository(dbPath);
+    const repo = createTritreeRepository(dbPath);
     const user = await createTestUser(repo, "writer");
     const state = await createSessionWithOptions(repo, user.id);
     const sqlite = new DatabaseSync(dbPath);
@@ -630,7 +630,7 @@ describe("Treeable repository", () => {
 
   it("rejects archived artifact mutations without changing persisted rows", async () => {
     const dbPath = testDbPath();
-    const repo = createTreeableRepository(dbPath);
+    const repo = createTritreeRepository(dbPath);
     const user = await createTestUser(repo, "writer");
     const state = await createSessionWithOptions(repo, user.id, []);
     repo.archiveSession(user.id, state.session.id);
@@ -678,7 +678,7 @@ describe("Treeable repository", () => {
   });
 
   it("activates an existing historical artifact branch without creating another child", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
     const first = await createSessionWithOptions(repo, user.id);
     const oldRoute = repo.createArtifactChild({
@@ -709,7 +709,7 @@ describe("Treeable repository", () => {
   });
 
   it("reactivating an analysis branch does not title the session from stale artifact rows", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
     const first = await createSessionWithOptions(repo, user.id);
     const oldRoute = repo.createArtifactChild({
@@ -750,7 +750,7 @@ describe("Treeable repository", () => {
   });
 
   it("creates sessions with default enabled skills and replaces them", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
     const state = await createSessionWithOptions(repo, user.id);
 
@@ -771,7 +771,7 @@ describe("Treeable repository", () => {
   });
 
   it("isolates custom skills while keeping system skills global", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const first = await createTestUser(repo, "first");
     const second = await createTestUser(repo, "second");
 
@@ -794,7 +794,7 @@ describe("Treeable repository", () => {
   it("updates configured system skills when the config file changes", async () => {
     const dbPath = testDbPath();
     const configPath = writeDefaultsConfig({ systemSkills: repositorySystemSkills });
-    const first = createTreeableRepository(dbPath, { defaultsConfigPath: configPath });
+    const first = createTritreeRepository(dbPath, { defaultsConfigPath: configPath });
     const user = await createTestUser(first, "writer");
 
     expect(first.listSkills(user.id).find((skill) => skill.id === "system-writer")?.prompt).toContain("seed");
@@ -815,7 +815,7 @@ describe("Treeable repository", () => {
       )
     );
 
-    const reopened = createTreeableRepository(dbPath, { defaultsConfigPath: configPath });
+    const reopened = createTritreeRepository(dbPath, { defaultsConfigPath: configPath });
     const updated = reopened.listSkills(user.id).find((skill) => skill.id === "system-writer");
 
     expect(updated).toEqual(expect.objectContaining({ title: "配置写作者", prompt: "配置文件里的新版写作者提示词。" }));
@@ -829,7 +829,7 @@ describe("Treeable repository", () => {
     mkdirSync(path.join(skillDir, "skills", "research"), { recursive: true });
     writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: local-travel\ndescription: 本地主题写作 Skill。\n---\n\n# Local Travel");
     writeFileSync(path.join(skillDir, "skills", "research", "SKILL.md"), "---\nname: research\ndescription: 查询目的地参考资料。\n---\n\n# Research");
-    const repo = createTreeableRepository(testDbPath(), { skillInstallRoot: installRoot });
+    const repo = createTritreeRepository(testDbPath(), { skillInstallRoot: installRoot });
     const user = await createTestUser(repo, "writer");
 
     const discovered = repo.listSkills(user.id).find((skill) => skill.id === "local-travel");
@@ -840,7 +840,7 @@ describe("Treeable repository", () => {
   });
 
   it("copies and manages creation request options per user", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const first = await createTestUser(repo, "first");
     const second = await createTestUser(repo, "second");
 
@@ -894,7 +894,7 @@ describe("Treeable repository", () => {
     `);
     sqlite.close();
 
-    createTreeableRepository(dbPath);
+    createTritreeRepository(dbPath);
     const migrated = new DatabaseSync(dbPath);
     const sessionColumns = migrated.prepare("PRAGMA table_info(sessions);").all() as Array<{ name: string }>;
     const rootColumns = migrated.prepare("PRAGMA table_info(root_memory);").all() as Array<{ name: string }>;
@@ -908,7 +908,7 @@ describe("Treeable repository", () => {
   });
 
   it("rejects sessions for missing root memory", async () => {
-    const repo = createTreeableRepository(testDbPath());
+    const repo = createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
 
     expect(() => repo.createSession({ userId: user.id, rootMemoryId: "missing-root", enabledSkillIds: [] })).toThrow(
@@ -931,7 +931,7 @@ describe("Treeable repository", () => {
 
     const configPath = writeDefaultsConfig({ systemSkills: repositorySystemSkills });
 
-    expect(() => createTreeableRepository(dbPath, { defaultsConfigPath: configPath })).toThrow(
+    expect(() => createTritreeRepository(dbPath, { defaultsConfigPath: configPath })).toThrow(
       "System skill config id system-writer conflicts with an existing non-system skill."
     );
   });

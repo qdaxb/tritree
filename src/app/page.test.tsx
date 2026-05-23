@@ -10,8 +10,8 @@ vi.mock("@/auth", () => ({
   auth: authMock
 }));
 
-vi.mock("@/components/TreeableApp", () => ({
-  TreeableApp: vi.fn(() => null)
+vi.mock("@/components/TritreeApp", () => ({
+  TritreeApp: vi.fn(() => null)
 }));
 
 vi.mock("@/lib/db/repository", () => ({

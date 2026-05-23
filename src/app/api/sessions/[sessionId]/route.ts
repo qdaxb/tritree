@@ -38,7 +38,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ sessi
     const response = authErrorResponse(error);
     if (response) return response;
     if (isBadRequestError(error)) return badRequestResponse(error);
-    console.error("[treeable:rename-session]", error);
+    console.error("[tritree:rename-session]", error);
     return NextResponse.json({ error: "无法重命名作品。" }, { status: 500 });
   }
 }
@@ -54,7 +54,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ ses
   } catch (error) {
     const response = authErrorResponse(error);
     if (response) return response;
-    console.error("[treeable:archive-session]", error);
+    console.error("[tritree:archive-session]", error);
     return NextResponse.json({ error: "无法归档作品。" }, { status: 500 });
   }
 }

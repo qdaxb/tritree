@@ -212,7 +212,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         send({ type: "done", state: nextState });
       } catch (error) {
         if (request.signal.aborted || isAbortError(error)) return;
-        console.error("[treeable:generate-artifact-stream]", error);
+        console.error("[tritree:generate-artifact-stream]", error);
         send({ type: "error", error: publicServerErrorMessage(error, "无法生成下一版作品。") });
       } finally {
         controller.close();

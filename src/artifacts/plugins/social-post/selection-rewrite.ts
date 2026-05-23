@@ -3,7 +3,7 @@ import { z } from "zod";
 import { skillsForTarget, type Skill } from "@/lib/domain";
 import { parseDirectorJsonObject } from "@/lib/ai/director";
 import { logTritreeAiResponse, logTritreeAiStream } from "@/lib/ai/debug-log";
-import { createTreeableAnthropicModel } from "@/lib/ai/mastra-agents";
+import { createTritreeAnthropicModel } from "@/lib/ai/mastra-agents";
 import { formatEnabledSkills, type DirectorMessage } from "@/lib/ai/prompts";
 import type { SocialPostPayload } from "./schema";
 
@@ -114,10 +114,10 @@ replacementText must be non-empty.
 
 export function createSocialPostSelectionRewriteAgent(env: Record<string, string | undefined> = process.env) {
   return new Agent({
-    id: "treeable-social-post-selection-rewrite-agent",
-    name: "Treeable Social Post Selection Rewrite Agent",
+    id: "tritree-social-post-selection-rewrite-agent",
+    name: "Tritree Social Post Selection Rewrite Agent",
     instructions: SOCIAL_POST_SELECTION_REWRITE_SYSTEM_PROMPT,
-    model: createTreeableAnthropicModel(env),
+    model: createTritreeAnthropicModel(env),
     defaultOptions: { modelSettings: { maxOutputTokens: 32000 } }
   });
 }

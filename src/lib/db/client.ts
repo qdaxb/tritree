@@ -4,15 +4,15 @@ import { DatabaseSync } from "node:sqlite";
 
 const CURRENT_SCHEMA_VERSION = 14;
 const CONTENT_RESET_SCHEMA_VERSION = 12;
-const TREEABLE_CONTENT_TABLES = [
+const TRITREE_CONTENT_TABLES = [
   "artifacts",
   "branch_history",
   "tree_nodes",
   "session_enabled_skills",
   "sessions"
 ];
-const TREEABLE_TABLES = [
-  ...TREEABLE_CONTENT_TABLES,
+const TRITREE_TABLES = [
+  ...TRITREE_CONTENT_TABLES,
   "creation_request_options",
   "skills",
   "user_oidc_identities",
@@ -23,7 +23,7 @@ const TREEABLE_TABLES = [
 class UnsupportedDatabaseVersionError extends Error {
   constructor(version: number) {
     super(
-      `Treeable database schema version ${version} is newer than this app supports. Back up your local database before changing app versions.`
+      `Tritree database schema version ${version} is newer than this app supports. Back up your local database before changing app versions.`
     );
   }
 }
@@ -43,7 +43,7 @@ export function createDatabase(dbPath = defaultDbPath()) {
 
 function migrate(sqlite: DatabaseSync) {
   const userVersion = sqlite.prepare("PRAGMA user_version;").get() as { user_version: number };
-  if (userVersion.user_version > CURRENT_SCHEMA_VERSION && hasTreeableTables(sqlite)) {
+  if (userVersion.user_version > CURRENT_SCHEMA_VERSION && hasTritreeTables(sqlite)) {
     throw new UnsupportedDatabaseVersionError(userVersion.user_version);
   }
 
@@ -55,8 +55,8 @@ function migrate(sqlite: DatabaseSync) {
   sqlite.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION};`);
 }
 
-function hasTreeableTables(sqlite: DatabaseSync) {
-  return TREEABLE_TABLES.some((table) => {
+function hasTritreeTables(sqlite: DatabaseSync) {
+  return TRITREE_TABLES.some((table) => {
     const row = sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
     return Boolean(row);
   });
@@ -64,7 +64,7 @@ function hasTreeableTables(sqlite: DatabaseSync) {
 
 function resetContentTables(sqlite: DatabaseSync) {
   sqlite.exec("PRAGMA foreign_keys = OFF;");
-  for (const table of TREEABLE_CONTENT_TABLES) {
+  for (const table of TRITREE_CONTENT_TABLES) {
     sqlite.exec(`DROP TABLE IF EXISTS ${table};`);
   }
   sqlite.exec("PRAGMA foreign_keys = ON;");

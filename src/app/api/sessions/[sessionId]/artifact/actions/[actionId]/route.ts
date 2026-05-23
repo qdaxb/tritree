@@ -99,7 +99,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
       return NextResponse.json({ error: error.publicMessage }, { status: 409 });
     }
 
-    console.error("[treeable:artifact-action]", error);
+    console.error("[tritree:artifact-action]", error);
     return NextResponse.json({ error: publicServerErrorMessage(error, "无法执行作品操作。") }, { status: 500 });
   }
 }

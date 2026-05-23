@@ -407,7 +407,7 @@ function activePathFor(nodes: TreeNode[], currentNode: TreeNode | null) {
   return path;
 }
 
-export function createTreeableRepository(
+export function createTritreeRepository(
   dbPath = defaultDbPath(),
   {
     skillInstallRoot = defaultSkillInstallRoot(),
@@ -1987,16 +1987,16 @@ export function createTreeableRepository(
   };
 }
 
-type TreeableRepository = ReturnType<typeof createTreeableRepository>;
+type TritreeRepository = ReturnType<typeof createTritreeRepository>;
 
-let repositoryInstance: TreeableRepository | null = null;
+let repositoryInstance: TritreeRepository | null = null;
 
 export function getRepository() {
-  repositoryInstance ??= createTreeableRepository();
+  repositoryInstance ??= createTritreeRepository();
   return repositoryInstance;
 }
 
-export const repository = new Proxy({} as TreeableRepository, {
+export const repository = new Proxy({} as TritreeRepository, {
   get(_target, property, receiver) {
     return Reflect.get(getRepository(), property, receiver);
   }

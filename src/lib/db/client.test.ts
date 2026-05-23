@@ -21,12 +21,12 @@ describe("defaultDbPath", () => {
 
   it("prefers TRITREE_DB_PATH while keeping TREEABLE_DB_PATH as a legacy fallback", () => {
     process.env.TRITREE_DB_PATH = "/tmp/new-tritree.sqlite";
-    process.env.TREEABLE_DB_PATH = "/tmp/old-treeable.sqlite";
+    process.env.TREEABLE_DB_PATH = "/tmp/old-tritree.sqlite";
 
     expect(defaultDbPath()).toBe("/tmp/new-tritree.sqlite");
 
     delete process.env.TRITREE_DB_PATH;
-    expect(defaultDbPath()).toBe("/tmp/old-treeable.sqlite");
+    expect(defaultDbPath()).toBe("/tmp/old-tritree.sqlite");
   });
 });
 

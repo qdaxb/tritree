@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TreeableApp } from "./TreeableApp";
+import { TritreeApp } from "./TritreeApp";
 import { listArtifactTypes } from "@/lib/artifacts";
 import type { Artifact, SessionState, Skill } from "@/lib/domain";
 
@@ -674,7 +674,7 @@ function installArtifactBodyScrollMetrics(region: HTMLElement, metrics: { client
   });
 }
 
-describe("TreeableApp", () => {
+describe("TritreeApp", () => {
   afterEach(() => {
     liveArtifactMock.mockClear();
     treeCanvasMock.mockClear();
@@ -691,7 +691,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByText("Seed：我想写 AI 产品经理的真实困境")).toBeInTheDocument();
     expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
@@ -714,7 +714,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
     expect(artifactWorkspaceMock).toHaveBeenLastCalledWith(
@@ -740,7 +740,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
     expect(artifactWorkspaceMock).toHaveBeenLastCalledWith(
@@ -785,7 +785,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
     expect(artifactWorkspaceMock).toHaveBeenLastCalledWith(
@@ -864,7 +864,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
     expect(screen.getByTestId("artifact-workspace-selected")).toHaveTextContent("none");
@@ -898,7 +898,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: artifactState() }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "artifact action" }));
@@ -943,7 +943,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: artifactState() }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "save artifact" }));
@@ -991,7 +991,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
     expect(artifactWorkspaceMock).toHaveBeenLastCalledWith(
@@ -1077,7 +1077,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("artifact-workspace")).toBeInTheDocument();
     expect(artifactWorkspaceMock).toHaveBeenLastCalledWith(
@@ -1139,7 +1139,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(artifactStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
     await vi.waitFor(() => {
@@ -1201,7 +1201,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(artifactStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("artifact-workspace");
     const artifactBody = document.querySelector(".artifact-workspace__body") as HTMLDivElement;
@@ -1258,7 +1258,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(artifactStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("artifact-workspace");
     const artifactBody = document.querySelector(".artifact-workspace__body") as HTMLDivElement;
@@ -1336,7 +1336,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(artifactStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
     await vi.waitFor(() => {
@@ -1393,7 +1393,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(artifactStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
     await vi.waitFor(() => {
@@ -1433,7 +1433,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: requestedState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp initialSessionId="session deep/link" />);
+    render(<TritreeApp initialSessionId="session deep/link" />);
 
     expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions/session%20deep%2Flink");
@@ -1461,7 +1461,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: requestedState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp initialSessionId="session-1" />);
+    render(<TritreeApp initialSessionId="session-1" />);
 
     expect(await screen.findByText("Seed：深链里的旧念头")).toBeInTheDocument();
     expect(await screen.findByTestId("tree-canvas")).toHaveTextContent("choices enabled");
@@ -1483,7 +1483,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ inspirations: [] }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp startNewWork />);
+    render(<TritreeApp startNewWork />);
 
     expect(await screen.findByRole("textbox", { name: "创作 seed" })).toHaveValue("");
     expect(screen.getByText("未启用技能")).toBeInTheDocument();
@@ -1513,7 +1513,7 @@ describe("TreeableApp", () => {
       });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp startNewWork />);
+    render(<TritreeApp startNewWork />);
 
     const seed = await screen.findByRole("textbox", { name: "创作 seed" });
     await userEvent.click(await screen.findByRole("button", { name: "AI 产品真实困境" }));
@@ -1542,7 +1542,7 @@ describe("TreeableApp", () => {
       });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp startNewWork />);
+    render(<TritreeApp startNewWork />);
 
     expect(await screen.findByRole("button", { name: "社媒灵感" })).toBeInTheDocument();
 
@@ -1579,7 +1579,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse({ ...finishedState, rootMemory: onSubmitState }));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp startNewWork />);
+    render(<TritreeApp startNewWork />);
 
     expect(await screen.findByRole("button", { name: "PRD 灵感" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "作品类型" })).not.toBeInTheDocument();
@@ -1604,7 +1604,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "灵感加载失败。" }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp startNewWork />);
+    render(<TritreeApp startNewWork />);
 
     expect(await screen.findByRole("textbox", { name: "创作 seed" })).toHaveValue("");
     expect(screen.queryByRole("group", { name: "灵感列表" })).not.toBeInTheDocument();
@@ -1624,7 +1624,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ rootMemory }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp startNewWork />);
+    render(<TritreeApp startNewWork />);
 
     await userEvent.click(await screen.findByRole("button", { name: "立即设置" }));
     expect(await screen.findByRole("button", { name: "一键生成我的风格" })).toBeInTheDocument();
@@ -1638,7 +1638,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "not found" }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp initialSessionId="archived-session" />);
+    render(<TritreeApp initialSessionId="archived-session" />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("作品不存在或已归档。");
     expect(screen.getByRole("textbox", { name: "创作 seed" })).toHaveValue("");
@@ -1658,10 +1658,10 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ inspirations: [] }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { rerender } = render(<TreeableApp initialSessionId="missing-session" />);
+    const { rerender } = render(<TritreeApp initialSessionId="missing-session" />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("作品不存在或已归档。");
-    rerender(<TreeableApp startNewWork />);
+    rerender(<TritreeApp startNewWork />);
 
     expect(await screen.findByRole("textbox", { name: "创作 seed" })).toHaveValue("");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -1686,12 +1686,12 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ inspirations: [] }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { rerender } = render(<TreeableApp />);
+    const { rerender } = render(<TritreeApp />);
 
     await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions");
     });
-    rerender(<TreeableApp startNewWork />);
+    rerender(<TritreeApp startNewWork />);
 
     expect(await screen.findByRole("textbox", { name: "创作 seed" })).toHaveValue("");
     await act(async () => {
@@ -1713,7 +1713,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("live-artifact")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "移动端主面板" })).not.toBeInTheDocument();
@@ -1733,7 +1733,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("live-artifact");
     await userEvent.click(screen.getByRole("button", { name: "展开树图" }));
@@ -1758,7 +1758,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("tree-canvas")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "移动端主面板" })).not.toBeInTheDocument();
@@ -1775,7 +1775,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("live-artifact");
     const shell = screen.getByRole("main");
@@ -1945,7 +1945,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: finishedState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     const topbar = await screen.findByText("Seed：我想写 AI 产品经理的真实困境 | 本次创作要求：改成英文的");
     expect(topbar).toBeInTheDocument();
@@ -1962,7 +1962,7 @@ describe("TreeableApp", () => {
       vi.stubGlobal("fetch", fetchMock);
 
       render(
-        <TreeableApp
+        <TritreeApp
           currentUser={{
             id: "user-1",
             username: "awei",
@@ -1995,7 +1995,7 @@ describe("TreeableApp", () => {
       vi.stubGlobal("fetch", fetchMock);
 
       render(
-        <TreeableApp
+        <TritreeApp
           currentUser={{
             id: "user-1",
             username: "awei",
@@ -2029,7 +2029,7 @@ describe("TreeableApp", () => {
       vi.stubGlobal("fetch", fetchMock);
 
       render(
-        <TreeableApp
+        <TritreeApp
           currentUser={{
             id: "user-2",
             username: "xiaolin",
@@ -2054,7 +2054,7 @@ describe("TreeableApp", () => {
       vi.stubGlobal("fetch", fetchMock);
 
       render(
-        <TreeableApp
+        <TritreeApp
           currentUser={{
             id: "user-1",
             username: "awei",
@@ -2079,7 +2079,7 @@ describe("TreeableApp", () => {
       vi.stubGlobal("fetch", fetchMock);
 
       render(
-        <TreeableApp
+        <TritreeApp
           currentUser={{
             id: "user-2",
             username: "xiaolin",
@@ -2104,7 +2104,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: null }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByRole("textbox", { name: "创作 seed" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/sessions");
@@ -2142,7 +2142,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(finishedState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.type(await screen.findByRole("textbox", { name: "创作 seed" }), "我想写 AI 产品经理的真实困境");
     await userEvent.click(screen.getByRole("button", { name: "展开自定义创作要求" }));
@@ -2202,7 +2202,7 @@ describe("TreeableApp", () => {
       });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.type(await screen.findByRole("textbox", { name: "创作 seed" }), "我想写 AI 产品经理的真实困境");
     await userEvent.click(screen.getByRole("button", { name: "用这个念头开始" }));
@@ -2241,7 +2241,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ inspirations: [] }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByText("Seed：我想写 AI 产品经理的真实困境")).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "新念头" }));
@@ -2289,7 +2289,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(currentSettingsState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByText(/Seed：我想写 AI 产品经理的真实困境/)).toBeInTheDocument();
     await userEvent.click(within(document.querySelector(".topbar") as HTMLElement).getByRole("button", { name: "重新开始" }));
@@ -2364,7 +2364,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("live-artifact")).toBeInTheDocument();
     expect(liveArtifactMock).toHaveBeenLastCalledWith(expect.objectContaining({ previousArtifact: state.nodeArtifacts[0].artifact }));
@@ -2429,7 +2429,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("tree-canvas")).toBeInTheDocument();
     expect(treeCanvasMock).toHaveBeenLastCalledWith(
@@ -2504,7 +2504,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("live-artifact")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "start comparison" }));
@@ -2592,7 +2592,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "activate historical branch" }));
 
@@ -2655,7 +2655,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(generatedState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByRole("button", { name: "展开树图" })).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(screen.getByRole("button", { name: "choose displayed option" }));
@@ -2728,7 +2728,7 @@ describe("TreeableApp", () => {
     });
 
     try {
-      render(<TreeableApp />);
+      render(<TritreeApp />);
 
       expect(await screen.findByRole("button", { name: "展开树图" })).toBeInTheDocument();
       expect(document.querySelector(".mobile-artifact-region")).not.toHaveClass("mobile-artifact-region--generating");
@@ -2783,7 +2783,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByRole("button", { name: "展开树图" });
     await userEvent.click(screen.getByRole("button", { name: "展开树图" }));
@@ -2810,7 +2810,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(activeState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByRole("button", { name: "展开树图" })).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(screen.getByRole("button", { name: "regenerate focused options" }));
@@ -2853,7 +2853,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(recoveredOptionsState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("tree-canvas");
     expect(treeCanvasMock).toHaveBeenLastCalledWith(expect.objectContaining({ onRegenerateOptions: expect.any(Function) }));
@@ -2897,7 +2897,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByRole("button", { name: "展开树图" });
     await userEvent.click(screen.getByRole("button", { name: "展开树图" }));
@@ -3007,7 +3007,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(secondOptionsState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByRole("button", { name: "展开树图" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "choose displayed option" }));
@@ -3150,7 +3150,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: customBranchState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("tree-canvas");
     await userEvent.click(screen.getByRole("button", { name: "view historical node" }));
@@ -3191,7 +3191,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: updatedState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("canvas-skills")).toHaveTextContent("分析");
     const artifactPanel = screen.getByTestId("live-artifact");
@@ -3223,7 +3223,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state: activeState }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByText("Seed：我想写 AI 产品经理的真实困境")).toBeInTheDocument();
     const topbar = document.querySelector(".topbar") as HTMLElement;
@@ -3254,7 +3254,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ skill: createdSkill }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(screen.queryByRole("button", { name: "技能库" })).not.toBeInTheDocument();
 
@@ -3290,7 +3290,7 @@ describe("TreeableApp", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(
-      <TreeableApp
+      <TritreeApp
         currentUser={{
           id: "user-2",
           username: "xiaolin",
@@ -3363,7 +3363,7 @@ describe("TreeableApp", () => {
       .mockReturnValueOnce(optionsPromise);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "activate historical branch" }));
 
@@ -3453,7 +3453,7 @@ describe("TreeableApp", () => {
       .mockReturnValueOnce(optionsPromise);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -3551,7 +3551,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -3694,7 +3694,7 @@ describe("TreeableApp", () => {
       });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -3777,7 +3777,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(artifactStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -3892,7 +3892,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(artifactStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -3975,7 +3975,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(artifactStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -4029,7 +4029,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsStream.response);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("tree-canvas");
     expect(screen.getByTestId("canvas-options").textContent).toBe("A|B|C");
@@ -4137,7 +4137,7 @@ describe("TreeableApp", () => {
       .mockReturnValueOnce(optionsPromise);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -4254,7 +4254,7 @@ describe("TreeableApp", () => {
       });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -4357,7 +4357,7 @@ describe("TreeableApp", () => {
       .mockReturnValueOnce(optionsPromise);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -4463,7 +4463,7 @@ describe("TreeableApp", () => {
       .mockReturnValueOnce(optionsPromise);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
@@ -4603,7 +4603,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(optionsState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
     await userEvent.click(await screen.findByRole("button", { name: "choose displayed option" }));
 
     const failureToast = await screen.findByRole("status");
@@ -4706,7 +4706,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(optionsState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "use custom skill option" }));
 
@@ -4798,7 +4798,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("canvas-current-node")).toHaveTextContent("node-3");
     await userEvent.click(screen.getByRole("button", { name: "view historical node" }));
@@ -4884,7 +4884,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ state }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     expect(await screen.findByTestId("artifact-workspace-artifacts")).toHaveTextContent("artifact-root|artifact-history|artifact-current");
     expect(screen.getByTestId("artifact-workspace-selected")).toHaveTextContent("artifact-current");
@@ -4959,7 +4959,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(optionsState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "view historical node" }));
 
@@ -5084,7 +5084,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(optionsState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await userEvent.click(await screen.findByRole("button", { name: "view historical node" }));
     await userEvent.click(screen.getByRole("button", { name: "save artifact" }));
@@ -5165,7 +5165,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce(optionsNdjsonResponse(optionsState));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("live-artifact");
     await userEvent.click(screen.getByRole("button", { name: "rewrite selection" }));
@@ -5210,7 +5210,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "无法生成下一版作品。" }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("live-artifact");
     await userEvent.click(screen.getByRole("button", { name: "rewrite selection" }));
@@ -5245,7 +5245,7 @@ describe("TreeableApp", () => {
       .mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ error: "选中文本已经变化，请重新选择。" }) });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<TreeableApp />);
+    render(<TritreeApp />);
 
     await screen.findByTestId("live-artifact");
     await userEvent.click(screen.getByRole("button", { name: "rewrite stale selection" }));

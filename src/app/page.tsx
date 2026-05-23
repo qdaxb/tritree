@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { TreeableApp } from "@/components/TreeableApp";
+import { TritreeApp } from "@/components/TritreeApp";
 import { getRepository } from "@/lib/db/repository";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const startNewWork = firstParam(params.new) === "1";
 
   return (
-    <TreeableApp
+    <TritreeApp
       currentUser={{
         id: user.id,
         username: user.username,

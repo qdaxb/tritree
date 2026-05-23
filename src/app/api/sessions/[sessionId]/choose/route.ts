@@ -68,7 +68,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     });
     return NextResponse.json({ state: nextState });
   } catch (error) {
-    console.error("[treeable:choose-branch]", error);
+    console.error("[tritree:choose-branch]", error);
     return NextResponse.json({ error: publicServerErrorMessage(error, "无法继续这个分支。") }, { status: 500 });
   }
 }

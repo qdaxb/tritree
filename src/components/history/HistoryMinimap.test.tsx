@@ -23,7 +23,7 @@ const state: SessionState = {
   session: {
     artifactTypeId: "social-post",
     id: "session-1",
-    title: "Treeable session",
+    title: "Tritree session",
     status: "active",
     currentNodeId: "node-1",
     createdAt: "2026-04-25T00:00:00.000Z",

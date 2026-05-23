@@ -666,7 +666,7 @@ function logZodIssues(target: RuntimeSubmitTarget, stage: string, error: unknown
   const issues = zodIssuesFromError(error);
   if (issues.length === 0) return;
   console.info(
-    `[treeable:generate-artifact-stream:zod-issues:${target}:${stage}]`,
+    `[tritree:generate-artifact-stream:zod-issues:${target}:${stage}]`,
     JSON.stringify(
       issues.map((issue) => ({
         path: issue.path.length > 0 ? issue.path.join(".") : "root",

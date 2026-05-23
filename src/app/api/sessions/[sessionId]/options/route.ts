@@ -96,7 +96,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         });
       } catch (error) {
         if (request.signal.aborted || isAbortError(error)) return;
-        console.error("[treeable:generate-options]", error);
+        console.error("[tritree:generate-options]", error);
         send({ type: "error", error: publicServerErrorMessage(error, "无法生成下一步选项。") });
       } finally {
         controller.close();

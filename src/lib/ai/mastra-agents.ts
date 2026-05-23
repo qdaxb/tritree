@@ -12,7 +12,7 @@ import {
   type SharedAgentContextInput
 } from "./mastra-context";
 
-export function createTreeableAnthropicModel(env: Record<string, string | undefined> = process.env) {
+export function createTritreeAnthropicModel(env: Record<string, string | undefined> = process.env) {
   const apiKey = getDirectorAuthToken(env);
 
   const anthropic = createAnthropic({
@@ -34,10 +34,10 @@ export function createTreeArtifactAgent(
   tools?: ToolsInput
 ) {
   return new Agent({
-    id: "treeable-tree-artifact-agent",
-    name: "Treeable Tree Artifact Agent",
+    id: "tritree-tree-artifact-agent",
+    name: "Tritree Tree Artifact Agent",
     instructions: buildTreeArtifactInstructions(context),
-    model: createTreeableAnthropicModel(env),
+    model: createTritreeAnthropicModel(env),
     defaultOptions: { modelSettings: { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS } },
     inputProcessors: [new TokenLimiterProcessor({ limit: resolveModelContextBudget(env).inputBudgetTokens })],
     ...(hasTools(tools) ? { tools } : {})
@@ -50,10 +50,10 @@ export function createTreeOptionsAgent(
   tools?: ToolsInput
 ) {
   return new Agent({
-    id: "treeable-tree-options-agent",
-    name: "Treeable Tree Options Agent",
+    id: "tritree-tree-options-agent",
+    name: "Tritree Tree Options Agent",
     instructions: buildTreeOptionsInstructions(context),
-    model: createTreeableAnthropicModel(env),
+    model: createTritreeAnthropicModel(env),
     defaultOptions: { modelSettings: { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS } },
     inputProcessors: [new TokenLimiterProcessor({ limit: resolveModelContextBudget(env).inputBudgetTokens })],
     ...(hasTools(tools) ? { tools } : {})
@@ -66,10 +66,10 @@ export function createTreeNextStepAgent(
   tools?: ToolsInput
 ) {
   return new Agent({
-    id: "treeable-tree-next-step-agent",
-    name: "Treeable Tree Next Step Agent",
+    id: "tritree-tree-next-step-agent",
+    name: "Tritree Tree Next Step Agent",
     instructions: buildTreeNextStepInstructions(context),
-    model: createTreeableAnthropicModel(env),
+    model: createTritreeAnthropicModel(env),
     defaultOptions: { modelSettings: { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS } },
     inputProcessors: [new TokenLimiterProcessor({ limit: resolveModelContextBudget(env).inputBudgetTokens })],
     ...(hasTools(tools) ? { tools } : {})
@@ -82,10 +82,10 @@ export function createTreeTurnAgent(
   tools?: ToolsInput
 ) {
   return new Agent({
-    id: "treeable-main-agent",
-    name: "Treeable Main ReAct Agent",
+    id: "tritree-main-agent",
+    name: "Tritree Main ReAct Agent",
     instructions: buildTreeTurnInstructions(context),
-    model: createTreeableAnthropicModel(env),
+    model: createTritreeAnthropicModel(env),
     defaultOptions: { modelSettings: { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS } },
     inputProcessors: [new TokenLimiterProcessor({ limit: resolveModelContextBudget(env).inputBudgetTokens })],
     ...(hasTools(tools) ? { tools } : {})

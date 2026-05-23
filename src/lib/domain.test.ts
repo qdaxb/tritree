@@ -712,7 +712,7 @@ describe("SessionStateSchema", () => {
       session: {
         ...validSession(),
         artifactTypeId: "prd",
-        title: "Treeable session",
+        title: "Tritree session",
         currentNodeId: "node-1"
       },
       currentNode: node,

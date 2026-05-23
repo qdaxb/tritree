@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ state });
   } catch (error) {
-    console.error("[treeable:start-session]", error);
+    console.error("[tritree:start-session]", error);
     return NextResponse.json({ error: publicServerErrorMessage(error, "无法启动创作。") }, { status: 500 });
   }
 }

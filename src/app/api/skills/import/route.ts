@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     if (error instanceof UnsupportedSkillSourceError) {
       return NextResponse.json({ error: "暂时只支持 GitHub 仓库 URL。" }, { status: 400 });
     }
-    console.error("[treeable:import-skills]", error);
+    console.error("[tritree:import-skills]", error);
     return NextResponse.json({ error: "无法导入 Skill 仓库。" }, { status: 500 });
   }
 }

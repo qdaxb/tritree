@@ -979,7 +979,7 @@ function expectNoProcessTerms(text: string) {
     "三选一",
     "AI Director",
     "Tritree",
-    "Treeable",
+    "Tritree",
     "产品机制",
     "整体流程",
     "工作台",

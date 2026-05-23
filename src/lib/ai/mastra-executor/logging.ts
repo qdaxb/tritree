@@ -30,7 +30,7 @@ export function logMastraPrompt(
         ? buildTreeNextStepInstructions(context)
         : buildTreeOptionsInstructions(context);
   console.info(
-    `[treeable:mastra-prompt:${kind}]`,
+    `[tritree:mastra-prompt:${kind}]`,
     JSON.stringify(
       {
         context,

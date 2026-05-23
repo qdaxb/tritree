@@ -78,7 +78,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     });
     return NextResponse.json({ state: nextState });
   } catch (error) {
-    console.error("[treeable:update-artifact]", error);
+    console.error("[tritree:update-artifact]", error);
     return NextResponse.json({ error: publicServerErrorMessage(error, "无法保存作品。") }, { status: 500 });
   }
 }

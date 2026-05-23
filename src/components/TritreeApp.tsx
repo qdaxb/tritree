@@ -8,7 +8,6 @@ import {
   FileText,
   GitBranch,
   LogOut,
-  Maximize2,
   Plus,
   RotateCcw,
   UsersRound,
@@ -16,7 +15,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  ArtifactSchema,
   SessionStateSchema,
   type Artifact,
   type BranchOption,
@@ -24,502 +22,62 @@ import {
   DEFAULT_ARTIFACT_TYPE_ID,
   type CreationRequestOption,
   type Inspiration,
-  InspirationSchema,
   type OptionGenerationMode,
   type RootMemory,
   type RootPreferences,
   type SessionState,
   type Skill,
   type SkillUpsert,
-  type TreeNode,
-  isCustomBranchOptionId,
-  isPrimaryBranchOptionId
+  isCustomBranchOptionId
 } from "@/lib/domain";
-import { getArtifactType, listArtifactTypes, type ArtifactType } from "@/lib/artifacts";
-import type { UserRole } from "@/lib/auth/types";
+import { listArtifactTypes, type ArtifactType } from "@/lib/artifacts";
 import { ArtifactWorkspace, processMaterialsForNode, type ProcessMaterial } from "@/components/artifacts/ArtifactWorkspace";
 import { RootMemorySetup } from "@/components/root-memory/RootMemorySetup";
 import { SkillLibraryPanel } from "@/components/skills/SkillLibraryPanel";
 import { SkillPicker } from "@/components/skills/SkillPicker";
 import { TreeCanvas } from "@/components/tree/TreeCanvas";
-import { isSeedArtifactForNode, isSeedArtifactForState } from "@/lib/seed-artifacts";
+import { isSeedArtifactForState } from "@/lib/seed-artifacts";
 import { createNdjsonParser } from "@/lib/stream/ndjson";
 import { apiPath, appPath } from "@/lib/web-base-path";
-
-type LoadState = "loading" | "root" | "ready" | "error";
-type MobilePanel = "tree" | "artifact";
-type NodeGenerationStage = { nodeId: string; stage: "artifact" | "options" };
-type RootSetupDefaults = {
-  artifactTypeId: ArtifactTypeId;
-  creationRequest?: string;
-  enabledSkillIds?: string[];
-  seed: string;
-};
-type CurrentUserView = {
-  id: string;
-  username: string;
-  displayName: string;
-  role: UserRole;
-  isAdmin: boolean;
-};
-type TreeableAppProps = {
-  currentUser?: CurrentUserView;
-  initialSessionId?: string;
-  startNewWork?: boolean;
-};
-
-type StreamingArtifactEntry = { artifact: Artifact; nodeId: string };
-type StreamingOptionsEntry = { nodeId: string; options: BranchOption[]; roundIntent?: string | null };
-type StreamingThinkingEntry = { nodeId: string | null; stage: NodeGenerationStage["stage"]; text: string };
-type StreamingProcessMaterialsEntry = { materials: ProcessMaterial[]; nodeId: string | null };
-type ArtifactStreamEvent =
-  | { type: "artifact.replace"; artifact: Artifact }
-  | { type: "artifact.patch"; path: string; value: unknown }
-  | { type: "options"; nodeId: string; options: BranchOption[]; roundIntent?: string | null }
-  | { type: "thinking"; nodeId?: string | null; stage?: NodeGenerationStage["stage"]; text: string }
-  | { type: "process_data"; nodeId?: string | null; data: ProcessMaterial }
-  | { type: "done"; state: SessionState }
-  | { type: "error"; error: string };
-type OptionsStreamEvent =
-  | { type: "options"; nodeId: string; options: BranchOption[]; roundIntent?: string | null }
-  | { type: "thinking"; nodeId?: string | null; text: string }
-  | { type: "process_data"; nodeId?: string | null; data: ProcessMaterial }
-  | { type: "done"; state: SessionState }
-  | { type: "error"; error: string };
-type ArtifactComparisonEntry = { artifact: Artifact; label: string; nodeId: string };
-type ArtifactComparisonSelection = { fromNodeId: string | null; toNodeId: string | null };
-type TreeCanvasLabelMode = "compact" | "detail";
-
-const MOBILE_LAYOUT_QUERY = "(max-width: 980px)";
-
-const preferenceText: Record<string, string> = {
-  Product: "产品",
-  Work: "工作",
-  "Life observation": "生活观察",
-  Learning: "学习",
-  Creation: "创作",
-  Sharp: "锋利",
-  Warm: "温暖",
-  Humorous: "幽默",
-  Calm: "平静",
-  Sincere: "真诚",
-  "Story-driven": "故事型",
-  "Opinion-driven": "观点型",
-  "Tutorial-like": "教程型",
-  Fragmentary: "碎片灵感",
-  "Long-form": "长文",
-  Practitioner: "实践者",
-  Observer: "观察者",
-  Expert: "专家",
-  Friend: "朋友",
-  Documentarian: "记录者"
-};
-
-function translatePreference(value: string) {
-  return preferenceText[value] ?? value;
-}
-
-function formatRootSummary(rootMemory: RootMemory | null) {
-  if (!rootMemory) return "";
-  const summary = rootMemory.summary.trim();
-  const artifactType = getArtifactType(rootMemory.preferences.artifactTypeId);
-  const summaryPrefix = artifactType.id === DEFAULT_ARTIFACT_TYPE_ID ? "" : `${artifactType.label} | `;
-  if (summary) return `${summaryPrefix}${summary.replace(/\s*\n\s*/g, " | ")}`;
-  if (rootMemory.preferences.seed.trim()) return `Seed：${rootMemory.preferences.seed.trim()}`;
-
-  const { preferences } = rootMemory;
-  return [
-    `领域：${preferences.domains.map(translatePreference).join("、")}`,
-    `语气：${preferences.tones.map(translatePreference).join("、")}`,
-    `表达：${preferences.styles.map(translatePreference).join("、")}`,
-    `视角：${preferences.personas.map(translatePreference).join("、")}`
-  ].join(" | ");
-}
-
-function apiKeyMessage(text: string) {
-  return text.includes("Kimi API Key") || text.includes("KIMI_API_KEY")
-    ? "请在 .env.local 添加 ANTHROPIC_AUTH_TOKEN 或 KIMI_API_KEY，然后重启开发服务器。"
-    : text;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isAbortError(error: unknown) {
-  if (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError") {
-    return true;
-  }
-
-  if (!error || typeof error !== "object" || !("name" in error)) return false;
-  return error.name === "AbortError" || error.name === "ResponseAborted";
-}
-
-function isBranchOption(value: unknown): value is BranchOption {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    (isPrimaryBranchOptionId(value.id) || isCustomBranchOptionId(value.id)) &&
-    typeof value.label === "string" &&
-    typeof value.description === "string" &&
-    typeof value.impact === "string" &&
-    (value.kind === "explore" || value.kind === "deepen" || value.kind === "reframe" || value.kind === "finish") &&
-    (value.mode == null || value.mode === "divergent" || value.mode === "balanced" || value.mode === "focused")
-  );
-}
-
-function normalizeInspirationsResponse(value: unknown): Inspiration[] {
-  if (!isRecord(value) || !Array.isArray(value.inspirations)) return [];
-
-  return value.inspirations.flatMap((item) => {
-    const parsed = InspirationSchema.safeParse(item);
-    return parsed.success ? [parsed.data] : [];
-  });
-}
-
-function normalizeArtifactTypesResponse(value: unknown): ArtifactType[] {
-  const allArtifactTypes = listArtifactTypes();
-  if (!Array.isArray(value)) return allArtifactTypes;
-
-  const artifactTypeById = new Map(allArtifactTypes.map((artifactType) => [artifactType.id, artifactType]));
-  const seenArtifactTypeIds = new Set<ArtifactTypeId>();
-  const artifactTypes = value.flatMap((item) => {
-    if (!isRecord(item) || typeof item.id !== "string") return [];
-    const artifactType = artifactTypeById.get(item.id as ArtifactTypeId);
-    if (!artifactType || seenArtifactTypeIds.has(artifactType.id)) return [];
-    seenArtifactTypeIds.add(artifactType.id);
-    // 保留服务端返回的 publishPlatforms（已经过服务端环境变量过滤）
-    if (Array.isArray(item.publishPlatforms)) {
-      return [{ ...artifactType, publishPlatforms: item.publishPlatforms as ArtifactType["publishPlatforms"] }];
-    }
-    return [artifactType];
-  });
-
-  return artifactTypes.length > 0 ? artifactTypes : allArtifactTypes;
-}
-
-function resolveArtifactTypeId(
-  artifactTypes: ArtifactType[],
-  preferredArtifactTypeId: ArtifactTypeId | null | undefined
-): ArtifactTypeId {
-  if (preferredArtifactTypeId && artifactTypes.some((artifactType) => artifactType.id === preferredArtifactTypeId)) {
-    return preferredArtifactTypeId;
-  }
-
-  return artifactTypes[0]?.id ?? DEFAULT_ARTIFACT_TYPE_ID;
-}
-
-function resolveRootSetupDefaults(
-  defaults: RootSetupDefaults | null | undefined,
-  artifactTypes: ArtifactType[]
-): RootSetupDefaults {
-  return {
-    artifactTypeId: resolveArtifactTypeId(artifactTypes, defaults?.artifactTypeId),
-    creationRequest: defaults?.creationRequest ?? "",
-    enabledSkillIds: defaults?.enabledSkillIds,
-    seed: defaults?.seed ?? ""
-  };
-}
-
-function isArtifactStreamEvent(value: unknown): value is ArtifactStreamEvent {
-  if (!isRecord(value) || typeof value.type !== "string") return false;
-
-  switch (value.type) {
-    case "artifact.replace":
-      return ArtifactSchema.safeParse(value.artifact).success;
-    case "artifact.patch":
-      return typeof value.path === "string";
-    case "options":
-      return (
-        typeof value.nodeId === "string" &&
-        Array.isArray(value.options) &&
-        value.options.every((option) => isBranchOption(option)) &&
-        (value.roundIntent == null || typeof value.roundIntent === "string")
-      );
-    case "thinking":
-      return (
-        typeof value.text === "string" &&
-        (value.nodeId == null || typeof value.nodeId === "string") &&
-        (value.stage == null || value.stage === "artifact" || value.stage === "options")
-      );
-    case "process_data":
-      return (value.nodeId == null || typeof value.nodeId === "string") && isProcessMaterial(value.data);
-    case "done":
-      return SessionStateSchema.safeParse(value.state).success;
-    case "error":
-      return typeof value.error === "string";
-    default:
-      return false;
-  }
-}
-
-function isOptionsStreamEvent(value: unknown): value is OptionsStreamEvent {
-  if (!isRecord(value) || typeof value.type !== "string") return false;
-
-  switch (value.type) {
-    case "done":
-      return SessionStateSchema.safeParse(value.state).success;
-    case "options":
-      return (
-        typeof value.nodeId === "string" &&
-        Array.isArray(value.options) &&
-        value.options.every((option) => isBranchOption(option)) &&
-        (value.roundIntent == null || typeof value.roundIntent === "string")
-      );
-    case "thinking":
-      return typeof value.text === "string" && (value.nodeId == null || typeof value.nodeId === "string");
-    case "process_data":
-      return (value.nodeId == null || typeof value.nodeId === "string") && isProcessMaterial(value.data);
-    case "error":
-      return typeof value.error === "string";
-    default:
-      return false;
-  }
-}
-
-function findTreeNode(state: SessionState, nodeId: string | null) {
-  if (!nodeId) return null;
-  if (state.currentNode?.id === nodeId) return state.currentNode;
-  return state.selectedPath.find((node) => node.id === nodeId) ?? state.treeNodes?.find((node) => node.id === nodeId) ?? null;
-}
-
-function isProcessMaterial(value: unknown): value is ProcessMaterial {
-  if (!isRecord(value)) return false;
-  if (typeof value.title !== "string" || !value.title.trim()) return false;
-  if (!Array.isArray(value.sourceToolCallIds) || !value.sourceToolCallIds.every((item) => typeof item === "string")) {
-    return false;
-  }
-  if (value.note != null && typeof value.note !== "string") return false;
-  if (!Array.isArray(value.items) || value.items.length === 0) return false;
-
-  return value.items.every((item) => {
-    if (!isRecord(item)) return false;
-    if (typeof item.title !== "string" || !item.title.trim()) return false;
-    if (item.subtitle != null && typeof item.subtitle !== "string") return false;
-    if (item.meta != null && typeof item.meta !== "string") return false;
-    if (item.url != null && typeof item.url !== "string") return false;
-    return true;
-  });
-}
-
-function artifactForNode(state: SessionState, nodeId: string | null) {
-  if (!nodeId) return null;
-  const artifacts = state.artifacts ?? [];
-  const nodeArtifact = state.nodeArtifacts?.find((item) => item.nodeId === nodeId)?.artifact ?? null;
-  if (nodeArtifact) return nodeArtifact;
-  if (state.currentNode?.id === nodeId && state.currentArtifact) return state.currentArtifact;
-
-  const producedArtifactId = findTreeNode(state, nodeId)?.producedArtifactId ?? null;
-  return producedArtifactId ? artifacts.find((artifact) => artifact.id === producedArtifactId) ?? null : null;
-}
-
-function selectedArtifactIdForView(state: SessionState, viewNodeId: string | null) {
-  const artifacts = state.artifacts ?? [];
-  const viewedNode = viewNodeId ? findTreeNode(state, viewNodeId) : null;
-  const viewedArtifact = viewedNode ? artifactForNode(state, viewNodeId) : null;
-  if (viewedArtifact) {
-    return isSeedArtifactForNode(state, viewedNode, viewedArtifact) ? null : viewedArtifact.id;
-  }
-  if (viewNodeId && viewedNode) {
-    const sourceArtifact = sourceArtifactForView(state, viewNodeId);
-    return sourceArtifact && !isSeedArtifactForState(state, sourceArtifact) ? sourceArtifact.id : null;
-  }
-  if (
-    state.currentArtifact &&
-    artifacts.some((artifact) => artifact.id === state.currentArtifact?.id) &&
-    !isSeedArtifactForState(state, state.currentArtifact)
-  ) {
-    return state.currentArtifact.id;
-  }
-  return artifacts.filter((artifact) => !isSeedArtifactForState(state, artifact)).at(-1)?.id ?? null;
-}
-
-function sourceArtifactForView(state: SessionState, nodeId: string) {
-  const artifacts = state.artifacts ?? [];
-  const artifactFromSourceIds = (sourceArtifactIds: string[]) =>
-    sourceArtifactIds.map((artifactId) => artifacts.find((artifact) => artifact.id === artifactId) ?? null).find(Boolean) ?? null;
-
-  let node = findTreeNode(state, nodeId);
-  if (!node) return null;
-
-  const directSourceArtifact = artifactFromSourceIds(node.sourceArtifactIds);
-  if (directSourceArtifact) return directSourceArtifact;
-
-  const visited = new Set<string>([node.id]);
-  while (node.parentId && !visited.has(node.parentId)) {
-    visited.add(node.parentId);
-    const parentNode = findTreeNode(state, node.parentId);
-    if (!parentNode) return null;
-
-    const parentArtifact = artifactForNode(state, parentNode.id);
-    if (parentArtifact) return parentArtifact;
-
-    const parentSourceArtifact = artifactFromSourceIds(parentNode.sourceArtifactIds);
-    if (parentSourceArtifact) return parentSourceArtifact;
-
-    node = parentNode;
-  }
-
-  return null;
-}
-
-function previousProcessMaterialsForView(state: SessionState, nodeId: string | null) {
-  const viewedNode = findTreeNode(state, nodeId);
-  if (!viewedNode) return [];
-
-  let node = viewedNode;
-  const visited = new Set<string>([node.id]);
-  while (node.parentId && !visited.has(node.parentId)) {
-    visited.add(node.parentId);
-    const parentNode = findTreeNode(state, node.parentId);
-    if (!parentNode) break;
-
-    const materials = processMaterialsForNode(parentNode);
-    if (materials.length > 0) return materials;
-
-    node = parentNode;
-  }
-
-  const selectedPathIndex = state.selectedPath.findIndex((pathNode) => pathNode.id === viewedNode.id);
-  for (let index = selectedPathIndex - 1; index >= 0; index--) {
-    const materials = processMaterialsForNode(state.selectedPath[index]);
-    if (materials.length > 0) return materials;
-  }
-
-  return [];
-}
-
-function withCustomOption(node: TreeNode, customOption: BranchOption | null) {
-  if (!customOption) return node;
-
-  return {
-    ...node,
-    options: [...node.options.filter((option) => option.id !== customOption.id), customOption]
-  };
-}
-
-function withStreamingOptions(node: TreeNode, streamingOptions: StreamingOptionsEntry | null) {
-  if (!streamingOptions) return node;
-
-  return {
-    ...node,
-    roundIntent: streamingOptions.roundIntent?.trim() ? streamingOptions.roundIntent : node.roundIntent,
-    options: streamingOptions.options
-  };
-}
-
-function mergeSkills(current: Skill[], incoming: Skill[]) {
-  const byId = new Map(current.map((skill) => [skill.id, skill]));
-  incoming.forEach((skill) => {
-    byId.set(skill.id, skill);
-  });
-  return Array.from(byId.values());
-}
-
-function needsNodeOptions(state: SessionState, nodeId: string | null) {
-  const node = findTreeNode(state, nodeId);
-  return Boolean(node && !node.isTerminal && node.options.length < 3);
-}
-
-async function allowArtifactRender() {
-  await new Promise((resolve) => window.setTimeout(resolve, 0));
-}
-
-function nodesForArtifactState(state: SessionState) {
-  const nodeById = new Map<string, TreeNode>();
-  [...(state.treeNodes ?? []), ...state.selectedPath, ...(state.currentNode ? [state.currentNode] : [])].forEach((node) => {
-    nodeById.set(node.id, node);
-  });
-
-  return Array.from(nodeById.values()).sort((first, second) => {
-    if (first.roundIndex !== second.roundIndex) return first.roundIndex - second.roundIndex;
-    return first.createdAt.localeCompare(second.createdAt);
-  });
-}
-
-function buildArtifactComparisonEntries(state: SessionState | null): ArtifactComparisonEntry[] {
-  if (!state) return [];
-
-  const nodes = nodesForArtifactState(state);
-  const nodesById = new Map(nodes.map((node) => [node.id, node]));
-  const entries = nodes
-    .map((node) => {
-      const artifact = artifactForNode(state, node.id);
-      return artifact ? { artifact, label: formatComparisonNodeLabel(node, nodesById), nodeId: node.id } : null;
-    })
-    .filter((entry): entry is ArtifactComparisonEntry => Boolean(entry));
-  const seenNodeIds = new Set(entries.map((entry) => entry.nodeId));
-
-  return [
-    ...entries,
-    ...(state.nodeArtifacts ?? [])
-      .filter((item) => !seenNodeIds.has(item.nodeId))
-      .map((item) => ({
-        artifact: item.artifact,
-        label: `节点 ${item.nodeId.slice(0, 6)}`,
-        nodeId: item.nodeId
-      }))
-  ];
-}
-
-function artifactHasChanges(artifact: Artifact, previousArtifact: Artifact) {
-  return artifact.type !== previousArtifact.type || artifactPayloadSignature(artifact.payload) !== artifactPayloadSignature(previousArtifact.payload);
-}
-
-function artifactPayloadSignature(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(artifactPayloadSignature).join(",")}]`;
-  if (isRecord(value)) {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${artifactPayloadSignature(value[key])}`)
-      .join(",")}}`;
-  }
-
-  return JSON.stringify(value);
-}
-
-function changedArtifactNodeIdsForState(state: SessionState | null) {
-  if (!state) return [];
-
-  return nodesForArtifactState(state)
-    .filter((node) => {
-      if (!node.producedArtifactId) return false;
-      const artifact = artifactForNode(state, node.id);
-      const sourceArtifact =
-        node.sourceArtifactIds.map((artifactId) => state.artifacts.find((candidate) => candidate.id === artifactId) ?? null).find(Boolean) ??
-        artifactForNode(state, node.parentId);
-
-      return Boolean(artifact && sourceArtifact && artifactHasChanges(artifact, sourceArtifact));
-    })
-    .map((node) => node.id);
-}
-
-function previousComparisonNodeId(entries: ArtifactComparisonEntry[], toNodeId: string) {
-  const toIndex = entries.findIndex((entry) => entry.nodeId === toNodeId);
-  return toIndex > 0 ? entries[toIndex - 1].nodeId : null;
-}
-
-function formatComparisonNodeLabel(node: TreeNode, nodesById: Map<string, TreeNode>) {
-  const incomingLabel = incomingOptionLabelForNode(node, nodesById) ?? node.roundIntent;
-  return `第 ${node.roundIndex} 轮 · ${incomingLabel}`;
-}
-
-function incomingOptionLabelForNode(node: TreeNode, nodesById: Map<string, TreeNode>) {
-  if (node.parentId && node.parentOptionId) {
-    return nodesById.get(node.parentId)?.options.find((option) => option.id === node.parentOptionId)?.label ?? null;
-  }
-
-  return null;
-}
-
-const emptyRootSetupDefaults: RootSetupDefaults = {
-  artifactTypeId: DEFAULT_ARTIFACT_TYPE_ID,
-  creationRequest: "",
-  enabledSkillIds: [],
-  seed: ""
-};
-
-export function TreeableApp({ currentUser, initialSessionId, startNewWork = false }: TreeableAppProps = {}) {
+import {
+  allowArtifactRender,
+  artifactForNode,
+  buildArtifactComparisonEntries,
+  changedArtifactNodeIdsForState,
+  findTreeNode,
+  mergeSkills,
+  needsNodeOptions,
+  previousComparisonNodeId,
+  previousProcessMaterialsForView,
+  selectedArtifactIdForView,
+  withCustomOption,
+  withStreamingOptions
+} from "@/components/tritree/artifact-view";
+import { emptyRootSetupDefaults, mobilePanelClassName, MOBILE_LAYOUT_QUERY } from "@/components/tritree/constants";
+import {
+  isAbortError,
+  isArtifactStreamEvent,
+  isOptionsStreamEvent,
+  normalizeArtifactTypesResponse,
+  normalizeInspirationsResponse,
+  resolveRootSetupDefaults
+} from "@/components/tritree/responses";
+import { apiKeyMessage, formatRootSummary } from "@/components/tritree/root-summary";
+import { TreeZoomTrigger } from "@/components/tritree/TreeZoomTrigger";
+import type {
+  ArtifactComparisonSelection,
+  LoadState,
+  NodeGenerationStage,
+  RootSetupDefaults,
+  StreamingArtifactEntry,
+  StreamingOptionsEntry,
+  StreamingProcessMaterialsEntry,
+  StreamingThinkingEntry,
+  TreeCanvasLabelMode,
+  TritreeAppProps
+} from "@/components/tritree/types";
+
+export function TritreeApp({ currentUser, initialSessionId, startNewWork = false }: TritreeAppProps = {}) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [rootMemory, setRootMemory] = useState<RootMemory | null>(null);
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
@@ -741,10 +299,6 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     artifactAutoScrollIgnoreUntilRef.current = Date.now() + 120;
     artifactRegion.scrollTop = 0;
   }, [generationStage?.nodeId, generationStage?.stage]);
-
-  function mobilePanelClassName(panel: MobilePanel, extraClassName?: string) {
-    return `mobile-panel mobile-panel--${panel}${extraClassName ? ` ${extraClassName}` : ""}`;
-  }
 
   function isCurrentLoadRequest(requestId: number) {
     return loadRequestIdRef.current === requestId;
@@ -1993,18 +1547,6 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
     );
   }
 
-  function renderTreeZoomTrigger() {
-    return (
-      <div
-        aria-hidden="true"
-        className="tree-zoom-trigger"
-      >
-        <Maximize2 aria-hidden="true" size={15} strokeWidth={2.35} />
-        <span>点击展开树图</span>
-      </div>
-    );
-  }
-
   return (
     <main className={appShellClassName}>
       <header className="topbar">
@@ -2232,7 +1774,7 @@ export function TreeableApp({ currentUser, initialSessionId, startNewWork = fals
             <div className="desktop-control-region__body">
               <div className="desktop-control-region__tree desktop-control-region__tree-shell">
                 {renderTreeCanvas("tree")}
-                {isDesktopTreeExpanded ? null : renderTreeZoomTrigger()}
+                {isDesktopTreeExpanded ? null : <TreeZoomTrigger />}
               </div>
               {artifactComparison ? null : (
                 <div className="desktop-control-region__options">{renderTreeCanvas("options")}</div>

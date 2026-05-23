@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Skill } from "@/lib/domain";
-import { createTreeOptionsAgent, createTreeableAnthropicModel } from "./mastra-agents";
+import { createTreeOptionsAgent, createTritreeAnthropicModel } from "./mastra-agents";
 import {
   generateTreeArtifact,
   generateTreeNextStep,
@@ -107,9 +107,9 @@ beforeEach(() => {
   });
 });
 
-describe("createTreeableAnthropicModel", () => {
+describe("createTritreeAnthropicModel", () => {
   it("adds the Anthropic v1 API prefix for the default Kimi-compatible base URL", () => {
-    createTreeableAnthropicModel({ KIMI_API_KEY: "token" });
+    createTritreeAnthropicModel({ KIMI_API_KEY: "token" });
 
     expect(mocks.createAnthropic).toHaveBeenCalledWith({
       apiKey: "token",
@@ -119,12 +119,12 @@ describe("createTreeableAnthropicModel", () => {
   });
 
   it("adds the v1 API prefix to custom compatible base URLs only when missing", () => {
-    createTreeableAnthropicModel({
+    createTritreeAnthropicModel({
       ANTHROPIC_AUTH_TOKEN: "token",
       ANTHROPIC_BASE_URL: "https://compatible.example/anthropic",
       ANTHROPIC_MODEL: "custom-model"
     });
-    createTreeableAnthropicModel({
+    createTritreeAnthropicModel({
       ANTHROPIC_AUTH_TOKEN: "token",
       ANTHROPIC_BASE_URL: "https://compatible.example/anthropic/v1/",
       ANTHROPIC_MODEL: "custom-model"
@@ -229,15 +229,15 @@ describe("tree director compatibility generators", () => {
 
     expect(fakeAgent.generate).toHaveBeenCalled();
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:artifact]",
+      "[tritree:mastra-prompt:artifact]",
       expect.stringContaining("自然短句")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:artifact]",
+      "[tritree:mastra-prompt:artifact]",
       expect.stringContaining("标题不要夸张")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:artifact]",
+      "[tritree:mastra-prompt:artifact]",
       expect.stringContaining("逻辑链审查")
     );
   });
@@ -265,15 +265,15 @@ describe("tree director compatibility generators", () => {
 
     expect(fakeAgent.stream).toHaveBeenCalled();
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:options]",
+      "[tritree:mastra-prompt:options]",
       expect.stringContaining("逻辑链审查")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:options]",
+      "[tritree:mastra-prompt:options]",
       expect.stringContaining("标题不要夸张")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:options]",
+      "[tritree:mastra-prompt:options]",
       expect.stringContaining("自然短句")
     );
   });
@@ -338,15 +338,15 @@ describe("tree director compatibility generators", () => {
       })
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:next-step]",
+      "[tritree:mastra-prompt:next-step]",
       expect.stringContaining("Fixed goal for this turn: submit a next-step routing result")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:next-step]",
+      "[tritree:mastra-prompt:next-step]",
       expect.stringContaining("逻辑链审查")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:next-step]",
+      "[tritree:mastra-prompt:next-step]",
       expect.stringContaining("自然短句")
     );
   });
@@ -385,15 +385,15 @@ describe("tree director compatibility generators", () => {
     });
 
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:options]",
+      "[tritree:mastra-prompt:options]",
       expect.stringContaining("load_skill_document")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:options]",
+      "[tritree:mastra-prompt:options]",
       expect.stringContaining("skills/sample-research/SKILL.md")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:options]",
+      "[tritree:mastra-prompt:options]",
       expect.not.stringContaining("标题和正文都要克制。")
     );
   });
@@ -475,11 +475,11 @@ describe("tree director compatibility generators", () => {
       })
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:options]",
+      "[tritree:mastra-prompt:options]",
       expect.stringContaining("MCP runtime tools are available")
     );
     expect(consoleInfoSpy).toHaveBeenCalledWith(
-      "[treeable:mastra-prompt:options]",
+      "[tritree:mastra-prompt:options]",
       expect.not.stringContaining("filesystem_read_file")
     );
   });

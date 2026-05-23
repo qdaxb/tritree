@@ -79,7 +79,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     });
     return NextResponse.json({ state: nextState, reused: false });
   } catch (error) {
-    console.error("[treeable:branch-history]", error);
+    console.error("[tritree:branch-history]", error);
     return NextResponse.json({ error: publicServerErrorMessage(error, "无法切换或生成历史分支。") }, { status: 500 });
   }
 }
