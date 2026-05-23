@@ -1495,6 +1495,7 @@ export function BranchOptionTray({
     (optionId) => primaryOptionById.has(optionId) && visiblePrimaryOptionIds.has(optionId)
   );
   const canRetryMissingOptions = Boolean(onRegenerateOptions && !isBusy && !hasAllPrimaryOptions);
+  const shouldShowOptionMain = primaryOptions.length > 0 || isBusy || isStreamingOptions || !canRetryMissingOptions;
   const trimmedQuestion = question?.trim();
   const selectedOption = selectedOptionId ? primaryOptionById.get(selectedOptionId) ?? null : null;
 
@@ -1530,32 +1531,34 @@ export function BranchOptionTray({
           )}
         </div>
       ) : null}
-      <div
-        aria-label="三个主选项"
-        className={clsx(
-          "branch-option-main",
-          "branch-option-main--horizontal",
-          selectedOption && "branch-option-main--selection-active"
-        )}
-        role="group"
-      >
-        {PRIMARY_BRANCH_OPTION_IDS.map((optionId) => {
-          const option = primaryOptionById.get(optionId);
-          return option && visiblePrimaryOptionIds.has(optionId) ? (
-            <BranchOptionCard
-              isBusy={isBusy || !primaryAllVisible || Boolean(selectedOption)}
-              isPending={pendingChoice === option.id}
-              isSelected={selectedOption?.id === option.id}
-              isStreaming={isStreamingOptions}
-              key={option.id}
-              onSelect={() => setSelectedOptionId(option.id)}
-              option={option}
-            />
-          ) : (
-            <BranchOptionPlaceholder key={optionId} optionId={optionId} />
-          );
-        })}
-      </div>
+      {shouldShowOptionMain ? (
+        <div
+          aria-label="三个主选项"
+          className={clsx(
+            "branch-option-main",
+            "branch-option-main--horizontal",
+            selectedOption && "branch-option-main--selection-active"
+          )}
+          role="group"
+        >
+          {PRIMARY_BRANCH_OPTION_IDS.map((optionId) => {
+            const option = primaryOptionById.get(optionId);
+            return option && visiblePrimaryOptionIds.has(optionId) ? (
+              <BranchOptionCard
+                isBusy={isBusy || !primaryAllVisible || Boolean(selectedOption)}
+                isPending={pendingChoice === option.id}
+                isSelected={selectedOption?.id === option.id}
+                isStreaming={isStreamingOptions}
+                key={option.id}
+                onSelect={() => setSelectedOptionId(option.id)}
+                option={option}
+              />
+            ) : (
+              <BranchOptionPlaceholder key={optionId} optionId={optionId} />
+            );
+          })}
+        </div>
+      ) : null}
       {canRetryMissingOptions ? (
         <div className="branch-option-retry" role="status">
           <span>选项还没生成出来</span>

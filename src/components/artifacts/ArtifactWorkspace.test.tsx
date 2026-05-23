@@ -268,7 +268,7 @@ describe("ArtifactWorkspace", () => {
     expect(socialPostScrollRule).toContain("overflow-y: visible");
   });
 
-  it("keeps draft content scrollable inside the mobile artifact workspace", () => {
+  it("lets short mobile draft content shrink while keeping long content scrollable", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const mediaRule =
       css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)?.groups?.body ??
@@ -284,10 +284,13 @@ describe("ArtifactWorkspace", () => {
       mediaRule.match(/\.mobile-artifact-region \.social-post-panel__scroll\s*\{(?<body>[^}]+)\}/)?.groups?.body ??
       "";
 
-    expect(mobileBodyRule).toContain("grid-template-rows: auto minmax(min(360px, 46dvh), 1fr)");
+    expect(mobileBodyRule).toContain("grid-template-rows: auto auto");
     expect(mobileBodyRule).not.toContain("grid-template-rows: minmax(0, min(36dvh, 320px))");
-    expect(mobileContentRule).toContain("min-height: min(360px, 46dvh)");
-    expect(mobilePanelRule).toContain("height: min(640px, 56dvh)");
+    expect(mobileContentRule).toContain("min-height: 0");
+    expect(mobilePanelRule).toContain("min-height: 0");
+    expect(mobilePanelRule).toMatch(/(?:^|\n)\s*height: auto;/);
+    expect(mobilePanelRule).toContain("max-height: min(640px, 56dvh)");
+    expect(mobilePanelRule).not.toMatch(/(?:^|\n)\s*height: min\(640px, 56dvh\);/);
     expect(mobilePanelRule).toContain("grid-template-rows: auto minmax(0, 1fr)");
     expect(mobilePanelRule).toContain("overflow: hidden");
     expect(mobileScrollRule).toContain("overflow-y: auto");

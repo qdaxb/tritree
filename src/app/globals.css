@@ -5934,16 +5934,16 @@ button:disabled {
   }
 
   .mobile-artifact-region .artifact-workspace__body {
-    grid-template-rows: auto minmax(min(360px, 46dvh), 1fr);
+    grid-template-rows: auto auto;
   }
 
   .mobile-artifact-region .artifact-workspace__content {
-    min-height: min(360px, 46dvh);
+    min-height: 0;
   }
 
   .mobile-artifact-region .social-post-panel {
-    min-height: min(360px, 46dvh);
-    height: min(640px, 56dvh);
+    min-height: 0;
+    height: auto;
     max-height: min(640px, 56dvh);
     grid-template-rows: auto minmax(0, 1fr);
     overflow: hidden;

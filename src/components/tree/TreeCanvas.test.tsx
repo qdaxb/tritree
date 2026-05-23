@@ -472,7 +472,7 @@ describe("TreeCanvas", () => {
 
   it("offers a retry action when option generation is idle but still missing choices", () => {
     const onRegenerateOptions = vi.fn();
-    render(
+    const { container } = render(
       <BranchOptionTray
         isBusy={false}
         onChoose={vi.fn()}
@@ -484,6 +484,8 @@ describe("TreeCanvas", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("选项还没生成出来");
+    expect(screen.queryByRole("group", { name: "三个主选项" })).not.toBeInTheDocument();
+    expect(container.querySelector(".branch-card--placeholder")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "重试生成选项" }));
 
