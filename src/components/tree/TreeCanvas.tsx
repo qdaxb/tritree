@@ -12,7 +12,6 @@ import {
   compactBranchLabel,
   compactTreeViewBox,
   createForceTreeGraph,
-  curvedLinkPath,
   defaultTreeViewBox,
   estimateInactiveRouteDepth,
   getOptionBranchLayout
