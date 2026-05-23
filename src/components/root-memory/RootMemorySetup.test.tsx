@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readGlobalCss } from "@/test/css";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
@@ -206,7 +205,7 @@ describe("RootMemorySetup", () => {
   });
 
   it("defines a light inline style setup for the seed header", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const inlineRule = css.match(/\.style-profile-setup--inline\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const inlineUnsetRule =
       css.match(/\.style-profile-setup--inline\.style-profile-setup--unset\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -304,7 +303,7 @@ describe("RootMemorySetup", () => {
   });
 
   it("keeps inspiration cards in a horizontally scrollable row sized for three visible items", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const optionsRule = css.match(/\.inspiration-options\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const optionRule = css.match(/\.inspiration-option\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 

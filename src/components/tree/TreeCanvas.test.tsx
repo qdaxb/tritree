@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readGlobalCss } from "@/test/css";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { BranchOption, TreeNode } from "@/lib/domain";
@@ -364,7 +363,7 @@ describe("TreeCanvas", () => {
   });
 
   it("keeps the tree instruction hint in the lower-left of the tree viewport", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const shellRule = css.match(/\.tree-viewport-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const hintRule = css.match(/\.tree-operation-hint\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const collapsedRule = css.match(/\.tree-operation-hint--collapsed\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -382,7 +381,7 @@ describe("TreeCanvas", () => {
   });
 
   it("styles compact tree mode as a fitted overview instead of a scroll surface", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const compactCanvasRule =
       css.match(/\.tree-canvas--compact\.tree-canvas--tree\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const compactViewportShellRule =
@@ -539,7 +538,7 @@ describe("TreeCanvas", () => {
   });
 
   it("keeps option cards compact without top hover previews or inline select hints", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const treeCanvasRule = css.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const treeShellRule = css.match(/\.tree-viewport-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const operationHintRule = css.match(/\.tree-operation-hint\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -586,7 +585,7 @@ describe("TreeCanvas", () => {
   });
 
   it("uses the same visible local spinning border on streamed option cards without lighting the tray", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const streamingCardRule = css.match(/\.branch-card--streaming\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const streamingCardBorderRule = css.match(/\.branch-card--streaming::after\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
@@ -631,7 +630,7 @@ describe("TreeCanvas", () => {
   });
 
   it("caps long current questions so the three choices remain visible", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const trayRule = css.match(/\.branch-option-tray\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const questionRule = css.match(/\.branch-option-question\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const questionWithActionRule =
@@ -1344,7 +1343,7 @@ describe("TreeCanvas", () => {
   });
 
   it("marks compact openable tree previews with pointer cursor styles", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const openableRule =
       css.match(/\.tree-canvas--compact\.tree-canvas--openable\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const openableViewportRule =
@@ -1667,7 +1666,7 @@ describe("TreeCanvas", () => {
   });
 
   it("stacks mobile direction cards instead of squeezing them into desktop columns", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const mobileRule = css.match(/@media \(max-width: 640px\)\s*\{(?<body>[\s\S]+)\}\s*$/)?.groups?.body ?? "";
 
     expect(mobileRule).toContain(".branch-option-main");
@@ -1677,7 +1676,7 @@ describe("TreeCanvas", () => {
   });
 
   it("uses a calm selected-option submit panel with a raised note field", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const mobileWorkspaceRule = css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)
       ?.groups?.body ?? "";
     const composerRule =
@@ -1702,7 +1701,7 @@ describe("TreeCanvas", () => {
   });
 
   it("overlays the submit panel without taking height from the option area", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const selectedInputRule =
       css.match(/\.branch-option-custom-input--selected\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const scrimRule =
@@ -1720,7 +1719,7 @@ describe("TreeCanvas", () => {
   });
 
   it("lets the full mobile options question expand the page height", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const mobileWorkspaceRule = css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)
       ?.groups?.body ?? "";
     const trayRule =
@@ -1748,7 +1747,7 @@ describe("TreeCanvas", () => {
   });
 
   it("lets vertical swipes inside the expanded mobile tree continue scrolling the page", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const mobileWorkspaceRule = css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)
       ?.groups?.body ?? "";
     const mobileTreeViewportRule =
@@ -1761,7 +1760,7 @@ describe("TreeCanvas", () => {
   });
 
   it("keeps the expanded mobile tree canvas compact on narrow screens", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const narrowMobileRule = css.match(/@media \(max-width: 640px\)\s*\{(?<body>[\s\S]+)\}\s*$/)?.groups?.body ?? "";
     const treeCanvasRule = narrowMobileRule.match(/\.tree-canvas\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const expandedTreeRegionRule =
@@ -1777,7 +1776,7 @@ describe("TreeCanvas", () => {
   });
 
   it("keeps the More Directions editor inside the bottom tray bounds", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const formRule = css.match(/\.branch-side-form\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
 
     expect(formRule).toContain("position: absolute");
@@ -1790,7 +1789,7 @@ describe("TreeCanvas", () => {
   });
 
   it("renders the inline custom direction as a compact input row", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const compactRule = css.match(/\.branch-side-form--compact\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const compactHeaderRule =
       css.match(/\.branch-side-form--compact \.branch-side-form__header\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -1807,7 +1806,7 @@ describe("TreeCanvas", () => {
   });
 
   it("keeps the option mode controls and refresh icon on one compact row", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const controlsRule = css.match(/\.branch-option-tray__controls\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const wrapRule = css.match(/\.option-mode-control-wrap\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const modeButtonRule = css.match(/\.option-mode-control__button\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";

@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readGlobalCss } from "@/test/css";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -179,7 +178,7 @@ function renderWorkspace(props: Partial<React.ComponentProps<typeof ArtifactWork
 
 describe("ArtifactWorkspace", () => {
   it("keeps injected header actions visually aligned with the comparison button", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const headerActionRule =
       css.match(/\.artifact-workspace__header-actions > button\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const pressedRule =
@@ -219,7 +218,7 @@ describe("ArtifactWorkspace", () => {
   });
 
   it("keeps the artifact header fixed while the workspace body scrolls", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const artifactRegionRule = css.match(/\.mobile-artifact-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const workspaceRule = css.match(/\.artifact-workspace\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const bodyRule = css.match(/\.artifact-workspace__body\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -269,7 +268,7 @@ describe("ArtifactWorkspace", () => {
   });
 
   it("lets short mobile draft content shrink while keeping long content scrollable", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const mediaRule =
       css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)?.groups?.body ??
       "";
@@ -299,7 +298,7 @@ describe("ArtifactWorkspace", () => {
   });
 
   it("uses a visible local spinning border for active process, materials, and draft surfaces", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const spinKeyframes = css.match(/@keyframes active-surface-spin\s*\{(?<body>[\s\S]+?)\n\}/)?.groups?.body ?? "";
     const processSurfaceRule = css.match(/\.artifact-workspace__process\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const processRule = css.match(/\.artifact-workspace__process--generating\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -774,7 +773,7 @@ describe("ArtifactWorkspace", () => {
     expect(materialText("第一行结论\n第二行结论")).toBeInTheDocument();
     expect(materialText("可信度：高\n来源：官方")).toBeInTheDocument();
 
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const materialNoteRule = css.match(/\.artifact-workspace__material-note\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const materialItemBodyRule =
       css.match(/\.artifact-workspace__material-item p\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";

@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readGlobalCss } from "@/test/css";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -1823,7 +1822,7 @@ describe("TreeableApp", () => {
   });
 
   it("defines desktop columns for left artifact and right control focus states", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const shellRule = css.match(/\.app-shell\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const controlRegionRule = css.match(/\.desktop-control-region\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const controlBodyRule = css.match(/\.desktop-control-region__body\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
@@ -1881,7 +1880,7 @@ describe("TreeableApp", () => {
   });
 
   it("defines mobile-only unified workspace visibility rules", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const defaultPanelRule = css.match(/\.mobile-panel\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const mediaRule = css.match(/@media \(max-width: 980px\)\s*\{(?<body>[\s\S]+?)@media \(max-width: 640px\)/)
       ?.groups?.body ?? "";
@@ -1907,7 +1906,7 @@ describe("TreeableApp", () => {
   });
 
   it("keeps the narrow mobile topbar compact instead of stacking boxed rows", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const narrowMobileRule = css.match(/@media \(max-width: 640px\)\s*\{(?<body>[\s\S]+)\}\s*$/)?.groups?.body ?? "";
     const topbarRule = narrowMobileRule.match(/\.topbar\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const topbarActionsRule = narrowMobileRule.match(/\.topbar-actions\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";

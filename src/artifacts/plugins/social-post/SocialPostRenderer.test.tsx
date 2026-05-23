@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readGlobalCss } from "@/test/css";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -63,7 +62,7 @@ function findTextNodeContaining(node: Node, text: string): Text | null {
 
 describe("SocialPostRenderer", () => {
   it("lets the social content expand inside the outer artifact scrollbar", () => {
-    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const css = readGlobalCss();
     const scrollRule = css.match(/\.social-post-panel__scroll\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const contentRule = css.match(/\.work-content\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
     const imagePromptRule = css.match(/\.image-prompt\s*\{(?<body>[^}]+)\}/)?.groups?.body ?? "";
