@@ -24,34 +24,20 @@ import {
   type Skill,
   type TreeNode
 } from "@/lib/domain";
-
-type TreeCanvasProps = {
-  changedArtifactNodeIds?: string[];
-  comparisonNodeIds?: ComparisonNodeIds | null;
-  currentNode: TreeNode | null;
-  display?: "full" | "options" | "tree";
-  focusedNodeId?: string | null;
-  generationStage?: NodeGenerationStage | null;
-  isComparisonMode?: boolean;
-  isMobileLayout?: boolean;
-  selectedPath: TreeNode[];
-  treeNodes?: TreeNode[];
-  isBusy: boolean;
-  pendingChoice: BranchOption["id"] | null;
-  pendingBranch?: { nodeId: string; optionId: BranchOption["id"] } | null;
-  onActivateBranch?: (nodeId: string, optionId: BranchOption["id"]) => void;
-  onAddCustomOption?: (option: BranchOption) => void;
-  onChoose: (optionId: BranchOption["id"], note?: string, optionMode?: OptionGenerationMode) => void;
-  onOpenTree?: () => void;
-  onRegenerateOptions?: (optionMode: OptionGenerationMode) => void;
-  onSelectComparisonNode?: (nodeId: string) => void;
-  onViewNode?: (nodeId: string) => void;
-  optionsHeaderAction?: ReactNode;
-  skills?: Skill[];
-  treeLabelMode?: TreeLabelMode;
-};
-
-type TreeLabelMode = "compact" | "detail";
+import type {
+  ComparisonNodeIds,
+  ForceTreeGraph,
+  ForceTreeLink,
+  ForceTreeNode,
+  NodeGenerationStage,
+  OptionBranchLayout,
+  PendingBranch,
+  Point2,
+  RouteSide,
+  SvgViewBox,
+  TreeCanvasProps
+} from "./types";
+export type { ForceTreeLink, ForceTreeNode, ForceTreeNodeKind } from "./types";
 
 const CANVAS_HEIGHT = 380;
 const MIN_CANVAS_WIDTH = 320;
@@ -77,70 +63,6 @@ const COMPACT_TREE_VIEWBOX_MIN_HEIGHT = 150;
 const COMPACT_TREE_VIEWBOX_X_PAD = 46;
 const COMPACT_TREE_VIEWBOX_Y_PAD = 38;
 const COMPACT_TREE_Y_SPREAD = 48;
-
-type Point2 = [number, number];
-type RouteSide = -1 | 1;
-type PendingBranch = { nodeId: string; optionId: BranchOption["id"] };
-type ComparisonNodeIds = { fromNodeId: string | null; toNodeId: string | null };
-type NodeGenerationStage = { nodeId: string; stage: "artifact" | "options" };
-
-type OptionBranchLayout = {
-  cardHeight: number;
-  cardWidth: number;
-  center: Point2;
-  height: number;
-  positions: Record<"a" | "b" | "c" | "custom", Point2>;
-  width: number;
-};
-
-export type ForceTreeNodeKind = "history" | "folded" | "option" | "loading";
-
-export type ForceTreeNode = {
-  branchFromNodeId?: string;
-  branchOptionId?: BranchOption["id"];
-  comparisonRole?: "from" | "to";
-  focusDepth?: number;
-  group: number;
-  id: string;
-  isArtifactChanged?: boolean;
-  isArtifactFocused?: boolean;
-  generationStage?: NodeGenerationStage["stage"];
-  isInactiveRoute?: boolean;
-  inactiveRouteSide?: RouteSide;
-  isSeedRoot?: boolean;
-  isStageComplete?: boolean;
-  isTerminal?: boolean;
-  kind: ForceTreeNodeKind;
-  label: string;
-  nodeId?: string;
-  option?: BranchOption;
-  pendingFor?: BranchOption["id"];
-  radius: number;
-  targetX: number;
-  targetY: number;
-};
-
-export type ForceTreeLink = {
-  distance: number;
-  focusDepth?: number;
-  isFuture?: boolean;
-  isInactiveRoute?: boolean;
-  source: string;
-  target: string;
-  value: number;
-};
-
-type ForceTreeGraph = {
-  links: ForceTreeLink[];
-  nodes: ForceTreeNode[];
-};
-
-type SvgViewBox = {
-  height: number;
-  width: number;
-  x: number;
-  y: number;
-};
 
 export function getOptionBranchLayout(canvasWidth: number, historyNodeCount = 0, inactiveRouteDepth = 0): OptionBranchLayout {
   const viewportWidth = Math.max(MIN_CANVAS_WIDTH, Math.round(canvasWidth || 760));
