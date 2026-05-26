@@ -45,7 +45,7 @@ npm install
 cp .env.example .env.local
 ```
 
-编辑 `.env.local`，至少配置 AI 接口：
+编辑 `.env.local`，至少配置一个 AI 接口。默认兼容 Anthropic/Kimi 风格接口：
 
 ```env
 ANTHROPIC_BASE_URL=https://your-provider.example/anthropic
@@ -62,6 +62,15 @@ TRITREE_DB_PATH=.tritree/tritree.sqlite
 ```bash
 mkdir -p .tritree
 cp config/defaults.example.json .tritree/defaults.json
+```
+
+也可以使用 OpenAI。只配置 `OPENAI_API_KEY` 且未配置 Anthropic/Kimi token 时，Tritree 会自动走 OpenAI Responses API；需要显式选择时可设置：
+
+```env
+TRITREE_AI_PROVIDER=openai
+OPENAI_API_KEY=your_api_key_here
+OPENAI_MODEL=gpt-5.5
+OPENAI_API_MODE=responses # responses 或 chat-completions
 ```
 
 启动开发服务器：
@@ -114,7 +123,7 @@ TRITREE_ARTIFACT_TYPES=social-post,prd
 | 层级 | 技术 |
 | --- | --- |
 | 应用框架 | Next.js 16 App Router + React 19 |
-| AI 执行 | Mastra Agent + AI SDK Anthropic-compatible provider |
+| AI 执行 | Mastra Agent + AI SDK Anthropic-compatible / OpenAI provider |
 | 认证 | NextAuth v4 Credentials / OIDC |
 | 数据 | Drizzle ORM；默认 SQLite，配置 `TRITREE_DATABASE_URL` 后使用 MySQL |
 | 编辑与可视化 | CodeMirror diff/merge、D3.js、lucide-react |

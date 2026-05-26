@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.72",
+    "@ai-sdk/openai": "^3.0.63",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/merge": "^6.12.1",
     "@codemirror/state": "^6.6.0",

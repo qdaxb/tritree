@@ -1,7 +1,7 @@
 import type { Skill } from "@/lib/domain";
 import type { ToolsInput } from "@mastra/core/agent";
 import { createSkillRuntimeTools } from "@/lib/skills/skill-runtime";
-import { createTritreeAnthropicModel } from "../mastra-agents";
+import { createTritreeLanguageModel } from "../mastra-agents";
 import { compactDirectorMessagesForModel } from "../model-context";
 import type { SharedAgentContextInput } from "../mastra-context";
 import { logTritreeAiDebug } from "../debug-log";
@@ -124,7 +124,7 @@ export function structuredOutputForDirector<TSchema>(
   if (hasRuntimeTools(tools)) {
     return {
       schema,
-      model: createTritreeAnthropicModel(env)
+      model: createTritreeLanguageModel(env)
     };
   }
 

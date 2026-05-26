@@ -24,7 +24,7 @@ vi.mock("@mastra/core/agent", async (importOriginal) => {
 });
 
 vi.mock("./mastra-agents", () => ({
-  createTritreeAnthropicModel: vi.fn(() => "mock-model")
+  createTritreeLanguageModel: vi.fn(() => "mock-model")
 }));
 
 type ExecutableTool = {

@@ -1,7 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { z } from "zod";
 import type { SkillUpsert } from "@/lib/domain";
-import { createTritreeAnthropicModel } from "@/lib/ai/mastra-agents";
+import { createTritreeLanguageModel } from "@/lib/ai/mastra-agents";
 import {
   StyleProfileGenerationError,
   buildStyleProfileUserPrompt,
@@ -67,7 +67,7 @@ export async function generateStyleFromSamples({
         id: "tritree-style-profile-agent",
         name: "Tritree Style Profile Agent",
         instructions: STYLE_PROFILE_SYSTEM_PROMPT,
-        model: createTritreeAnthropicModel(env)
+        model: createTritreeLanguageModel(env)
       }) as unknown as StyleProfileAgentLike);
 
     const messages = [{ role: "user" as const, content: buildStyleProfileUserPrompt(normalizedSamples) }];

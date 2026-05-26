@@ -16,6 +16,11 @@ import {
 
 export const DEFAULT_KIMI_BASE_URL = "https://api.moonshot.ai/anthropic";
 export const DEFAULT_KIMI_MODEL = "kimi-k2.5";
+export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+export const DEFAULT_OPENAI_MODEL = "gpt-5.5";
+
+export type DirectorProvider = "anthropic-compatible" | "openai";
+export type OpenAiApiMode = "responses" | "chat-completions";
 
 export { DirectorArtifactOutputSchema, DirectorNextStepOutputSchema };
 export type { DirectorArtifactOutput };
@@ -51,15 +56,61 @@ export function parseDirectorOptionsText(text: string): DirectorOptionsOutput {
 }
 
 export function getDirectorModel(env: Record<string, string | undefined> = process.env) {
+  if (getDirectorProvider(env) === "openai") {
+    return env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL;
+  }
+
   return env.ANTHROPIC_MODEL ?? env.KIMI_MODEL ?? DEFAULT_KIMI_MODEL;
 }
 
 export function getDirectorBaseUrl(env: Record<string, string | undefined> = process.env) {
+  if (getDirectorProvider(env) === "openai") {
+    return trimTrailingSlash(env.OPENAI_BASE_URL ?? DEFAULT_OPENAI_BASE_URL);
+  }
+
   return trimTrailingSlash(env.ANTHROPIC_BASE_URL ?? env.KIMI_BASE_URL ?? DEFAULT_KIMI_BASE_URL);
 }
 
 export function getDirectorAuthToken(env: Record<string, string | undefined> = process.env) {
+  if (getDirectorProvider(env) === "openai") {
+    return env.OPENAI_API_KEY ?? env.OPENAI_AUTH_TOKEN ?? "";
+  }
+
   return env.ANTHROPIC_AUTH_TOKEN ?? env.KIMI_API_KEY ?? env.MOONSHOT_API_KEY ?? "";
+}
+
+export function getDirectorProvider(env: Record<string, string | undefined> = process.env): DirectorProvider {
+  const explicitProvider = normalizeProviderName(env.TRITREE_AI_PROVIDER ?? env.AI_PROVIDER);
+  if (explicitProvider) return explicitProvider;
+
+  const hasOpenAiToken = Boolean(env.OPENAI_API_KEY || env.OPENAI_AUTH_TOKEN);
+  const hasAnthropicCompatibleToken = Boolean(env.ANTHROPIC_AUTH_TOKEN || env.KIMI_API_KEY || env.MOONSHOT_API_KEY);
+  if (hasOpenAiToken && !hasAnthropicCompatibleToken) {
+    return "openai";
+  }
+
+  return "anthropic-compatible";
+}
+
+export function getOpenAiApiMode(env: Record<string, string | undefined> = process.env): OpenAiApiMode {
+  const value = (env.OPENAI_API_MODE ?? env.OPENAI_WIRE_API ?? "responses").trim().toLowerCase();
+  if (!value || value === "responses" || value === "response") {
+    return "responses";
+  }
+
+  if (
+    value === "chat" ||
+    value === "chat-completion" ||
+    value === "chat-completions" ||
+    value === "chat_completion" ||
+    value === "chat_completions" ||
+    value === "chat/completion" ||
+    value === "chat/completions"
+  ) {
+    return "chat-completions";
+  }
+
+  throw new Error(`Unsupported OPENAI_API_MODE: ${env.OPENAI_API_MODE ?? env.OPENAI_WIRE_API}`);
 }
 
 export function parseDirectorJsonObject(text: string) {
@@ -167,4 +218,25 @@ function nextNonWhitespaceChar(value: string, startIndex: number) {
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
+}
+
+function normalizeProviderName(value: string | undefined): DirectorProvider | "" {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return "";
+
+  if (normalized === "openai") {
+    return "openai";
+  }
+
+  if (
+    normalized === "anthropic" ||
+    normalized === "anthropic-compatible" ||
+    normalized === "anthropic_compatible" ||
+    normalized === "kimi" ||
+    normalized === "moonshot"
+  ) {
+    return "anthropic-compatible";
+  }
+
+  throw new Error(`Unsupported TRITREE_AI_PROVIDER: ${value}`);
 }

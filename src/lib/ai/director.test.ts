@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_KIMI_BASE_URL,
   DEFAULT_KIMI_MODEL,
+  DEFAULT_OPENAI_MODEL,
   buildDirectorInput,
   DirectorArtifactOutputSchema,
   DirectorNextStepOutputSchema,
   getDirectorAuthToken,
   getDirectorBaseUrl,
   getDirectorModel,
+  getDirectorProvider,
+  getOpenAiApiMode,
   parseDirectorArtifactText,
   parseDirectorOptionsOutput,
   parseDirectorOptionsText,
@@ -371,6 +374,11 @@ describe("getDirectorModel", () => {
     expect(getDirectorModel({ ANTHROPIC_MODEL: "custom-model" })).toBe("custom-model");
     expect(getDirectorModel({ KIMI_MODEL: "kimi-custom" })).toBe("kimi-custom");
   });
+
+  it("uses OpenAI model env vars for OpenAI provider configuration", () => {
+    expect(getDirectorModel({ OPENAI_API_KEY: "openai-key", OPENAI_MODEL: "gpt-custom" })).toBe("gpt-custom");
+    expect(getDirectorModel({ TRITREE_AI_PROVIDER: "openai" })).toBe(DEFAULT_OPENAI_MODEL);
+  });
 });
 
 function buildTestDirectorInput(parts: Omit<DirectorInputParts, "artifactContext" | "messages"> & Partial<Pick<DirectorInputParts, "artifactContext" | "messages">>) {
@@ -393,6 +401,40 @@ describe("getDirectorAuthToken", () => {
   it("accepts Kimi or Anthropic-compatible token names", () => {
     expect(getDirectorAuthToken({ KIMI_API_KEY: "kimi-key" })).toBe("kimi-key");
     expect(getDirectorAuthToken({ ANTHROPIC_AUTH_TOKEN: "anthropic-token" })).toBe("anthropic-token");
+  });
+
+  it("accepts OpenAI token names for OpenAI provider configuration", () => {
+    expect(getDirectorAuthToken({ OPENAI_API_KEY: "openai-key" })).toBe("openai-key");
+    expect(getDirectorAuthToken({ OPENAI_AUTH_TOKEN: "openai-token" })).toBe("openai-token");
+  });
+});
+
+describe("getDirectorProvider", () => {
+  it("keeps the Anthropic-compatible provider as the default", () => {
+    expect(getDirectorProvider({})).toBe("anthropic-compatible");
+  });
+
+  it("auto-selects OpenAI when only OpenAI credentials are configured", () => {
+    expect(getDirectorProvider({ OPENAI_API_KEY: "openai-key" })).toBe("openai");
+  });
+
+  it("lets explicit provider configuration override auto-detection", () => {
+    expect(getDirectorProvider({ TRITREE_AI_PROVIDER: "openai", KIMI_API_KEY: "kimi-key" })).toBe("openai");
+    expect(getDirectorProvider({ TRITREE_AI_PROVIDER: "anthropic-compatible", OPENAI_API_KEY: "openai-key" })).toBe(
+      "anthropic-compatible"
+    );
+  });
+});
+
+describe("getOpenAiApiMode", () => {
+  it("defaults OpenAI to the Responses API", () => {
+    expect(getOpenAiApiMode({})).toBe("responses");
+  });
+
+  it("accepts common Chat Completions aliases", () => {
+    expect(getOpenAiApiMode({ OPENAI_API_MODE: "chat-completions" })).toBe("chat-completions");
+    expect(getOpenAiApiMode({ OPENAI_API_MODE: "chat/completions" })).toBe("chat-completions");
+    expect(getOpenAiApiMode({ OPENAI_API_MODE: "chat" })).toBe("chat-completions");
   });
 });
 

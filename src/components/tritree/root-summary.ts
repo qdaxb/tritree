@@ -46,7 +46,11 @@ export function formatRootSummary(rootMemory: RootMemory | null) {
 }
 
 export function apiKeyMessage(text: string) {
+  if (text.includes("OPENAI_API_KEY") || text.includes("OPENAI_AUTH_TOKEN")) {
+    return "请在 .env.local 添加 OPENAI_API_KEY，然后重启开发服务器。";
+  }
+
   return text.includes("Kimi API Key") || text.includes("KIMI_API_KEY")
-    ? "请在 .env.local 添加 ANTHROPIC_AUTH_TOKEN 或 KIMI_API_KEY，然后重启开发服务器。"
+    ? "请在 .env.local 添加 ANTHROPIC_AUTH_TOKEN、KIMI_API_KEY 或 OPENAI_API_KEY，然后重启开发服务器。"
     : text;
 }

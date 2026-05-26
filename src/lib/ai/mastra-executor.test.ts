@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Skill } from "@/lib/domain";
-import { createTreeOptionsAgent, createTritreeAnthropicModel } from "./mastra-agents";
+import { createTreeOptionsAgent, createTritreeAnthropicModel, createTritreeLanguageModel } from "./mastra-agents";
 import {
   generateTreeArtifact,
   generateTreeNextStep,
@@ -14,6 +14,7 @@ import type { DirectorInputParts } from "./prompts";
 const mocks = vi.hoisted(() => ({
   agentConstructor: vi.fn(),
   createAnthropic: vi.fn(),
+  createOpenAI: vi.fn(),
   createMcpRuntimeTools: vi.fn(),
   createSkillRuntimeTools: vi.fn(),
   createSubagentRuntimeTools: vi.fn()
@@ -21,6 +22,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: mocks.createAnthropic
+}));
+
+vi.mock("@ai-sdk/openai", () => ({
+  createOpenAI: mocks.createOpenAI
 }));
 
 vi.mock("@mastra/core/agent", () => ({
@@ -40,6 +45,12 @@ vi.mock("./subagent-runtime", () => ({
 }));
 
 const modelFactory = vi.fn((modelId: string) => ({ modelId }));
+const openAiResponsesModelFactory = vi.fn((modelId: string) => ({ modelId, provider: "openai-responses" }));
+const openAiChatModelFactory = vi.fn((modelId: string) => ({ modelId, provider: "openai-chat" }));
+const openAiProvider = Object.assign(vi.fn((modelId: string) => ({ modelId, provider: "openai-default" })), {
+  chat: openAiChatModelFactory,
+  responses: openAiResponsesModelFactory
+});
 
 const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
 
@@ -90,7 +101,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   consoleInfoSpy.mockClear();
   modelFactory.mockClear();
+  openAiProvider.mockClear();
+  openAiChatModelFactory.mockClear();
+  openAiResponsesModelFactory.mockClear();
   mocks.createAnthropic.mockReturnValue(modelFactory);
+  mocks.createOpenAI.mockReturnValue(openAiProvider);
   mocks.createSkillRuntimeTools.mockResolvedValue({ toolSummaries: [], tools: {} });
   mocks.createMcpRuntimeTools.mockResolvedValue({ disconnect: vi.fn(), toolSummaries: [], tools: {} });
   mocks.createSubagentRuntimeTools.mockReturnValue({
@@ -138,6 +153,55 @@ describe("createTritreeAnthropicModel", () => {
       apiKey: "token",
       baseURL: "https://compatible.example/anthropic/v1"
     });
+  });
+});
+
+describe("createTritreeLanguageModel", () => {
+  it("creates an OpenAI Responses API model by default", () => {
+    const model = createTritreeLanguageModel({
+      OPENAI_API_KEY: "openai-token",
+      OPENAI_MODEL: "gpt-custom"
+    });
+
+    expect(mocks.createOpenAI).toHaveBeenCalledWith({
+      apiKey: "openai-token"
+    });
+    expect(openAiResponsesModelFactory).toHaveBeenCalledWith("gpt-custom");
+    expect(openAiChatModelFactory).not.toHaveBeenCalled();
+    expect(model).toEqual({ modelId: "gpt-custom", provider: "openai-responses" });
+  });
+
+  it("creates an OpenAI Chat Completions API model when requested", () => {
+    const model = createTritreeLanguageModel({
+      OPENAI_API_KEY: "openai-token",
+      OPENAI_BASE_URL: "https://openai-proxy.example/v1/",
+      OPENAI_MODEL: "gpt-chat",
+      OPENAI_API_MODE: "chat/completions"
+    });
+
+    expect(mocks.createOpenAI).toHaveBeenCalledWith({
+      apiKey: "openai-token",
+      baseURL: "https://openai-proxy.example/v1"
+    });
+    expect(openAiChatModelFactory).toHaveBeenCalledWith("gpt-chat");
+    expect(openAiResponsesModelFactory).not.toHaveBeenCalled();
+    expect(model).toEqual({ modelId: "gpt-chat", provider: "openai-chat" });
+  });
+
+  it("preserves Anthropic-compatible model creation unless OpenAI is selected", () => {
+    const model = createTritreeLanguageModel({
+      ANTHROPIC_AUTH_TOKEN: "token",
+      ANTHROPIC_BASE_URL: "https://compatible.example/anthropic",
+      ANTHROPIC_MODEL: "custom-model",
+      OPENAI_API_KEY: "openai-token"
+    });
+
+    expect(mocks.createAnthropic).toHaveBeenCalledWith({
+      apiKey: "token",
+      baseURL: "https://compatible.example/anthropic/v1"
+    });
+    expect(mocks.createOpenAI).not.toHaveBeenCalled();
+    expect(model).toEqual({ modelId: "custom-model" });
   });
 });
 

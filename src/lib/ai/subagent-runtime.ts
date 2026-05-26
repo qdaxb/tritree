@@ -9,7 +9,7 @@ import {
   projectAgentContext,
   type ContextViewPolicy
 } from "./context-projection";
-import { createTritreeAnthropicModel } from "./mastra-agents";
+import { createTritreeLanguageModel } from "./mastra-agents";
 import { ShowProcessDataInputSchema, type ProcessDataDisplay } from "./mastra-executor/schemas";
 import { toAsyncIterable } from "./mastra-executor/json-utils";
 import {
@@ -191,7 +191,7 @@ export async function runSubagentTaskWithModel(task: SubagentTask): Promise<stri
     id: "tritree-subagent-runtime-agent",
     name: `Tritree ${task.title} Subagent`,
     instructions: buildSubagentInstructions(task),
-    model: createTritreeAnthropicModel(env),
+    model: createTritreeLanguageModel(env),
     defaultOptions: { modelSettings: { maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS } },
     inputProcessors: [new TokenLimiterProcessor({ limit: resolveModelContextBudget(env).inputBudgetTokens })],
     ...(hasRuntimeTools(tools) ? { tools } : {})
