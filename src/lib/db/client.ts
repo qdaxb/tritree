@@ -43,11 +43,9 @@ export type QueryExecuteResult = {
 
 export interface TritreeDrizzleDatabase {
   provider: DatabaseConfig["provider"];
-  orm: unknown;
   queryAll<T = unknown>(sql: string, ...params: unknown[]): Promise<T[]>;
   queryGet<T = unknown>(sql: string, ...params: unknown[]): Promise<T | undefined>;
   execute(sql: string, ...params: unknown[]): Promise<QueryExecuteResult>;
-  executeBatch(sql: string): Promise<void>;
   transaction<T>(write: (db: TritreeDrizzleDatabase) => T | Promise<T>): Promise<T>;
   close(): Promise<void>;
 }
@@ -146,40 +144,27 @@ async function createMysqlDatabase(
 
 class SqliteTritreeDatabase implements TritreeDrizzleDatabase {
   readonly provider = "sqlite" as const;
-  readonly orm: unknown;
 
   constructor(
-    orm: SqliteDrizzleExecutor,
+    private readonly orm: SqliteDrizzleExecutor,
     private readonly sqlite?: DatabaseSync
-  ) {
-    this.orm = orm;
-  }
-
-  private get sqliteOrm() {
-    return this.orm as SqliteDrizzleExecutor;
-  }
+  ) {}
 
   async queryAll<T = unknown>(sql: string, ...params: unknown[]) {
-    return this.sqliteOrm.all<T>(toDrizzleSql(sql, params));
+    return this.orm.all<T>(toDrizzleSql(sql, params));
   }
 
   async queryGet<T = unknown>(sql: string, ...params: unknown[]) {
-    return this.sqliteOrm.get<T>(toDrizzleSql(sql, params));
+    return this.orm.get<T>(toDrizzleSql(sql, params));
   }
 
   async execute(sql: string, ...params: unknown[]) {
-    const result = await this.sqliteOrm.run(toDrizzleSql(sql, params));
+    const result = await this.orm.run(toDrizzleSql(sql, params));
     return { changes: sqliteChanges(result) };
   }
 
-  async executeBatch(sql: string) {
-    for (const statement of splitSqlStatements(sql)) {
-      await this.execute(statement);
-    }
-  }
-
   async transaction<T>(write: (db: TritreeDrizzleDatabase) => T | Promise<T>): Promise<T> {
-    return this.sqliteOrm.transaction((tx) => Promise.resolve(write(new SqliteTritreeDatabase(tx))), { behavior: "immediate" });
+    return this.orm.transaction((tx) => Promise.resolve(write(new SqliteTritreeDatabase(tx))), { behavior: "immediate" });
   }
 
   async close() {
@@ -189,21 +174,14 @@ class SqliteTritreeDatabase implements TritreeDrizzleDatabase {
 
 class MysqlTritreeDatabase implements TritreeDrizzleDatabase {
   readonly provider = "mysql" as const;
-  readonly orm: unknown;
 
   constructor(
-    orm: MysqlDrizzleExecutor,
+    private readonly orm: MysqlDrizzleExecutor,
     private readonly pool?: MysqlPoolLike
-  ) {
-    this.orm = orm;
-  }
-
-  private get mysqlOrm() {
-    return this.orm as MysqlDrizzleExecutor;
-  }
+  ) {}
 
   async queryAll<T = unknown>(sql: string, ...params: unknown[]) {
-    const result = await this.mysqlOrm.execute(toDrizzleSql(mysqlSql(sql), params));
+    const result = await this.orm.execute(toDrizzleSql(mysqlSql(sql), params));
     return mysqlRows(result) as T[];
   }
 
@@ -213,18 +191,12 @@ class MysqlTritreeDatabase implements TritreeDrizzleDatabase {
   }
 
   async execute(sql: string, ...params: unknown[]) {
-    const result = await this.mysqlOrm.execute(toDrizzleSql(mysqlSql(sql), params));
+    const result = await this.orm.execute(toDrizzleSql(mysqlSql(sql), params));
     return { changes: mysqlAffectedRows(mysqlResultHeader(result)) };
   }
 
-  async executeBatch(sql: string) {
-    for (const statement of splitSqlStatements(sql)) {
-      await this.execute(statement);
-    }
-  }
-
   async transaction<T>(write: (db: TritreeDrizzleDatabase) => T | Promise<T>): Promise<T> {
-    return this.mysqlOrm.transaction((tx) => Promise.resolve(write(new MysqlTritreeDatabase(tx))));
+    return this.orm.transaction((tx) => Promise.resolve(write(new MysqlTritreeDatabase(tx))));
   }
 
   async close() {
@@ -299,6 +271,12 @@ function splitSqlStatements(sql: string) {
     .filter(Boolean);
 }
 
+async function executeBatch(db: TritreeDrizzleDatabase, sql: string) {
+  for (const statement of splitSqlStatements(sql)) {
+    await db.execute(statement);
+  }
+}
+
 async function migrateSqlite(db: TritreeDrizzleDatabase) {
   const userVersion = (await db.queryGet<{ user_version: number }>("PRAGMA user_version")) ?? { user_version: 0 };
   if (userVersion.user_version > CURRENT_SCHEMA_VERSION && (await hasSqliteTritreeTables(db))) {
@@ -330,7 +308,7 @@ async function resetSqliteContentTables(db: TritreeDrizzleDatabase) {
 }
 
 async function createSqliteSchema(db: TritreeDrizzleDatabase) {
-  await db.executeBatch(`
+  await executeBatch(db, `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
