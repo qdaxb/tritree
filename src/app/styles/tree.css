@@ -46,13 +46,13 @@
 .desktop-control-region__body {
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(84px, 0.14fr) minmax(0, 0.86fr);
+  grid-template-rows: minmax(84px, 14fr) minmax(0, 86fr);
   gap: 10px;
   overflow: hidden;
 }
 
 .desktop-control-region--tree-expanded .desktop-control-region__body {
-  grid-template-rows: minmax(360px, 0.58fr) minmax(0, 0.42fr);
+  grid-template-rows: minmax(360px, 58fr) minmax(0, 42fr);
 }
 
 .desktop-control-region--comparison .desktop-control-region__body {
@@ -1721,4 +1721,3 @@
     width: auto;
   }
 }
-

@@ -1866,9 +1866,9 @@ describe("TritreeApp", () => {
     expect(treeZoomHoverRule).toContain("max-width: 8em");
     expect(treeZoomHoverRule).toContain("opacity: 1");
     expect(treeZoomRule).not.toContain("inset: 0");
-    expect(controlBodyRule).toContain("grid-template-rows: minmax(84px, 0.14fr) minmax(0, 0.86fr)");
+    expect(controlBodyRule).toContain("grid-template-rows: minmax(84px, 14fr) minmax(0, 86fr)");
     expect(expandedShellRule).toContain("grid-template-columns: minmax(420px, 0.46fr) minmax(620px, 0.54fr)");
-    expect(expandedControlRule).toContain("grid-template-rows: minmax(360px, 0.58fr) minmax(0, 0.42fr)");
+    expect(expandedControlRule).toContain("grid-template-rows: minmax(360px, 58fr) minmax(0, 42fr)");
     expect(comparisonControlRule).toContain("grid-template-rows: minmax(0, 1fr)");
     expect(expandedTreeRule).toContain("height: 100%");
     expect(desktopOptionsRule).toContain("grid-template-columns: 1fr");
