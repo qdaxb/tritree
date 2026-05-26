@@ -426,7 +426,7 @@ describe("MCP runtime tool loading", () => {
     expect(result.toolSummaries.join("\n")).not.toContain("filesystem_read_file");
     expect(result.toolSummaries.join("\n")).not.toContain("search_search_web");
     expect(result.tools.search_search_web).toMatchObject({
-      description: expect.stringContaining("at most 5 times")
+      description: expect.stringContaining("at most 20 times")
     });
     await result.disconnect();
     expect(disconnect).toHaveBeenCalledTimes(1);
@@ -457,18 +457,18 @@ describe("MCP runtime tool loading", () => {
     const tool = result.tools.search_lookup as {
       execute: (input: Record<string, unknown>) => Promise<unknown>;
     };
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 20; index += 1) {
       await expect(tool.execute({ query: `item-${index}` })).resolves.toEqual({ ok: true });
     }
 
-    await expect(tool.execute({ query: "item-5" })).resolves.toEqual({
-      error: "MCP tool call limit reached for search_lookup after 5 calls; no external request was sent.",
-      limit: 5,
+    await expect(tool.execute({ query: "item-20" })).resolves.toEqual({
+      error: "MCP tool call limit reached for search_lookup after 20 calls; no external request was sent.",
+      limit: 20,
       ok: false,
       toolName: "search_lookup"
     });
-    expect(lookup.execute).toHaveBeenCalledTimes(5);
-    expect(result.toolSummaries.join("\n")).toContain("Each MCP tool is limited to 5 executions per turn");
+    expect(lookup.execute).toHaveBeenCalledTimes(20);
+    expect(result.toolSummaries.join("\n")).toContain("Each MCP tool is limited to 20 executions per turn");
   });
 
   it("keeps non-English MCP labels and descriptions out of prompt summaries", async () => {
