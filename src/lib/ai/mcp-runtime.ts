@@ -52,6 +52,8 @@ type LoadServerDefinitionsResult = {
 const SERVER_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
 const ENV_PLACEHOLDER_PATTERN = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const MAX_TIMEOUT_MS = 120_000;
+const DEFAULT_MCP_TOOL_CALL_LIMIT = 5;
+const MCP_TOOL_CALL_LIMIT_ENV = "TRITREE_MCP_TOOL_CALL_LIMIT";
 const STDIO_NORMALIZED_KEYS = new Set(["args", "command", "cwd", "disabled", "env", "label", "roots", "timeout"]);
 const HTTP_NORMALIZED_KEYS = new Set(["connectTimeout", "disabled", "headers", "label", "requestInit", "roots", "timeout", "url"]);
 
@@ -542,6 +544,12 @@ export async function createMcpRuntimeTools(options: McpRuntimeOptions = {}): Pr
   const toolLabels: Record<string, string> = {};
   const toolSummaries = [...diagnostics];
   const existingTools = options.existingTools ?? {};
+  const toolCallLimit = resolveMcpToolCallLimit(options.env ?? process.env);
+  if (toolCallLimit.diagnostic) {
+    diagnostics.push(toolCallLimit.diagnostic);
+    toolSummaries.push(toolCallLimit.diagnostic);
+    options.log?.(`[tritree:mcp] ${toolCallLimit.diagnostic}`);
+  }
   let loadedToolCount = 0;
 
   for (const [serverName, serverTools] of Object.entries(toolsets)) {
@@ -556,7 +564,7 @@ export async function createMcpRuntimeTools(options: McpRuntimeOptions = {}): Pr
         continue;
       }
 
-      tools[namespacedName] = tool;
+      tools[namespacedName] = withMcpToolCallLimit(tool, namespacedName, toolCallLimit.limit);
       if (serverLabel !== serverName) toolLabels[namespacedName] = serverLabel;
       loadedToolCount += 1;
     }
@@ -566,6 +574,11 @@ export async function createMcpRuntimeTools(options: McpRuntimeOptions = {}): Pr
     toolSummaries.push(
       `MCP runtime tools are available through the model tool schema. Call MCP tools only when this turn's task needs their capability.`
     );
+    if (toolCallLimit.limit !== null) {
+      toolSummaries.push(
+        `Each MCP tool is limited to ${toolCallLimit.limit} executions per turn. If a tool returns a limit result, stop retrying that tool and use the material already gathered or ask a narrower follow-up. Set ${MCP_TOOL_CALL_LIMIT_ENV}=0 to disable this guard.`
+      );
+    }
   }
 
   return {
@@ -574,6 +587,48 @@ export async function createMcpRuntimeTools(options: McpRuntimeOptions = {}): Pr
     toolLabels,
     toolSummaries,
     tools
+  };
+}
+
+function resolveMcpToolCallLimit(env: StringEnv): { diagnostic?: string; limit: number | null } {
+  const configured = env[MCP_TOOL_CALL_LIMIT_ENV]?.trim();
+  if (configured === undefined || configured === "") return { limit: DEFAULT_MCP_TOOL_CALL_LIMIT };
+  if (configured === "0") return { limit: null };
+
+  const parsed = Number(configured);
+  if (Number.isInteger(parsed) && parsed > 0) return { limit: parsed };
+
+  return {
+    diagnostic: `${MCP_TOOL_CALL_LIMIT_ENV} must be a non-negative integer; using default ${DEFAULT_MCP_TOOL_CALL_LIMIT}.`,
+    limit: DEFAULT_MCP_TOOL_CALL_LIMIT
+  };
+}
+
+function withMcpToolCallLimit<TTool>(tool: TTool, runtimeName: string, limit: number | null): TTool {
+  if (limit === null || !isRecord(tool) || typeof tool.execute !== "function") return tool;
+
+  let callCount = 0;
+  const execute = tool.execute as (...args: unknown[]) => unknown;
+  return {
+    ...tool,
+    ...(typeof tool.description === "string"
+      ? {
+          description: `${tool.description}\n\nRuntime guard: this MCP tool can be executed at most ${limit} times in one Tritree turn. If a limit result is returned, do not retry this tool.`
+        }
+      : {}),
+    execute: async (...args: unknown[]) => {
+      if (callCount >= limit) {
+        return {
+          error: `MCP tool call limit reached for ${runtimeName} after ${limit} calls; no external request was sent.`,
+          limit,
+          ok: false,
+          toolName: runtimeName
+        };
+      }
+
+      callCount += 1;
+      return execute.apply(tool, args);
+    }
   };
 }
 

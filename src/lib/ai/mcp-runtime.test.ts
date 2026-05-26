@@ -413,15 +413,62 @@ describe("MCP runtime tool loading", () => {
         })
       })
     );
-    expect(result.tools).toEqual({
-      filesystem_read_file: readFile,
-      search_search_web: searchWeb
+    expect(Object.keys(result.tools)).toEqual(["filesystem_read_file", "search_search_web"]);
+    expect(result.tools.filesystem_read_file).toMatchObject({
+      description: expect.stringContaining(readFile.description),
+      id: readFile.id
+    });
+    expect(result.tools.search_search_web).toMatchObject({
+      description: expect.stringContaining(searchWeb.description),
+      id: searchWeb.id
     });
     expect(result.toolSummaries.join("\n")).toContain("MCP runtime tools are available");
     expect(result.toolSummaries.join("\n")).not.toContain("filesystem_read_file");
     expect(result.toolSummaries.join("\n")).not.toContain("search_search_web");
+    expect(result.tools.search_search_web).toMatchObject({
+      description: expect.stringContaining("at most 5 times")
+    });
     await result.disconnect();
     expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("limits repeated MCP tool executions per runtime by default", async () => {
+    const dir = makeTempDir();
+    const configPath = writeJsonConfig(dir, {
+      mcpServers: {
+        search: {
+          url: "https://mcp.example.com/mcp"
+        }
+      }
+    });
+    const lookup = { id: "lookup", description: "Lookup records.", execute: vi.fn(async () => ({ ok: true })) };
+    const result = await createMcpRuntimeTools({
+      configPath,
+      createClient: () => ({
+        disconnect: async () => undefined,
+        listToolsetsWithErrors: async () => ({
+          errors: {},
+          toolsets: { search: { lookup } }
+        })
+      }),
+      env: {}
+    });
+
+    const tool = result.tools.search_lookup as {
+      execute: (input: Record<string, unknown>) => Promise<unknown>;
+    };
+    for (let index = 0; index < 5; index += 1) {
+      await expect(tool.execute({ query: `item-${index}` })).resolves.toEqual({ ok: true });
+    }
+
+    await expect(tool.execute({ query: "item-5" })).resolves.toEqual({
+      error: "MCP tool call limit reached for search_lookup after 5 calls; no external request was sent.",
+      limit: 5,
+      ok: false,
+      toolName: "search_lookup"
+    });
+    expect(lookup.execute).toHaveBeenCalledTimes(5);
+    expect(result.toolSummaries.join("\n")).toContain("Each MCP tool is limited to 5 executions per turn");
   });
 
   it("keeps non-English MCP labels and descriptions out of prompt summaries", async () => {
@@ -618,7 +665,11 @@ describe("MCP runtime tool loading", () => {
       env: {}
     });
 
-    expect(result.tools).toEqual({ mcp_lookup: lookup });
+    expect(Object.keys(result.tools)).toEqual(["mcp_lookup"]);
+    expect(result.tools.mcp_lookup).toMatchObject({
+      description: expect.stringContaining(lookup.description),
+      id: lookup.id
+    });
     expect(result.toolSummaries.join("\n")).toContain("MCP runtime tools are available");
     expect(result.toolSummaries.join("\n")).not.toContain("mcp_lookup");
   });
