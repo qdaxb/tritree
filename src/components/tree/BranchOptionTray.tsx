@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { CheckCircle2, Plus, RefreshCw, X } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
 import {
   CUSTOM_OPTION_ID_PREFIX,
   PRIMARY_BRANCH_OPTION_IDS,
@@ -517,6 +517,12 @@ function MoreDirectionsCard({
     closeCustomOption();
   }
 
+  function submitCompactInputOnEnter(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    addCustomOption();
+  }
+
   return (
     <div className={formClassName}>
       {isCompactInline ? null : (
@@ -536,6 +542,7 @@ function MoreDirectionsCard({
             aria-label={textareaLabel}
             disabled={disabled}
             onChange={(event) => setContent(event.target.value)}
+            onKeyDown={submitCompactInputOnEnter}
             placeholder={placeholder}
             type="text"
             value={content}

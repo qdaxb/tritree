@@ -216,6 +216,34 @@ describe("TreeCanvas", () => {
     expect(within(tray).getByRole("textbox", { name: "自己写方向" })).toHaveValue("");
   });
 
+  it("submits the compact custom direction when Enter is pressed", () => {
+    const onAddCustomOption = vi.fn();
+    render(
+      <BranchOptionTray
+        isBusy={false}
+        isCustomOptionInline
+        onAddCustomOption={onAddCustomOption}
+        onChoose={vi.fn()}
+        options={currentNode.options}
+        pendingChoice={null}
+        question="这次最需要先确认什么？"
+      />
+    );
+
+    const customInput = screen.getByRole("textbox", { name: "自己写方向" });
+
+    fireEvent.change(customInput, { target: { value: "反击同款套餐" } });
+    fireEvent.keyDown(customInput, { code: "Enter", key: "Enter" });
+
+    expect(onAddCustomOption).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: "反击同款套餐",
+        label: "反击同款套餐"
+      })
+    );
+    expect(customInput).toHaveValue("");
+  });
+
   it("shows a completed panel instead of waiting option placeholders for terminal nodes", () => {
     const terminalNode: TreeNode = {
       ...currentNode,
