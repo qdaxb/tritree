@@ -7,7 +7,7 @@ import { SocialPostPayloadSchema, type SocialPostPayload } from "./schema";
 
 type SelectionMode = "actions" | "edit";
 type PublishPlatform = "weibo" | "xiaohongshu" | "moments";
-type PublishCopyAction = PublishPlatform | "title" | "body" | "hashtags" | "imagePrompt";
+type PublishCopyAction = PublishPlatform | "title" | "hashtags" | "imagePrompt";
 type PublishTextByPlatform = Record<PublishPlatform, string>;
 
 type CapturedTextSelection = {
@@ -268,6 +268,16 @@ export function SocialPostRenderer({ artifact, isBusy, onAction, onSave, previou
               rows={7}
               value={publishTexts[activePublishPlatform]}
             />
+            <div className="work-publish-actions">
+              <button
+                className="work-publish-actions__primary"
+                onClick={() => void copyPublishText(activePublishPlatform)}
+                type="button"
+              >
+                <Copy aria-hidden="true" size={13} />
+                <span>{copiedPublishAction === activePublishPlatform ? "已复制" : `复制${publishPlatformLabel(activePublishPlatform)}文案`}</span>
+              </button>
+            </div>
           </section>
           <section className="work-publish-image-prompt">
             <div className="work-publish-image-prompt__meta">
@@ -287,22 +297,6 @@ export function SocialPostRenderer({ artifact, isBusy, onAction, onSave, previou
               value={publishImagePrompt}
             />
           </section>
-          <div className="work-publish-actions">
-            <button
-              className="work-publish-actions__primary"
-              onClick={() => void copyPublishText(activePublishPlatform)}
-              type="button"
-            >
-              <Copy aria-hidden="true" size={13} />
-              <span>{copiedPublishAction === activePublishPlatform ? "已复制" : `复制${publishPlatformLabel(activePublishPlatform)}文案`}</span>
-            </button>
-            {activePlatforms.length > 1 ? (
-              <button onClick={() => void copyPublishText("body")} type="button">
-                <Copy aria-hidden="true" size={13} />
-                <span>{copiedPublishAction === "body" ? "已复制" : "复制正文"}</span>
-              </button>
-            ) : null}
-          </div>
           {publishCopyError ? (
             <p className="work-publish-error" role="status">
               {publishCopyError}
@@ -589,7 +583,6 @@ function publishCopyValue(
   publishTexts: PublishTextByPlatform,
   publishImagePrompt: string
 ) {
-  if (action === "body") return payload.body.trim();
   if (action === "title") return resolveSocialPostTitle(payload.title, payload.body).trim();
   if (action === "hashtags") return normalizedHashtags(payload.hashtags, platform).join(" ");
   if (action === "imagePrompt") return publishImagePrompt;

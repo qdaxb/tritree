@@ -325,4 +325,25 @@ describe("SocialPostRenderer", () => {
 
     expect(writeText).toHaveBeenCalledWith("编辑后的微博文案");
   });
+
+  it("scopes the platform copy action to the publish preview area", async () => {
+    render(
+      <SocialPostRenderer
+        artifact={createArtifact({ title: "标题", body: "正文", hashtags: ["#AI"], imagePrompt: "配图" })}
+        isBusy={false}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "发布" }));
+
+    const publishPreview = document.querySelector(".work-publish-preview");
+    const imagePromptSection = document.querySelector(".work-publish-image-prompt");
+    expect(publishPreview).toBeInstanceOf(HTMLElement);
+    expect(imagePromptSection).toBeInstanceOf(HTMLElement);
+
+    expect(within(publishPreview as HTMLElement).getByRole("button", { name: "复制微博文案" })).toBeInTheDocument();
+    expect(within(publishPreview as HTMLElement).queryByRole("button", { name: "复制正文" })).not.toBeInTheDocument();
+    expect(within(imagePromptSection as HTMLElement).queryByRole("button", { name: "复制微博文案" })).not.toBeInTheDocument();
+    expect(within(imagePromptSection as HTMLElement).getByRole("button", { name: "复制配图提示" })).toBeInTheDocument();
+  });
 });
