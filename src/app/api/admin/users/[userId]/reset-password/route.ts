@@ -25,7 +25,8 @@ export async function POST(request: Request, context: { params: Promise<{ userId
   try {
     await requireAdminUser();
     const body = ResetAdminPasswordBodySchema.parse(await request.json());
-    const user = await getRepository().resetUserPassword(userId, body.password);
+    const repository = await getRepository();
+    const user = await repository.resetUserPassword(userId, body.password);
     return NextResponse.json({ user: publicUser(user) });
   } catch (error) {
     const response = authErrorResponse(error);

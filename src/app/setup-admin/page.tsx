@@ -5,9 +5,9 @@ import { getRepository } from "@/lib/db/repository";
 
 export const dynamic = "force-dynamic";
 
-export default function SetupAdminPage() {
-  const repository = getRepository();
-  if (repository.hasUsers()) redirect("/login");
+export default async function SetupAdminPage() {
+  const repository = await getRepository();
+  if (await repository.hasUsers()) redirect("/login");
 
   return <SetupAdminForm />;
 }

@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const user = await requireCurrentUser();
-    const repository = getRepository();
+    const repository = await getRepository();
     const configuredPublishPlatforms = listConfiguredPublishPlatforms();
     const artifactTypes = listConfiguredArtifactTypes().map((artifactType) =>
       artifactType.showPublishAssistant
@@ -20,8 +20,8 @@ export async function GET() {
     );
     return NextResponse.json({
       artifactTypes,
-      skills: repository.listSkills(user.id),
-      creationRequestOptions: repository.listCreationRequestOptions(user.id),
+      skills: await repository.listSkills(user.id),
+      creationRequestOptions: await repository.listCreationRequestOptions(user.id),
       styleProfile: {
         externalStyleGenerationAvailable: externalStyleProviderAvailable()
       }
@@ -37,7 +37,8 @@ export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser();
     const body = SkillUpsertSchema.parse(await request.json());
-    const skill = getRepository().createSkill(user.id, body);
+    const repository = await getRepository();
+    const skill = await repository.createSkill(user.id, body);
     return NextResponse.json({ skill });
   } catch (error) {
     const response = authErrorResponse(error);

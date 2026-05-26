@@ -14,7 +14,8 @@ const CreationRequestOptionOrderSchema = z.object({
 export async function GET() {
   try {
     const user = await requireCurrentUser();
-    return NextResponse.json({ options: getRepository().listCreationRequestOptions(user.id) });
+    const repository = await getRepository();
+    return NextResponse.json({ options: await repository.listCreationRequestOptions(user.id) });
   } catch (error) {
     const response = authErrorResponse(error);
     if (response) return response;
@@ -26,7 +27,8 @@ export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser();
     const body = CreationRequestOptionUpsertSchema.parse(await request.json());
-    const option = getRepository().createCreationRequestOption(user.id, body);
+    const repository = await getRepository();
+    const option = await repository.createCreationRequestOption(user.id, body);
     return NextResponse.json({ option });
   } catch (error) {
     const response = authErrorResponse(error);
@@ -40,7 +42,8 @@ export async function PUT(request: Request) {
   try {
     const user = await requireCurrentUser();
     const body = CreationRequestOptionOrderSchema.parse(await request.json());
-    const options = getRepository().reorderCreationRequestOptions(user.id, body.orderedIds);
+    const repository = await getRepository();
+    const options = await repository.reorderCreationRequestOptions(user.id, body.orderedIds);
     return NextResponse.json({ options });
   } catch (error) {
     const response = authErrorResponse(error);

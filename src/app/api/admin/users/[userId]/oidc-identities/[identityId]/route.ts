@@ -10,7 +10,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ use
 
   try {
     await requireAdminUser();
-    getRepository().deleteOidcIdentityForUser(userId, identityId);
+    const repository = await getRepository();
+    await repository.deleteOidcIdentityForUser(userId, identityId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     const response = authErrorResponse(error);

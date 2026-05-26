@@ -9,11 +9,11 @@ import { appHomePath } from "@/lib/web-base-path";
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
-  const repository = getRepository();
-  if (!repository.hasUsers()) redirect("/setup-admin");
+  const repository = await getRepository();
+  if (!(await repository.hasUsers())) redirect("/setup-admin");
 
   const session = await auth();
-  if (session?.user?.id && repository.getUser(session.user.id)?.isActive) redirect(appHomePath());
+  if (session?.user?.id && (await repository.getUser(session.user.id))?.isActive) redirect(appHomePath());
 
   return <LoginForm isOidcEnabled={isOidcEnabled()} />;
 }

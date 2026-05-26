@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, integer, primaryKey, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
-// The raw DDL in client.ts is the authoritative migration source; this Drizzle schema mirrors table shape and constraints for future migration work.
+// SQLite Drizzle schema used by the runtime database client.
 export const users = sqliteTable(
   "users",
   {

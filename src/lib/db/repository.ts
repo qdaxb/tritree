@@ -61,7 +61,7 @@ import {
   type ConfiguredCreationRequestOption,
   type ConfiguredSystemSkill
 } from "@/lib/defaults";
-import { createDatabase, defaultDbPath } from "./client";
+import { createDatabase, resolveDatabaseConfig, type DatabaseConfig, type TritreeDrizzleDatabase } from "./client";
 
 type UserRow = {
   id: string;
@@ -243,16 +243,8 @@ function toOidcIdentity(row: OidcIdentityRow): OidcIdentity {
   });
 }
 
-function withTransaction<T>(db: ReturnType<typeof createDatabase>, write: () => T) {
-  db.exec("BEGIN IMMEDIATE;");
-  try {
-    const result = write();
-    db.exec("COMMIT;");
-    return result;
-  } catch (error) {
-    db.exec("ROLLBACK;");
-    throw error;
-  }
+function withTransaction<T>(db: TritreeDrizzleDatabase, write: () => T | Promise<T>) {
+  return db.transaction(write);
 }
 
 function summarizePreferences(preferences: RootPreferences) {
@@ -407,8 +399,8 @@ function activePathFor(nodes: TreeNode[], currentNode: TreeNode | null) {
   return path;
 }
 
-export function createTritreeRepository(
-  dbPath = defaultDbPath(),
+export async function createTritreeRepository(
+  dbConfig: string | DatabaseConfig = resolveDatabaseConfig(),
   {
     skillInstallRoot = defaultSkillInstallRoot(),
     defaultsConfigPath
@@ -418,43 +410,43 @@ export function createTritreeRepository(
   } = {}
 ) {
   const configuredDefaults = loadConfiguredDefaults({ configPath: defaultsConfigPath });
-  const db = createDatabase(dbPath);
+  const db = await createDatabase(typeof dbConfig === "string" ? { provider: "sqlite", path: dbConfig } : dbConfig);
   try {
-    cleanupStoredSkillRuntimePrompts();
-    ensureSystemSkills(configuredDefaults.systemSkills);
-    ensureDefaultCreationRequestOptions(configuredDefaults.creationRequestOptions);
+    await cleanupStoredSkillRuntimePrompts();
+    await ensureSystemSkills(configuredDefaults.systemSkills);
+    await ensureDefaultCreationRequestOptions(configuredDefaults.creationRequestOptions);
   } catch (error) {
-    db.close();
+    await db.close();
     throw error;
   }
 
-  function cleanupStoredSkillRuntimePrompts() {
+  async function cleanupStoredSkillRuntimePrompts() {
     const timestamp = now();
-    const rows = db.prepare("SELECT id, prompt FROM skills").all() as Array<Pick<SkillRow, "id" | "prompt">>;
+    const rows = await db.queryAll<Pick<SkillRow, "id" | "prompt">>("SELECT id, prompt FROM skills");
     for (const row of rows) {
       const normalizedPrompt = stripSkillRuntimeMetadata(row.prompt);
       if (normalizedPrompt === row.prompt) continue;
-      db.prepare("UPDATE skills SET prompt = ?, updated_at = ? WHERE id = ?").run(normalizedPrompt, timestamp, row.id);
+      await db.execute("UPDATE skills SET prompt = ?, updated_at = ? WHERE id = ?", normalizedPrompt, timestamp, row.id);
     }
   }
 
-  function ensureSystemSkills(systemSkills: ConfiguredSystemSkill[]) {
+  async function ensureSystemSkills(systemSkills: ConfiguredSystemSkill[]) {
     const timestamp = now();
     for (const [index, skill] of systemSkills.entries()) {
       const parsed = SkillUpsertSchema.parse(skill);
       const sortOrder = skill.sortOrder ?? index;
-      const existing = db.prepare("SELECT * FROM skills WHERE id = ?").get(skill.id) as SkillRow | undefined;
+      const existing = await db.queryGet<SkillRow>("SELECT * FROM skills WHERE id = ?", skill.id);
       if (existing) {
         if (existing.user_id !== null || !existing.is_system) {
           throw new Error(`System skill config id ${skill.id} conflicts with an existing non-system skill.`);
         }
-        db.prepare(
+        await db.execute(
           `
             UPDATE skills
             SET user_id = NULL, title = ?, category = ?, description = ?, prompt = ?, applies_to = ?, sort_order = ?, is_system = 1, default_enabled = ?, default_loaded = ?, parent_skill_id = ?, is_archived = ?, updated_at = ?
             WHERE id = ?
           `
-        ).run(
+        ,
           parsed.title,
           parsed.category,
           parsed.description,
@@ -469,12 +461,12 @@ export function createTritreeRepository(
           skill.id
         );
       } else {
-        db.prepare(
+        await db.execute(
           `
             INSERT INTO skills (id, title, category, description, prompt, applies_to, sort_order, is_system, default_enabled, default_loaded, parent_skill_id, is_archived, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
           `
-        ).run(
+        ,
           skill.id,
           parsed.title,
           parsed.category,
@@ -494,7 +486,7 @@ export function createTritreeRepository(
 
     const configuredIds = systemSkills.map((skill) => skill.id);
     const placeholders = configuredIds.map(() => "?").join(", ");
-    db.prepare(
+    await db.execute(
       `
         UPDATE skills
         SET is_archived = 1, updated_at = ?
@@ -503,61 +495,59 @@ export function createTritreeRepository(
           AND is_archived = 0
           AND id NOT IN (${placeholders})
       `
-    ).run(timestamp, ...configuredIds);
+    , timestamp, ...configuredIds);
   }
 
-  function ensureDefaultCreationRequestOptions(creationRequestOptions: ConfiguredCreationRequestOption[]) {
+  async function ensureDefaultCreationRequestOptions(creationRequestOptions: ConfiguredCreationRequestOption[]) {
     const timestamp = now();
 
-    creationRequestOptions.forEach((option, index) => {
+    for (const [index, option] of creationRequestOptions.entries()) {
       const sortOrder = option.sortOrder ?? index;
-      const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ?").get(option.id) as
-        | CreationRequestOptionRow
-        | undefined;
+      const existing = await db.queryGet<CreationRequestOptionRow>("SELECT * FROM creation_request_options WHERE id = ?", option.id);
       if (existing) {
         if (existing.user_id !== null) {
           throw new Error(`Defaults config creation request option id ${option.id} conflicts with an existing user option.`);
         }
-        db.prepare(
+        await db.execute(
           `
             UPDATE creation_request_options
             SET user_id = NULL, label = ?, sort_order = ?, is_archived = 0, updated_at = ?
             WHERE id = ?
           `
-        ).run(option.label, sortOrder, timestamp, option.id);
-        return;
+        , option.label, sortOrder, timestamp, option.id);
+        continue;
       }
 
-      db.prepare(
+      await db.execute(
         `
           INSERT INTO creation_request_options (id, label, sort_order, is_archived, created_at, updated_at)
           VALUES (?, ?, ?, 0, ?, ?)
         `
-      ).run(option.id, option.label, sortOrder, timestamp, timestamp);
-    });
+      , option.id, option.label, sortOrder, timestamp, timestamp);
+    }
 
-    archiveRemovedDefaultCreationRequestOptions(creationRequestOptions, timestamp);
+    await archiveRemovedDefaultCreationRequestOptions(creationRequestOptions, timestamp);
   }
 
-  function archiveRemovedDefaultCreationRequestOptions(
+  async function archiveRemovedDefaultCreationRequestOptions(
     creationRequestOptions: ConfiguredCreationRequestOption[],
     timestamp: string
   ) {
     if (creationRequestOptions.length === 0) {
-      db.prepare(
+      await db.execute(
         `
           UPDATE creation_request_options
           SET is_archived = 1, updated_at = ?
           WHERE user_id IS NULL
             AND is_archived = 0
         `
-      ).run(timestamp);
+      , timestamp);
       return;
     }
 
     const configuredIds = creationRequestOptions.map((option) => option.id);
     const placeholders = configuredIds.map(() => "?").join(", ");
-    db.prepare(
+    await db.execute(
       `
         UPDATE creation_request_options
         SET is_archived = 1, updated_at = ?
@@ -565,71 +555,71 @@ export function createTritreeRepository(
           AND is_archived = 0
           AND id NOT IN (${placeholders})
       `
-    ).run(timestamp, ...configuredIds);
+    , timestamp, ...configuredIds);
   }
 
-  function ensureUserCreationRequestOptions(userId: string) {
-    const row = db
-      .prepare("SELECT id FROM creation_request_options WHERE user_id = ? LIMIT 1")
-      .get(userId);
+  async function ensureUserCreationRequestOptions(userId: string) {
+    const row = await db.queryGet("SELECT id FROM creation_request_options WHERE user_id = ? LIMIT 1", userId);
     if (row) return;
 
     const timestamp = now();
-    configuredDefaults.creationRequestOptions.forEach((option, index) => {
-      db.prepare(
+    for (const [index, option] of configuredDefaults.creationRequestOptions.entries()) {
+      await db.execute(
         `
           INSERT INTO creation_request_options (id, user_id, label, sort_order, is_archived, created_at, updated_at)
           VALUES (?, ?, ?, ?, 0, ?, ?)
         `
-      ).run(nanoid(), userId, option.label, option.sortOrder ?? index, timestamp, timestamp);
-    });
+      , nanoid(), userId, option.label, option.sortOrder ?? index, timestamp, timestamp);
+    }
   }
 
-  function listCreationRequestOptions(
+  async function listCreationRequestOptions(
     userId: string,
     { includeArchived = false }: { includeArchived?: boolean } = {}
   ) {
-    ensureUserCreationRequestOptions(userId);
-    const rows = db
-      .prepare(
-        includeArchived
-          ? "SELECT * FROM creation_request_options WHERE user_id = ? ORDER BY sort_order, created_at, rowid"
-          : "SELECT * FROM creation_request_options WHERE user_id = ? AND is_archived = 0 ORDER BY sort_order, created_at, rowid"
-      )
-      .all(userId) as CreationRequestOptionRow[];
+    await ensureUserCreationRequestOptions(userId);
+    const rows = await db.queryAll<CreationRequestOptionRow>(
+      includeArchived
+        ? "SELECT * FROM creation_request_options WHERE user_id = ? ORDER BY sort_order, created_at, rowid"
+        : "SELECT * FROM creation_request_options WHERE user_id = ? AND is_archived = 0 ORDER BY sort_order, created_at, rowid",
+      userId
+    );
     return rows.map(toCreationRequestOption);
   }
 
-  function nextCreationRequestOptionSortOrder(userId: string) {
-    const row = db
-      .prepare("SELECT MAX(sort_order) AS max_sort_order FROM creation_request_options WHERE user_id = ?")
-      .get(userId) as { max_sort_order: number | null } | undefined;
+  async function nextCreationRequestOptionSortOrder(userId: string) {
+    const row = await db.queryGet<{ max_sort_order: number | null }>(
+      "SELECT MAX(sort_order) AS max_sort_order FROM creation_request_options WHERE user_id = ?",
+      userId
+    );
     return typeof row?.max_sort_order === "number" ? row.max_sort_order + 1 : 0;
   }
 
-  function createCreationRequestOption(userId: string, input: CreationRequestOptionUpsert) {
-    ensureUserCreationRequestOptions(userId);
+  async function createCreationRequestOption(userId: string, input: CreationRequestOptionUpsert) {
+    await ensureUserCreationRequestOptions(userId);
     const parsed = CreationRequestOptionUpsertSchema.parse(input);
     const id = nanoid();
     const timestamp = now();
-    const sortOrder = parsed.sortOrder ?? nextCreationRequestOptionSortOrder(userId);
+    const sortOrder = parsed.sortOrder ?? (await nextCreationRequestOptionSortOrder(userId));
 
-    db.prepare(
+    await db.execute(
       `
         INSERT INTO creation_request_options (id, user_id, label, sort_order, is_archived, created_at, updated_at)
         VALUES (?, ?, ?, ?, 0, ?, ?)
       `
-    ).run(id, userId, parsed.label, sortOrder, timestamp, timestamp);
+    , id, userId, parsed.label, sortOrder, timestamp, timestamp);
 
     return toCreationRequestOption(
-      db.prepare("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?").get(id, userId) as CreationRequestOptionRow
+      (await db.queryGet<CreationRequestOptionRow>("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?", id, userId))!
     );
   }
 
-  function updateCreationRequestOption(userId: string, optionId: string, input: Partial<CreationRequestOptionUpsert>) {
-    const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?").get(optionId, userId) as
-      | CreationRequestOptionRow
-      | undefined;
+  async function updateCreationRequestOption(userId: string, optionId: string, input: Partial<CreationRequestOptionUpsert>) {
+    const existing = await db.queryGet<CreationRequestOptionRow>(
+      "SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?",
+      optionId,
+      userId
+    );
     if (!existing) throw new Error("Creation request option was not found.");
 
     const parsed = CreationRequestOptionUpsertSchema.parse({
@@ -638,103 +628,105 @@ export function createTritreeRepository(
     });
     const timestamp = now();
 
-    db.prepare(
+    await db.execute(
       `
         UPDATE creation_request_options
         SET label = ?, sort_order = ?, updated_at = ?
         WHERE id = ? AND user_id = ?
       `
-    ).run(parsed.label, parsed.sortOrder ?? existing.sort_order, timestamp, optionId, userId);
+    , parsed.label, parsed.sortOrder ?? existing.sort_order, timestamp, optionId, userId);
 
     return toCreationRequestOption(
-      db.prepare("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?").get(optionId, userId) as CreationRequestOptionRow
+      (await db.queryGet<CreationRequestOptionRow>("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?", optionId, userId))!
     );
   }
 
-  function deleteCreationRequestOption(userId: string, optionId: string) {
-    const existing = db.prepare("SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?").get(optionId, userId) as
-      | CreationRequestOptionRow
-      | undefined;
+  async function deleteCreationRequestOption(userId: string, optionId: string) {
+    const existing = await db.queryGet<CreationRequestOptionRow>(
+      "SELECT * FROM creation_request_options WHERE id = ? AND user_id = ?",
+      optionId,
+      userId
+    );
     if (!existing) throw new Error("Creation request option was not found.");
 
-    db.prepare(
+    await db.execute(
       `
         UPDATE creation_request_options
         SET is_archived = 1, updated_at = ?
         WHERE id = ? AND user_id = ?
       `
-    ).run(now(), optionId, userId);
+    , now(), optionId, userId);
   }
 
-  function reorderCreationRequestOptions(userId: string, orderedIds: string[]) {
-    ensureUserCreationRequestOptions(userId);
+  async function reorderCreationRequestOptions(userId: string, orderedIds: string[]) {
+    await ensureUserCreationRequestOptions(userId);
     const ids = Array.from(new Set(orderedIds));
-    const existingIds = new Set(listCreationRequestOptions(userId).map((option) => option.id));
+    const existingOptions = await listCreationRequestOptions(userId);
+    const existingIds = new Set(existingOptions.map((option) => option.id));
     const timestamp = now();
     const orderedKnownIds = ids.filter((id) => existingIds.has(id));
-    const remainingIds = listCreationRequestOptions(userId)
+    const remainingIds = existingOptions
       .map((option) => option.id)
       .filter((id) => !orderedKnownIds.includes(id));
 
-    [...orderedKnownIds, ...remainingIds].forEach((id, index) => {
-      db.prepare(
+    for (const [index, id] of [...orderedKnownIds, ...remainingIds].entries()) {
+      await db.execute(
         `
           UPDATE creation_request_options
           SET sort_order = ?, updated_at = ?
           WHERE id = ? AND user_id = ?
         `
-      ).run(index, timestamp, id, userId);
-    });
+      , index, timestamp, id, userId);
+    }
 
     return listCreationRequestOptions(userId);
   }
 
-  function resetCreationRequestOptions(userId: string) {
-    ensureUserCreationRequestOptions(userId);
+  async function resetCreationRequestOptions(userId: string) {
+    await ensureUserCreationRequestOptions(userId);
     const timestamp = now();
 
     return withTransaction(db, () => {
-      db.prepare("UPDATE creation_request_options SET is_archived = 1, updated_at = ? WHERE user_id = ?").run(timestamp, userId);
+      return (async () => {
+        await db.execute("UPDATE creation_request_options SET is_archived = 1, updated_at = ? WHERE user_id = ?", timestamp, userId);
 
-      configuredDefaults.creationRequestOptions.forEach((option, index) => {
-        db.prepare(
-          `
-            INSERT INTO creation_request_options (id, user_id, label, sort_order, is_archived, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 0, ?, ?)
-          `
-        ).run(nanoid(), userId, option.label, option.sortOrder ?? index, timestamp, timestamp);
-      });
+        for (const [index, option] of configuredDefaults.creationRequestOptions.entries()) {
+          await db.execute(
+            `
+              INSERT INTO creation_request_options (id, user_id, label, sort_order, is_archived, created_at, updated_at)
+              VALUES (?, ?, ?, ?, 0, ?, ?)
+            `
+          , nanoid(), userId, option.label, option.sortOrder ?? index, timestamp, timestamp);
+        }
 
-      return listCreationRequestOptions(userId);
+        return listCreationRequestOptions(userId);
+      })();
     });
   }
 
-  function listSkills(userId: string, { includeArchived = false }: { includeArchived?: boolean } = {}) {
-    syncInstalledSkillsFromFolder();
-    const rows = db
-      .prepare(
-        includeArchived
-          ? `
+  async function listSkills(userId: string, { includeArchived = false }: { includeArchived?: boolean } = {}) {
+    await syncInstalledSkillsFromFolder();
+    const rows = await db.queryAll<SkillRow>(
+      includeArchived
+        ? `
+          SELECT *
+          FROM skills
+          WHERE user_id IS NULL OR user_id = ?
+            ORDER BY is_system DESC, sort_order, category, title
+          `
+        : `
             SELECT *
             FROM skills
-            WHERE user_id IS NULL OR user_id = ?
-              ORDER BY is_system DESC, sort_order, category, title
-            `
-          : `
-              SELECT *
-              FROM skills
-              WHERE (user_id IS NULL OR user_id = ?) AND is_archived = 0
-              ORDER BY is_system DESC, sort_order, category, title
-            `
-      )
-      .all(userId) as SkillRow[];
+            WHERE (user_id IS NULL OR user_id = ?) AND is_archived = 0
+            ORDER BY is_system DESC, sort_order, category, title
+          `,
+      userId
+    );
     return rows.map(toSkill);
   }
 
-  function defaultEnabledSkillIds() {
-    const rows = db
-      .prepare("SELECT * FROM skills WHERE is_system = 1 AND user_id IS NULL AND is_archived = 0")
-      .all() as SkillRow[];
+  async function defaultEnabledSkillIds() {
+    const rows = await db.queryAll<SkillRow>("SELECT * FROM skills WHERE is_system = 1 AND user_id IS NULL AND is_archived = 0");
     return rows
       .map(toSkill)
       .filter((skill) => skill.defaultEnabled)
@@ -742,38 +734,38 @@ export function createTritreeRepository(
       .map((skill) => skill.id);
   }
 
-  function resolveSkillsByIds(skillIds: string[], userId: string) {
-    syncInstalledSkillsFromFolder();
+  async function resolveSkillsByIds(skillIds: string[], userId: string) {
+    await syncInstalledSkillsFromFolder();
     const ids = uniqueSkillIds(skillIds);
     if (ids.length === 0 || !userId) return [];
-    return ids
-      .map((id) =>
-        db
-          .prepare(
-            `
-              SELECT *
-              FROM skills
-              WHERE id = ?
-                AND is_archived = 0
-                AND (user_id IS NULL OR user_id = ?)
-            `
-          )
-          .get(id, userId) as SkillRow | undefined
+    const rows = await Promise.all(
+      ids.map((id) =>
+        db.queryGet<SkillRow>(
+          `
+            SELECT *
+            FROM skills
+            WHERE id = ?
+              AND is_archived = 0
+              AND (user_id IS NULL OR user_id = ?)
+          `,
+          id,
+          userId
+        )
       )
-      .filter((row): row is SkillRow => Boolean(row))
-      .map(toSkill);
+    );
+    return rows.filter((row): row is SkillRow => Boolean(row)).map(toSkill);
   }
 
-  function createSkill(userId: string, input: SkillUpsert) {
+  async function createSkill(userId: string, input: SkillUpsert) {
     const parsed = SkillUpsertSchema.parse(input);
     const id = nanoid();
     const timestamp = now();
-    db.prepare(
+    await db.execute(
       `
         INSERT INTO skills (id, user_id, title, category, description, prompt, applies_to, is_system, default_enabled, default_loaded, parent_skill_id, is_archived, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
       `
-    ).run(
+    ,
       id,
       userId,
       parsed.title,
@@ -788,33 +780,33 @@ export function createTritreeRepository(
       timestamp,
       timestamp
     );
-    return toSkill(db.prepare("SELECT * FROM skills WHERE id = ? AND user_id = ?").get(id, userId) as SkillRow);
+    return toSkill((await db.queryGet<SkillRow>("SELECT * FROM skills WHERE id = ? AND user_id = ?", id, userId))!);
   }
 
-  function importSkills(inputs: InstalledSkillImport[]) {
+  async function importSkills(inputs: InstalledSkillImport[]) {
     const timestamp = now();
 
-    return withTransaction(db, () => {
+    return withTransaction(db, async () => {
       const imported: Skill[] = [];
 
       for (const input of inputs) {
-        imported.push(upsertImportedSkill(input, timestamp, { allowSystemOverwrite: false }));
+        imported.push(await upsertImportedSkill(input, timestamp, { allowSystemOverwrite: false }));
       }
 
       return imported;
     });
   }
 
-  function syncInstalledSkillsFromFolder() {
+  async function syncInstalledSkillsFromFolder() {
     const timestamp = now();
     for (const installed of discoverInstalledSkills({ installRoot: skillInstallRoot })) {
-      const existing = db.prepare("SELECT * FROM skills WHERE id = ?").get(installed.skill.id) as SkillRow | undefined;
+      const existing = await db.queryGet<SkillRow>("SELECT * FROM skills WHERE id = ?", installed.skill.id);
       if (existing?.is_system) continue;
-      upsertImportedSkill(installed.skill, timestamp, { allowSystemOverwrite: false });
+      await upsertImportedSkill(installed.skill, timestamp, { allowSystemOverwrite: false });
     }
   }
 
-  function upsertImportedSkill(
+  async function upsertImportedSkill(
     input: InstalledSkillImport,
     timestamp: string,
     {
@@ -824,19 +816,19 @@ export function createTritreeRepository(
     }
   ) {
     const parsed = SkillUpsertSchema.parse(input);
-    const existing = db.prepare("SELECT * FROM skills WHERE id = ?").get(input.id) as SkillRow | undefined;
+    const existing = await db.queryGet<SkillRow>("SELECT * FROM skills WHERE id = ?", input.id);
     if (existing?.is_system && !allowSystemOverwrite) {
       throw new Error("System skills cannot be overwritten by imported skills.");
     }
 
     if (existing) {
-      db.prepare(
+      await db.execute(
         `
           UPDATE skills
           SET title = ?, category = ?, description = ?, prompt = ?, applies_to = ?, default_enabled = ?, default_loaded = ?, parent_skill_id = ?, is_archived = ?, updated_at = ?
           WHERE id = ?
         `
-      ).run(
+      ,
         parsed.title,
         parsed.category,
         parsed.description,
@@ -850,12 +842,12 @@ export function createTritreeRepository(
         input.id
       );
     } else {
-      db.prepare(
+      await db.execute(
         `
           INSERT INTO skills (id, title, category, description, prompt, applies_to, is_system, default_enabled, default_loaded, parent_skill_id, is_archived, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
         `
-      ).run(
+      ,
         input.id,
         parsed.title,
         parsed.category,
@@ -871,13 +863,15 @@ export function createTritreeRepository(
       );
     }
 
-    return toSkill(db.prepare("SELECT * FROM skills WHERE id = ?").get(input.id) as SkillRow);
+    return toSkill((await db.queryGet<SkillRow>("SELECT * FROM skills WHERE id = ?", input.id))!);
   }
 
-  function updateSkill(userId: string, skillId: string, input: Partial<SkillUpsert>) {
-    const existing = db
-      .prepare("SELECT * FROM skills WHERE id = ? AND (user_id IS NULL OR user_id = ?)")
-      .get(skillId, userId) as SkillRow | undefined;
+  async function updateSkill(userId: string, skillId: string, input: Partial<SkillUpsert>) {
+    const existing = await db.queryGet<SkillRow>(
+      "SELECT * FROM skills WHERE id = ? AND (user_id IS NULL OR user_id = ?)",
+      skillId,
+      userId
+    );
     if (!existing) throw new Error("Skill was not found.");
     if (existing.is_system) throw new Error("System skills cannot be edited directly.");
     const parsed = SkillUpsertSchema.parse({
@@ -892,13 +886,13 @@ export function createTritreeRepository(
       isArchived: input.isArchived ?? Boolean(existing.is_archived)
     });
     const timestamp = now();
-    db.prepare(
+    await db.execute(
       `
         UPDATE skills
         SET title = ?, category = ?, description = ?, prompt = ?, applies_to = ?, default_enabled = ?, default_loaded = ?, parent_skill_id = ?, is_archived = ?, updated_at = ?
         WHERE id = ? AND (user_id IS NULL OR user_id = ?)
       `
-    ).run(
+    ,
       parsed.title,
       parsed.category,
       parsed.description,
@@ -912,58 +906,58 @@ export function createTritreeRepository(
       skillId,
       userId
     );
-    return toSkill(db.prepare("SELECT * FROM skills WHERE id = ? AND (user_id IS NULL OR user_id = ?)").get(skillId, userId) as SkillRow);
+    return toSkill((await db.queryGet<SkillRow>("SELECT * FROM skills WHERE id = ? AND (user_id IS NULL OR user_id = ?)", skillId, userId))!);
   }
 
-  function saveSessionEnabledSkills(sessionId: string, userId: string, skillIds: string[], timestamp: string) {
-    syncInstalledSkillsFromFolder();
-    db.prepare("DELETE FROM session_enabled_skills WHERE session_id = ?").run(sessionId);
+  async function saveSessionEnabledSkills(sessionId: string, userId: string, skillIds: string[], timestamp: string) {
+    await syncInstalledSkillsFromFolder();
+    await db.execute("DELETE FROM session_enabled_skills WHERE session_id = ?", sessionId);
     for (const skillId of uniqueSkillIds(skillIds)) {
-      const exists = db
-        .prepare(
-          "SELECT id FROM skills WHERE id = ? AND is_archived = 0 AND (user_id IS NULL OR user_id = ?)"
-        )
-        .get(skillId, userId);
+      const exists = await db.queryGet(
+        "SELECT id FROM skills WHERE id = ? AND is_archived = 0 AND (user_id IS NULL OR user_id = ?)",
+        skillId,
+        userId
+      );
       if (!exists) continue;
-      db.prepare(
+      await db.execute(
         `
           INSERT INTO session_enabled_skills (session_id, skill_id, created_at)
           VALUES (?, ?, ?)
         `
-      ).run(sessionId, skillId, timestamp);
+      , sessionId, skillId, timestamp);
     }
   }
 
-  function enabledSkillsForSession(sessionId: string, userId: string) {
-    const rows = db
-      .prepare(
-        `
-          SELECT skills.*
-          FROM session_enabled_skills
-          JOIN skills ON skills.id = session_enabled_skills.skill_id
-          WHERE session_enabled_skills.session_id = ?
-            AND skills.is_archived = 0
-            AND (skills.user_id IS NULL OR skills.user_id = ?)
-          ORDER BY session_enabled_skills.created_at, session_enabled_skills.rowid
-        `
-      )
-      .all(sessionId, userId) as SkillRow[];
+  async function enabledSkillsForSession(sessionId: string, userId: string) {
+    const rows = await db.queryAll<SkillRow>(
+      `
+        SELECT skills.*
+        FROM session_enabled_skills
+        JOIN skills ON skills.id = session_enabled_skills.skill_id
+        WHERE session_enabled_skills.session_id = ?
+          AND skills.is_archived = 0
+          AND (skills.user_id IS NULL OR skills.user_id = ?)
+        ORDER BY session_enabled_skills.created_at, session_enabled_skills.rowid
+      `,
+      sessionId,
+      userId
+    );
     return rows.map(toSkill);
   }
 
-  function replaceSessionEnabledSkills(userId: string, sessionId: string, skillIds: string[]) {
-    const session = getActiveSession(userId, sessionId);
+  async function replaceSessionEnabledSkills(userId: string, sessionId: string, skillIds: string[]) {
+    const session = await getActiveSession(userId, sessionId);
     if (!session) throw new Error("Session was not found.");
     const timestamp = now();
-    return withTransaction(db, () => {
-      saveSessionEnabledSkills(sessionId, userId, skillIds, timestamp);
+    return withTransaction(db, async () => {
+      await saveSessionEnabledSkills(sessionId, userId, skillIds, timestamp);
       return getSessionState(userId, sessionId);
     });
   }
 
-  function hasUsers() {
-    const row = db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number };
-    return row.count > 0;
+  async function hasUsers() {
+    const row = await db.queryGet<{ count: number }>("SELECT COUNT(*) AS count FROM users");
+    return Number(row?.count ?? 0) > 0;
   }
 
   async function createInitialAdmin(input: CreateInitialAdminInput) {
@@ -972,19 +966,19 @@ export function createTritreeRepository(
     const timestamp = now();
     const id = nanoid();
 
-    return withTransaction(db, () => {
-      if (hasUsers()) {
+    return withTransaction(db, async () => {
+      if (await hasUsers()) {
         throw new Error("Initial administrator already exists.");
       }
 
-      db.prepare(
+      await db.execute(
         `
           INSERT INTO users (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
           VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)
         `
-      ).run(id, parsed.username, parsed.displayName, passwordHash, timestamp, timestamp);
+      , id, parsed.username, parsed.displayName, passwordHash, timestamp, timestamp);
 
-      return getUser(id)!;
+      return (await getUser(id))!;
     });
   }
 
@@ -994,24 +988,24 @@ export function createTritreeRepository(
     const timestamp = now();
     const id = nanoid();
 
-    db.prepare(
+    await db.execute(
       `
         INSERT INTO users (id, username, display_name, password_hash, role, is_active, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `
-    ).run(id, parsed.username, parsed.displayName, passwordHash, parsed.role, parsed.isActive ? 1 : 0, timestamp, timestamp);
+    , id, parsed.username, parsed.displayName, passwordHash, parsed.role, parsed.isActive ? 1 : 0, timestamp, timestamp);
 
-    return getUser(id)!;
+    return (await getUser(id))!;
   }
 
-  function listUsers() {
-    const rows = db.prepare("SELECT * FROM users ORDER BY created_at, rowid").all() as UserRow[];
+  async function listUsers() {
+    const rows = await db.queryAll<UserRow>("SELECT * FROM users ORDER BY created_at, rowid");
     return rows.map(toUser);
   }
 
-  function listUsersWithOidcIdentities() {
-    const users = listUsers();
-    const identityRows = db.prepare("SELECT * FROM user_oidc_identities ORDER BY created_at, rowid").all() as OidcIdentityRow[];
+  async function listUsersWithOidcIdentities() {
+    const users = await listUsers();
+    const identityRows = await db.queryAll<OidcIdentityRow>("SELECT * FROM user_oidc_identities ORDER BY created_at, rowid");
     const identitiesByUserId = new Map<string, OidcIdentity[]>();
 
     for (const row of identityRows) {
@@ -1026,19 +1020,19 @@ export function createTritreeRepository(
     }));
   }
 
-  function getUser(userId: string) {
-    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+  async function getUser(userId: string) {
+    const row = await db.queryGet<UserRow>("SELECT * FROM users WHERE id = ?", userId);
     return row ? toUser(row) : null;
   }
 
-  function getUserWithPasswordHashByUsername(username: string) {
-    const row = db.prepare("SELECT * FROM users WHERE username = ?").get(username.trim()) as UserRow | undefined;
+  async function getUserWithPasswordHashByUsername(username: string) {
+    const row = await db.queryGet<UserRow>("SELECT * FROM users WHERE username = ?", username.trim());
     return row ? toUserWithPasswordHash(row) : null;
   }
 
   async function verifyPasswordLogin(username: string, password: string) {
     const parsed = CredentialsLoginSchema.parse({ username, password });
-    const user = getUserWithPasswordHashByUsername(parsed.username);
+    const user = await getUserWithPasswordHashByUsername(parsed.username);
     if (!user?.isActive || !user.passwordHash) return null;
 
     const isValid = await verifyPassword(parsed.password, user.passwordHash);
@@ -1056,77 +1050,78 @@ export function createTritreeRepository(
   }
 
   async function resetUserPassword(userId: string, password: string) {
-    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    const existing = await db.queryGet<UserRow>("SELECT * FROM users WHERE id = ?", userId);
     if (!existing) throw new Error("User was not found.");
 
     const parsed = ResetPasswordSchema.parse({ password });
     const passwordHash = await hashPassword(parsed.password);
-    db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(passwordHash, now(), userId);
+    await db.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", passwordHash, now(), userId);
 
-    return getUser(userId)!;
+    return (await getUser(userId))!;
   }
 
-  function updateUserDisplayName(userId: string, displayName: string) {
-    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+  async function updateUserDisplayName(userId: string, displayName: string) {
+    const existing = await db.queryGet<UserRow>("SELECT * FROM users WHERE id = ?", userId);
     if (!existing) throw new Error("User was not found.");
 
     const parsedDisplayName = UpdateUserSchema.shape.displayName.unwrap().parse(displayName);
-    db.prepare("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?").run(parsedDisplayName, now(), userId);
-    return getUser(userId)!;
+    await db.execute("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?", parsedDisplayName, now(), userId);
+    return (await getUser(userId))!;
   }
 
-  function activeAdminCountExcluding(userId: string) {
-    const row = db
-      .prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = 1 AND id <> ?")
-      .get(userId) as { count: number };
-    return row.count;
+  async function activeAdminCountExcluding(userId: string) {
+    const row = await db.queryGet<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND is_active = 1 AND id <> ?",
+      userId
+    );
+    return Number(row?.count ?? 0);
   }
 
-  function setUserActive(userId: string, isActive: boolean) {
-    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+  async function setUserActive(userId: string, isActive: boolean) {
+    const existing = await db.queryGet<UserRow>("SELECT * FROM users WHERE id = ?", userId);
     if (!existing) throw new Error("User was not found.");
 
     if (
       existing.role === "admin" &&
       Boolean(existing.is_active) &&
       !isActive &&
-      activeAdminCountExcluding(userId) === 0
+      (await activeAdminCountExcluding(userId)) === 0
     ) {
       throw new Error("Cannot deactivate the final active administrator.");
     }
 
-    db.prepare("UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?").run(isActive ? 1 : 0, now(), userId);
-    return getUser(userId)!;
+    await db.execute("UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?", isActive ? 1 : 0, now(), userId);
+    return (await getUser(userId))!;
   }
 
-  function setUserRole(userId: string, role: UserRole) {
+  async function setUserRole(userId: string, role: UserRole) {
     const parsedRole = UserRoleSchema.parse(role);
-    const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    const existing = await db.queryGet<UserRow>("SELECT * FROM users WHERE id = ?", userId);
     if (!existing) throw new Error("User was not found.");
 
     if (
       existing.role === "admin" &&
       Boolean(existing.is_active) &&
       parsedRole !== "admin" &&
-      activeAdminCountExcluding(userId) === 0
+      (await activeAdminCountExcluding(userId)) === 0
     ) {
       throw new Error("Cannot demote the final active administrator.");
     }
 
-    db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(parsedRole, now(), userId);
-    return getUser(userId)!;
+    await db.execute("UPDATE users SET role = ?, updated_at = ? WHERE id = ?", parsedRole, now(), userId);
+    return (await getUser(userId))!;
   }
 
-  function updateUser(userId: string, input: UpdateUserInput) {
+  async function updateUser(userId: string, input: UpdateUserInput) {
     const parsed = UpdateUserSchema.parse(input);
 
-    return withTransaction(db, () => {
-      const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
+    return withTransaction(db, async () => {
+      const existing = await db.queryGet<UserRow>("SELECT * FROM users WHERE id = ?", userId);
       if (!existing) throw new Error("User was not found.");
 
       const nextRole = parsed.role ?? UserRoleSchema.parse(existing.role);
       const nextIsActive = parsed.isActive ?? Boolean(existing.is_active);
-      if (existing.role === "admin" && Boolean(existing.is_active) && activeAdminCountExcluding(userId) === 0) {
+      if (existing.role === "admin" && Boolean(existing.is_active) && (await activeAdminCountExcluding(userId)) === 0) {
         if (!nextIsActive) {
           throw new Error("Cannot deactivate the final active administrator.");
         }
@@ -1137,105 +1132,98 @@ export function createTritreeRepository(
 
       const timestamp = now();
       if (parsed.displayName !== undefined) {
-        db.prepare("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?").run(parsed.displayName, timestamp, userId);
+        await db.execute("UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?", parsed.displayName, timestamp, userId);
       }
       if (parsed.isActive !== undefined) {
-        db.prepare("UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?").run(parsed.isActive ? 1 : 0, timestamp, userId);
+        await db.execute("UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?", parsed.isActive ? 1 : 0, timestamp, userId);
       }
       if (parsed.role !== undefined) {
-        db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(parsed.role, timestamp, userId);
+        await db.execute("UPDATE users SET role = ?, updated_at = ? WHERE id = ?", parsed.role, timestamp, userId);
       }
 
-      return getUser(userId)!;
+      return (await getUser(userId))!;
     });
   }
 
-  function bindOidcIdentity(userId: string, input: OidcIdentityUpsert) {
-    const user = getUser(userId);
+  async function bindOidcIdentity(userId: string, input: OidcIdentityUpsert) {
+    const user = await getUser(userId);
     if (!user) throw new Error("User was not found.");
 
     const parsed = OidcIdentityUpsertSchema.parse(input);
-    const existing = db
-      .prepare("SELECT id FROM user_oidc_identities WHERE issuer = ? AND subject = ?")
-      .get(parsed.issuer, parsed.subject);
+    const existing = await db.queryGet("SELECT id FROM user_oidc_identities WHERE issuer = ? AND subject = ?", parsed.issuer, parsed.subject);
     if (existing) throw new Error("OIDC identity is already bound.");
 
     const id = nanoid();
     const timestamp = now();
-    db.prepare(
+    await db.execute(
       `
         INSERT INTO user_oidc_identities (id, user_id, issuer, subject, email, name, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `
-    ).run(id, userId, parsed.issuer, parsed.subject, parsed.email, parsed.name, timestamp, timestamp);
+    , id, userId, parsed.issuer, parsed.subject, parsed.email, parsed.name, timestamp, timestamp);
 
-    return toOidcIdentity(db.prepare("SELECT * FROM user_oidc_identities WHERE id = ?").get(id) as OidcIdentityRow);
+    return toOidcIdentity((await db.queryGet<OidcIdentityRow>("SELECT * FROM user_oidc_identities WHERE id = ?", id))!);
   }
 
-  function deleteOidcIdentity(identityId: string) {
-    db.prepare("DELETE FROM user_oidc_identities WHERE id = ?").run(identityId);
+  async function deleteOidcIdentity(identityId: string) {
+    await db.execute("DELETE FROM user_oidc_identities WHERE id = ?", identityId);
   }
 
-  function deleteOidcIdentityForUser(userId: string, identityId: string) {
-    const result = db
-      .prepare("DELETE FROM user_oidc_identities WHERE id = ? AND user_id = ?")
-      .run(identityId, userId) as { changes: number };
+  async function deleteOidcIdentityForUser(userId: string, identityId: string) {
+    const result = await db.execute("DELETE FROM user_oidc_identities WHERE id = ? AND user_id = ?", identityId, userId);
     if (result.changes === 0) throw new Error("OIDC identity was not found.");
   }
 
-  function findUserByOidcIdentity(issuer: string, subject: string) {
-    const row = db
-      .prepare(
-        `
-          SELECT users.*
-          FROM user_oidc_identities
-          JOIN users ON users.id = user_oidc_identities.user_id
-          WHERE user_oidc_identities.issuer = ? AND user_oidc_identities.subject = ? AND users.is_active = 1
-        `
-      )
-      .get(issuer.trim(), subject.trim()) as UserRow | undefined;
+  async function findUserByOidcIdentity(issuer: string, subject: string) {
+    const row = await db.queryGet<UserRow>(
+      `
+        SELECT users.*
+        FROM user_oidc_identities
+        JOIN users ON users.id = user_oidc_identities.user_id
+        WHERE user_oidc_identities.issuer = ? AND user_oidc_identities.subject = ? AND users.is_active = 1
+      `,
+      issuer.trim(),
+      subject.trim()
+    );
 
     return row ? toUser(row) : null;
   }
 
-  function getRootMemory(userId: string) {
-    const row = db
-      .prepare(
-        `
-          SELECT *
-          FROM root_memory
-          WHERE user_id = ?
-          ORDER BY updated_at DESC, created_at DESC, rowid DESC
-          LIMIT 1
-        `
-      )
-      .get(userId) as RootMemoryRow | undefined;
+  async function getRootMemory(userId: string) {
+    const row = await db.queryGet<RootMemoryRow>(
+      `
+        SELECT *
+        FROM root_memory
+        WHERE user_id = ?
+        ORDER BY updated_at DESC, created_at DESC, rowid DESC
+        LIMIT 1
+      `,
+      userId
+    );
     return row ? toRootMemory(row) : null;
   }
 
-  function saveRootMemory(userId: string, preferences: RootPreferences) {
+  async function saveRootMemory(userId: string, preferences: RootPreferences) {
     const parsed = RootPreferencesSchema.parse(preferences);
-    const existing = getRootMemory(userId);
+    const existing = await getRootMemory(userId);
     const id = nanoid();
     const timestamp = now();
     const summary = summarizePreferences(parsed);
 
-    db.prepare(
+    await db.execute(
       `
         INSERT INTO root_memory (id, user_id, preferences_json, summary, learned_summary, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `
-    ).run(id, userId, JSON.stringify(parsed), summary, existing?.learnedSummary ?? "", timestamp, timestamp);
+    , id, userId, JSON.stringify(parsed), summary, existing?.learnedSummary ?? "", timestamp, timestamp);
 
-    const row = db.prepare("SELECT * FROM root_memory WHERE id = ? AND user_id = ?").get(id, userId) as RootMemoryRow | undefined;
+    const row = await db.queryGet<RootMemoryRow>("SELECT * FROM root_memory WHERE id = ? AND user_id = ?", id, userId);
     if (!row) throw new Error("Failed to save root memory.");
     return toRootMemory(row);
   }
 
-  function requireOwnedRootMemory(userId: string, rootMemoryId: string) {
-    const rootRow = db.prepare("SELECT * FROM root_memory WHERE id = ? AND user_id = ?").get(rootMemoryId, userId) as
-      | RootMemoryRow
-      | undefined;
+  async function requireOwnedRootMemory(userId: string, rootMemoryId: string) {
+    const rootRow = await db.queryGet<RootMemoryRow>("SELECT * FROM root_memory WHERE id = ? AND user_id = ?", rootMemoryId, userId);
     const root = rootRow ? toRootMemory(rootRow) : null;
     if (!root) throw new Error("Root memory was not found.");
     return root;
@@ -1248,7 +1236,7 @@ export function createTritreeRepository(
     return plugin.summarizeForTree(parsedPayload);
   }
 
-  function insertArtifact({
+  async function insertArtifact({
     sessionId,
     nodeId,
     type,
@@ -1266,16 +1254,16 @@ export function createTritreeRepository(
     const plugin = requireArtifactPlugin(type);
     const parsedPayload = plugin.payloadSchema.parse(payload);
     const artifactId = nanoid();
-    db.prepare(
+    await db.execute(
       `
         INSERT INTO artifacts (id, session_id, node_id, type, version, payload_json, source_artifact_ids_json, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
-    ).run(artifactId, sessionId, nodeId, type, 1, JSON.stringify(parsedPayload), JSON.stringify(sourceArtifactIds), timestamp, timestamp);
+    , artifactId, sessionId, nodeId, type, 1, JSON.stringify(parsedPayload), JSON.stringify(sourceArtifactIds), timestamp, timestamp);
     return artifactId;
   }
 
-  function createWorkflowNodeWithOptionalArtifact({
+  async function createWorkflowNodeWithOptionalArtifact({
     userId,
     rootMemoryId,
     artifactTypeId,
@@ -1308,19 +1296,19 @@ export function createTritreeRepository(
     const explicitSessionTitle = truncateSessionTitle(sessionTitle ?? "");
     const resolvedSessionTitle = explicitSessionTitle || artifactTitle || parent?.session.title || roundIntent || "Untitled Tree";
 
-    return withTransaction(db, () => {
+    return withTransaction(db, async () => {
       if (parent) {
-        saveNodeSelection(sessionId, parent.node.id, parent.options, parent.selectedOptionId, timestamp);
+        await saveNodeSelection(sessionId, parent.node.id, parent.options, parent.selectedOptionId, timestamp);
       } else {
-        db.prepare(
+        await db.execute(
           `
             INSERT INTO sessions (id, user_id, root_memory_id, artifact_type_id, title, status, current_node_id, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           `
-        ).run(sessionId, userId, rootMemoryId, artifactTypeId, resolvedSessionTitle, "active", nodeId, timestamp, timestamp);
+        , sessionId, userId, rootMemoryId, artifactTypeId, resolvedSessionTitle, "active", nodeId, timestamp, timestamp);
       }
 
-      db.prepare(
+      await db.execute(
         `
           INSERT INTO tree_nodes (
             id,
@@ -1340,7 +1328,7 @@ export function createTritreeRepository(
           )
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
-      ).run(
+      ,
         nodeId,
         sessionId,
         parent?.node.id ?? null,
@@ -1358,7 +1346,7 @@ export function createTritreeRepository(
       );
 
       const artifactId = artifact
-        ? insertArtifact({
+        ? await insertArtifact({
             sessionId,
             nodeId,
             type: artifact.type,
@@ -1368,27 +1356,27 @@ export function createTritreeRepository(
           })
         : null;
 
-      db.prepare(
+      await db.execute(
         `
           UPDATE tree_nodes
           SET produced_artifact_id = ?
           WHERE id = ?
         `
-      ).run(artifactId, nodeId);
+      , artifactId, nodeId);
 
       if (parent) {
-        db.prepare(
+        await db.execute(
           `
             UPDATE sessions
             SET current_node_id = ?, title = ?, status = ?, updated_at = ?
             WHERE id = ? AND user_id = ?
           `
-        ).run(nodeId, resolvedSessionTitle, "active", timestamp, sessionId, userId);
+        , nodeId, resolvedSessionTitle, "active", timestamp, sessionId, userId);
       } else {
-        saveSessionEnabledSkills(sessionId, userId, enabledSkillIds ?? defaultEnabledSkillIds(), timestamp);
+        await saveSessionEnabledSkills(sessionId, userId, enabledSkillIds ?? (await defaultEnabledSkillIds()), timestamp);
       }
 
-      const state = getSessionState(userId, sessionId);
+      const state = await getSessionState(userId, sessionId);
       if (!state) {
         throw new Error("Failed to create workflow node state.");
       }
@@ -1396,8 +1384,8 @@ export function createTritreeRepository(
     });
   }
 
-  function createSession({ userId, enabledSkillIds, rootMemoryId }: { userId: string; enabledSkillIds?: string[]; rootMemoryId: string }) {
-    const root = requireOwnedRootMemory(userId, rootMemoryId);
+  async function createSession({ userId, enabledSkillIds, rootMemoryId }: { userId: string; enabledSkillIds?: string[]; rootMemoryId: string }) {
+    const root = await requireOwnedRootMemory(userId, rootMemoryId);
     const plugin = requireArtifactPlugin(root.preferences.artifactTypeId ?? DEFAULT_ARTIFACT_TYPE_ID);
     const seedPayload = plugin.createSeedPayload({
       creationRequest: root.preferences.creationRequest,
@@ -1416,7 +1404,7 @@ export function createTritreeRepository(
     });
   }
 
-  function createArtifactChild(input: {
+  async function createArtifactChild(input: {
     artifact: { type: string; payload: unknown; sourceArtifactIds?: string[] } | null;
     customOption?: BranchOption;
     optionMode?: OptionGenerationMode;
@@ -1425,13 +1413,13 @@ export function createTritreeRepository(
     sessionId: string;
     nodeId: string;
     userId: string;
-  }): SessionState {
-    const session = getActiveSession(input.userId, input.sessionId);
+  }): Promise<SessionState> {
+    const session = await getActiveSession(input.userId, input.sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
 
-    const current = db.prepare("SELECT * FROM tree_nodes WHERE id = ?").get(input.nodeId) as TreeNodeRow | undefined;
+    const current = await db.queryGet<TreeNodeRow>("SELECT * FROM tree_nodes WHERE id = ?", input.nodeId);
     if (!current || current.session_id !== input.sessionId) {
       throw new Error("Parent tree node was not found.");
     }
@@ -1467,19 +1455,19 @@ export function createTritreeRepository(
     });
   }
 
-  function updateNodeArtifact(input: {
+  async function updateNodeArtifact(input: {
     agentMessages?: AgentMessage[];
     artifact: { type: string; payload: unknown; sourceArtifactIds?: string[] } | null;
     nodeId: string;
     roundIntent: string;
     sessionId: string;
     userId: string;
-  }): SessionState {
-    const session = getActiveSession(input.userId, input.sessionId);
+  }): Promise<SessionState> {
+    const session = await getActiveSession(input.userId, input.sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
-    const target = db.prepare("SELECT * FROM tree_nodes WHERE id = ?").get(input.nodeId) as TreeNodeRow | undefined;
+    const target = await db.queryGet<TreeNodeRow>("SELECT * FROM tree_nodes WHERE id = ?", input.nodeId);
     if (!target || target.session_id !== input.sessionId) {
       throw new Error("Tree node was not found.");
     }
@@ -1489,9 +1477,9 @@ export function createTritreeRepository(
     const agentMessagesJson = appendAgentMessagesJson(target.agent_messages_json, input.agentMessages);
     const title = artifactTreeTitle(input.artifact) ?? session.title;
 
-    return withTransaction(db, () => {
+    return withTransaction(db, async () => {
       const artifactId = input.artifact
-        ? insertArtifact({
+        ? await insertArtifact({
             sessionId: input.sessionId,
             nodeId: input.nodeId,
             type: input.artifact.type,
@@ -1501,7 +1489,7 @@ export function createTritreeRepository(
           })
         : null;
 
-      db.prepare(
+      await db.execute(
         `
           UPDATE tree_nodes
           SET round_intent = ?,
@@ -1512,7 +1500,7 @@ export function createTritreeRepository(
               updated_at = ?
           WHERE id = ?
         `
-      ).run(
+      ,
         input.roundIntent,
         input.artifact ? "artifact" : "analysis",
         artifactId,
@@ -1522,15 +1510,15 @@ export function createTritreeRepository(
         input.nodeId
       );
 
-      db.prepare(
+      await db.execute(
         `
           UPDATE sessions
           SET title = ?, status = ?, updated_at = ?
           WHERE id = ? AND user_id = ?
         `
-      ).run(title, "active", timestamp, input.sessionId, input.userId);
+      , title, "active", timestamp, input.sessionId, input.userId);
 
-      const state = getSessionState(input.userId, input.sessionId);
+      const state = await getSessionState(input.userId, input.sessionId);
       if (!state) {
         throw new Error("Failed to update node artifact.");
       }
@@ -1538,7 +1526,7 @@ export function createTritreeRepository(
     });
   }
 
-  function updateNodeOptions({
+  async function updateNodeOptions({
     userId,
     sessionId,
     nodeId,
@@ -1552,11 +1540,11 @@ export function createTritreeRepository(
     agentMessages?: AgentMessage[];
   }) {
     requireThreeOptions(output.options);
-    const session = getActiveSession(userId, sessionId);
+    const session = await getActiveSession(userId, sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
-    const target = db.prepare("SELECT * FROM tree_nodes WHERE id = ?").get(nodeId) as TreeNodeRow | undefined;
+    const target = await db.queryGet<TreeNodeRow>("SELECT * FROM tree_nodes WHERE id = ?", nodeId);
     if (!target || target.session_id !== sessionId) {
       throw new Error("Tree node was not found.");
     }
@@ -1564,24 +1552,24 @@ export function createTritreeRepository(
     const timestamp = now();
     const agentMessagesJson = appendAgentMessagesJson(target.agent_messages_json, agentMessages);
 
-    return withTransaction(db, () => {
-      db.prepare(
+    return withTransaction(db, async () => {
+      await db.execute(
         `
           UPDATE tree_nodes
           SET round_intent = ?, options_json = ?, agent_messages_json = ?, updated_at = ?
           WHERE id = ?
         `
-      ).run(output.roundIntent, JSON.stringify(output.options), agentMessagesJson, timestamp, nodeId);
+      , output.roundIntent, JSON.stringify(output.options), agentMessagesJson, timestamp, nodeId);
 
-      db.prepare(
+      await db.execute(
         `
           UPDATE sessions
           SET updated_at = ?
           WHERE id = ? AND user_id = ?
         `
-      ).run(timestamp, sessionId, userId);
+      , timestamp, sessionId, userId);
 
-      const state = getSessionState(userId, sessionId);
+      const state = await getSessionState(userId, sessionId);
       if (!state) {
         throw new Error("Failed to update session options.");
       }
@@ -1589,7 +1577,7 @@ export function createTritreeRepository(
     });
   }
 
-  function completeNode({
+  async function completeNode({
     userId,
     sessionId,
     nodeId,
@@ -1604,11 +1592,11 @@ export function createTritreeRepository(
     agentMessages?: AgentMessage[];
     artifact?: { type: string; payload: unknown; sourceArtifactIds?: string[] } | null;
   }) {
-    const session = getActiveSession(userId, sessionId);
+    const session = await getActiveSession(userId, sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
-    const target = db.prepare("SELECT * FROM tree_nodes WHERE id = ?").get(nodeId) as TreeNodeRow | undefined;
+    const target = await db.queryGet<TreeNodeRow>("SELECT * FROM tree_nodes WHERE id = ?", nodeId);
     if (!target || target.session_id !== sessionId) {
       throw new Error("Tree node was not found.");
     }
@@ -1618,9 +1606,9 @@ export function createTritreeRepository(
     const agentMessagesJson = appendAgentMessagesJson(target.agent_messages_json, agentMessages);
     const title = artifactTreeTitle(artifact) ?? session.title;
 
-    return withTransaction(db, () => {
+    return withTransaction(db, async () => {
       const artifactId = artifact
-        ? insertArtifact({
+        ? await insertArtifact({
             sessionId,
             nodeId,
             type: artifact.type,
@@ -1630,7 +1618,7 @@ export function createTritreeRepository(
           })
         : null;
 
-      db.prepare(
+      await db.execute(
         `
           UPDATE tree_nodes
           SET round_intent = ?,
@@ -1643,7 +1631,7 @@ export function createTritreeRepository(
               updated_at = ?
           WHERE id = ?
         `
-      ).run(
+      ,
         output.roundIntent,
         artifact ? "artifact" : "analysis",
         artifactId,
@@ -1653,15 +1641,15 @@ export function createTritreeRepository(
         nodeId
       );
 
-      db.prepare(
+      await db.execute(
         `
           UPDATE sessions
           SET title = ?, updated_at = ?
           WHERE id = ? AND user_id = ?
         `
-      ).run(title, timestamp, sessionId, userId);
+      , title, timestamp, sessionId, userId);
 
-      const state = getSessionState(userId, sessionId);
+      const state = await getSessionState(userId, sessionId);
       if (!state) {
         throw new Error("Failed to complete tree node.");
       }
@@ -1669,7 +1657,7 @@ export function createTritreeRepository(
     });
   }
 
-  function activateHistoricalBranch({
+  async function activateHistoricalBranch({
     userId,
     sessionId,
     nodeId,
@@ -1680,48 +1668,47 @@ export function createTritreeRepository(
     nodeId: string;
     selectedOptionId: BranchOption["id"];
   }) {
-    const session = getActiveSession(userId, sessionId);
+    const session = await getActiveSession(userId, sessionId);
     if (!session) {
       throw new Error("Session was not found.");
     }
-    const parent = getNodeForSelection(sessionId, nodeId);
+    const parent = await getNodeForSelection(sessionId, nodeId);
 
-    const existingChild = db
-      .prepare(
-        `
-          SELECT *
-          FROM tree_nodes
-          WHERE session_id = ? AND parent_id = ? AND parent_option_id = ?
-          ORDER BY created_at DESC, rowid DESC
-          LIMIT 1
-        `
-      )
-      .get(sessionId, nodeId, selectedOptionId) as TreeNodeRow | undefined;
+    const existingChild = await db.queryGet<TreeNodeRow>(
+      `
+        SELECT *
+        FROM tree_nodes
+        WHERE session_id = ? AND parent_id = ? AND parent_option_id = ?
+        ORDER BY created_at DESC, rowid DESC
+        LIMIT 1
+      `,
+      sessionId,
+      nodeId,
+      selectedOptionId
+    );
     if (!existingChild) return null;
 
     const selectedOptions = optionsWithSelection(parent, selectedOptionId);
     const timestamp = now();
-    return withTransaction(db, () => {
-      saveNodeSelection(sessionId, nodeId, selectedOptions, selectedOptionId, timestamp);
+    return withTransaction(db, async () => {
+      await saveNodeSelection(sessionId, nodeId, selectedOptions, selectedOptionId, timestamp);
       const artifact = existingChild.produced_artifact_id
-        ? (db.prepare("SELECT * FROM artifacts WHERE id = ?").get(existingChild.produced_artifact_id) as
-            | ArtifactRow
-            | undefined)
+        ? await db.queryGet<ArtifactRow>("SELECT * FROM artifacts WHERE id = ?", existingChild.produced_artifact_id)
         : undefined;
-      db.prepare(
+      await db.execute(
         `
           UPDATE sessions
           SET current_node_id = ?, title = ?, status = ?, updated_at = ?
           WHERE id = ? AND user_id = ?
         `
-      ).run(existingChild.id, artifactExcerpt(artifact) || session.title, "active", timestamp, sessionId, userId);
+      , existingChild.id, artifactExcerpt(artifact) || session.title, "active", timestamp, sessionId, userId);
 
       return getSessionState(userId, sessionId);
     });
   }
 
-  function getNodeForSelection(sessionId: string, nodeId: string) {
-    const row = db.prepare("SELECT * FROM tree_nodes WHERE id = ?").get(nodeId) as TreeNodeRow | undefined;
+  async function getNodeForSelection(sessionId: string, nodeId: string) {
+    const row = await db.queryGet<TreeNodeRow>("SELECT * FROM tree_nodes WHERE id = ?", nodeId);
     if (!row || row.session_id !== sessionId) {
       throw new Error("Historical tree node was not found.");
     }
@@ -1743,7 +1730,7 @@ export function createTritreeRepository(
     return currentOptions;
   }
 
-  function saveNodeSelection(
+  async function saveNodeSelection(
     sessionId: string,
     nodeId: string,
     options: BranchOption[],
@@ -1751,33 +1738,31 @@ export function createTritreeRepository(
     timestamp: string
   ) {
     const folded = options.filter((option) => option.id !== selectedOptionId);
-    db.prepare(
+    await db.execute(
       `
         UPDATE tree_nodes
         SET options_json = ?, selected_option_id = ?, folded_options_json = ?, updated_at = ?
         WHERE id = ?
       `
-    ).run(JSON.stringify(options), selectedOptionId, JSON.stringify(folded), timestamp, nodeId);
-    db.prepare("DELETE FROM branch_history WHERE session_id = ? AND node_id = ?").run(sessionId, nodeId);
+    , JSON.stringify(options), selectedOptionId, JSON.stringify(folded), timestamp, nodeId);
+    await db.execute("DELETE FROM branch_history WHERE session_id = ? AND node_id = ?", sessionId, nodeId);
     for (const option of folded) {
-      db.prepare(
+      await db.execute(
         `
           INSERT INTO branch_history (id, session_id, node_id, option_json, created_at)
           VALUES (?, ?, ?, ?, ?)
         `
-      ).run(nanoid(), sessionId, nodeId, JSON.stringify(option), timestamp);
+      , nanoid(), sessionId, nodeId, JSON.stringify(option), timestamp);
     }
   }
 
-  function getActiveSession(userId: string, sessionId: string) {
-    return db.prepare("SELECT * FROM sessions WHERE id = ? AND user_id = ? AND is_archived = 0").get(sessionId, userId) as
-      | SessionRow
-      | undefined;
+  async function getActiveSession(userId: string, sessionId: string) {
+    return db.queryGet<SessionRow>("SELECT * FROM sessions WHERE id = ? AND user_id = ? AND is_archived = 0", sessionId, userId);
   }
 
-  function toWorkSummary(row: WorkSummaryRow): WorkSummary {
+  async function toWorkSummary(row: WorkSummaryRow): Promise<WorkSummary> {
     const artifactRow = row.latest_artifact_id
-      ? (db.prepare("SELECT * FROM artifacts WHERE id = ?").get(row.latest_artifact_id) as ArtifactRow | undefined)
+      ? await db.queryGet<ArtifactRow>("SELECT * FROM artifacts WHERE id = ?", row.latest_artifact_id)
       : undefined;
     const excerpt = artifactExcerpt(artifactRow);
     return WorkSummarySchema.parse({
@@ -1794,102 +1779,110 @@ export function createTritreeRepository(
     });
   }
 
-  function getSessionSummary(userId: string, sessionId: string) {
-    const row = db
-      .prepare(
-        `
-          SELECT
-            sessions.*,
-            current_node.round_index AS current_round_index,
-            COALESCE(current_artifact.id, latest_artifact.id) AS latest_artifact_id
-          FROM sessions
-          LEFT JOIN tree_nodes AS current_node
-            ON current_node.id = sessions.current_node_id
-          LEFT JOIN artifacts AS current_artifact
-            ON current_artifact.id = current_node.produced_artifact_id
-          LEFT JOIN artifacts AS latest_artifact
-            ON latest_artifact.id = (
-              SELECT linked_artifacts.id
-              FROM tree_nodes AS linked_nodes
-              JOIN artifacts AS linked_artifacts
-                ON linked_artifacts.id = linked_nodes.produced_artifact_id
-              WHERE linked_nodes.session_id = sessions.id
-                AND linked_nodes.produced_artifact_id IS NOT NULL
-              ORDER BY linked_artifacts.updated_at DESC, linked_artifacts.created_at DESC, linked_artifacts.rowid DESC
-              LIMIT 1
-            )
-          WHERE sessions.id = ?
-            AND sessions.user_id = ?
-        `
-      )
-      .get(sessionId, userId) as WorkSummaryRow | undefined;
+  async function getSessionSummary(userId: string, sessionId: string) {
+    const row = await db.queryGet<WorkSummaryRow>(
+      `
+        SELECT
+          sessions.*,
+          current_node.round_index AS current_round_index,
+          COALESCE(current_artifact.id, latest_artifact.id) AS latest_artifact_id
+        FROM sessions
+        LEFT JOIN tree_nodes AS current_node
+          ON current_node.id = sessions.current_node_id
+        LEFT JOIN artifacts AS current_artifact
+          ON current_artifact.id = current_node.produced_artifact_id
+        LEFT JOIN artifacts AS latest_artifact
+          ON latest_artifact.id = (
+            SELECT linked_artifacts.id
+            FROM tree_nodes AS linked_nodes
+            JOIN artifacts AS linked_artifacts
+              ON linked_artifacts.id = linked_nodes.produced_artifact_id
+            WHERE linked_nodes.session_id = sessions.id
+              AND linked_nodes.produced_artifact_id IS NOT NULL
+            ORDER BY linked_artifacts.updated_at DESC, linked_artifacts.created_at DESC, linked_artifacts.rowid DESC
+            LIMIT 1
+          )
+        WHERE sessions.id = ?
+          AND sessions.user_id = ?
+      `,
+      sessionId,
+      userId
+    );
 
     return row ? toWorkSummary(row) : null;
   }
 
-  function listSessionSummaries(userId: string, { archived = false }: { archived?: boolean } = {}) {
-    const rows = db
-      .prepare(
-        `
-          SELECT
-            sessions.*,
-            current_node.round_index AS current_round_index,
-            COALESCE(current_artifact.id, latest_artifact.id) AS latest_artifact_id
-          FROM sessions
-          LEFT JOIN tree_nodes AS current_node
-            ON current_node.id = sessions.current_node_id
-          LEFT JOIN artifacts AS current_artifact
-            ON current_artifact.id = current_node.produced_artifact_id
-          LEFT JOIN artifacts AS latest_artifact
-            ON latest_artifact.id = (
-              SELECT linked_artifacts.id
-              FROM tree_nodes AS linked_nodes
-              JOIN artifacts AS linked_artifacts
-                ON linked_artifacts.id = linked_nodes.produced_artifact_id
-              WHERE linked_nodes.session_id = sessions.id
-                AND linked_nodes.produced_artifact_id IS NOT NULL
-              ORDER BY linked_artifacts.updated_at DESC, linked_artifacts.created_at DESC, linked_artifacts.rowid DESC
-              LIMIT 1
-            )
-          WHERE sessions.user_id = ?
-            AND sessions.is_archived = ?
-          ORDER BY sessions.updated_at DESC, sessions.created_at DESC, sessions.rowid DESC
-        `
-      )
-      .all(userId, archived ? 1 : 0) as WorkSummaryRow[];
+  async function listSessionSummaries(userId: string, { archived = false }: { archived?: boolean } = {}) {
+    const rows = await db.queryAll<WorkSummaryRow>(
+      `
+        SELECT
+          sessions.*,
+          current_node.round_index AS current_round_index,
+          COALESCE(current_artifact.id, latest_artifact.id) AS latest_artifact_id
+        FROM sessions
+        LEFT JOIN tree_nodes AS current_node
+          ON current_node.id = sessions.current_node_id
+        LEFT JOIN artifacts AS current_artifact
+          ON current_artifact.id = current_node.produced_artifact_id
+        LEFT JOIN artifacts AS latest_artifact
+          ON latest_artifact.id = (
+            SELECT linked_artifacts.id
+            FROM tree_nodes AS linked_nodes
+            JOIN artifacts AS linked_artifacts
+              ON linked_artifacts.id = linked_nodes.produced_artifact_id
+            WHERE linked_nodes.session_id = sessions.id
+              AND linked_nodes.produced_artifact_id IS NOT NULL
+            ORDER BY linked_artifacts.updated_at DESC, linked_artifacts.created_at DESC, linked_artifacts.rowid DESC
+            LIMIT 1
+          )
+        WHERE sessions.user_id = ?
+          AND sessions.is_archived = ?
+        ORDER BY sessions.updated_at DESC, sessions.created_at DESC, sessions.rowid DESC
+      `,
+      userId,
+      archived ? 1 : 0
+    );
 
-    return rows.map(toWorkSummary);
+    return Promise.all(rows.map(toWorkSummary));
   }
 
-  function renameSession(userId: string, sessionId: string, title: string) {
+  async function renameSession(userId: string, sessionId: string, title: string) {
     const timestamp = now();
-    const result = db
-      .prepare("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ? AND is_archived = 0")
-      .run(title, timestamp, sessionId, userId) as { changes: number };
+    const result = await db.execute(
+      "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ? AND is_archived = 0",
+      title,
+      timestamp,
+      sessionId,
+      userId
+    );
     return result.changes > 0 ? getSessionSummary(userId, sessionId) : null;
   }
 
-  function archiveSession(userId: string, sessionId: string) {
+  async function archiveSession(userId: string, sessionId: string) {
     const timestamp = now();
-    const result = db
-      .prepare("UPDATE sessions SET is_archived = 1, updated_at = ? WHERE id = ? AND user_id = ? AND is_archived = 0")
-      .run(timestamp, sessionId, userId) as { changes: number };
+    const result = await db.execute(
+      "UPDATE sessions SET is_archived = 1, updated_at = ? WHERE id = ? AND user_id = ? AND is_archived = 0",
+      timestamp,
+      sessionId,
+      userId
+    );
     return result.changes > 0 ? getSessionSummary(userId, sessionId) : null;
   }
 
-  function getSessionState(userId: string, sessionId: string): SessionState | null {
-    const session = getActiveSession(userId, sessionId);
+  async function getSessionState(userId: string, sessionId: string): Promise<SessionState | null> {
+    const session = await getActiveSession(userId, sessionId);
     if (!session) return null;
 
-    const root = db.prepare("SELECT * FROM root_memory WHERE id = ? AND user_id = ?").get(session.root_memory_id, userId) as
-      | RootMemoryRow
-      | undefined;
+    const root = await db.queryGet<RootMemoryRow>("SELECT * FROM root_memory WHERE id = ? AND user_id = ?", session.root_memory_id, userId);
     if (!root) return null;
 
-    const nodes = (db.prepare("SELECT * FROM tree_nodes WHERE session_id = ?").all(sessionId) as TreeNodeRow[])
+    const nodes = (await db.queryAll<TreeNodeRow>("SELECT * FROM tree_nodes WHERE session_id = ?", sessionId))
       .map(toNode)
       .sort((a, b) => a.roundIndex - b.roundIndex);
-    const artifactRows = db.prepare("SELECT * FROM artifacts WHERE session_id = ? ORDER BY created_at ASC, rowid ASC").all(sessionId) as ArtifactRow[];
+    const artifactRows = await db.queryAll<ArtifactRow>(
+      "SELECT * FROM artifacts WHERE session_id = ? ORDER BY created_at ASC, rowid ASC",
+      sessionId
+    );
     const artifacts = artifactRows.map(toArtifact);
     const artifactById = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
     const currentNode = session.current_node_id ? nodes.find((node) => node.id === session.current_node_id) ?? null : null;
@@ -1898,9 +1891,9 @@ export function createTritreeRepository(
       const artifact = node.producedArtifactId ? artifactById.get(node.producedArtifactId) : null;
       return artifact ? [{ nodeId: node.id, artifact }] : [];
     });
-    const historyRows = db.prepare("SELECT * FROM branch_history WHERE session_id = ?").all(sessionId) as BranchHistoryRow[];
+    const historyRows = await db.queryAll<BranchHistoryRow>("SELECT * FROM branch_history WHERE session_id = ?", sessionId);
     const selectedPath = activePathFor(nodes, currentNode);
-    const enabledSkills = enabledSkillsForSession(sessionId, userId);
+    const enabledSkills = await enabledSkillsForSession(sessionId, userId);
 
     return SessionStateSchema.parse({
       rootMemory: rootMemoryForSession(root, session, artifactRows[0]),
@@ -1930,12 +1923,11 @@ export function createTritreeRepository(
     });
   }
 
-  function getLatestSessionState(userId: string): SessionState | null {
-    const row = db
-      .prepare(
-        "SELECT id FROM sessions WHERE user_id = ? AND is_archived = 0 ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1"
-      )
-      .get(userId) as { id: string } | undefined;
+  async function getLatestSessionState(userId: string): Promise<SessionState | null> {
+    const row = await db.queryGet<{ id: string }>(
+      "SELECT id FROM sessions WHERE user_id = ? AND is_archived = 0 ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1",
+      userId
+    );
 
     return row ? getSessionState(userId, row.id) : null;
   }
@@ -1987,17 +1979,11 @@ export function createTritreeRepository(
   };
 }
 
-type TritreeRepository = ReturnType<typeof createTritreeRepository>;
+type TritreeRepository = Awaited<ReturnType<typeof createTritreeRepository>>;
 
-let repositoryInstance: TritreeRepository | null = null;
+let repositoryInstance: Promise<TritreeRepository> | null = null;
 
 export function getRepository() {
   repositoryInstance ??= createTritreeRepository();
   return repositoryInstance;
 }
-
-export const repository = new Proxy({} as TritreeRepository, {
-  get(_target, property, receiver) {
-    return Reflect.get(getRepository(), property, receiver);
-  }
-});

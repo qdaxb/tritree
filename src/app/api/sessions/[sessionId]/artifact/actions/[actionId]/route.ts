@@ -37,8 +37,8 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "请求内容格式不正确。" }, { status: 400 });
   }
 
-  const repository = getRepository();
-  const sessionState = repository.getSessionState(user.id, sessionId);
+  const repository = await getRepository();
+  const sessionState = await repository.getSessionState(user.id, sessionId);
   if (!sessionState) {
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
   }
@@ -70,7 +70,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     });
     const payload = plugin.payloadSchema.parse(result.payload);
     const selectedOptionId = actionOptionId(actionId);
-    const nextState = repository.createArtifactChild({
+    const nextState = await repository.createArtifactChild({
       userId: user.id,
       sessionId,
       nodeId: body.nodeId,

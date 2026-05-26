@@ -9,7 +9,8 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const user = await requireCurrentUser();
-    return NextResponse.json({ rootMemory: getRepository().getRootMemory(user.id) });
+    const repository = await getRepository();
+    return NextResponse.json({ rootMemory: await repository.getRootMemory(user.id) });
   } catch (error) {
     const response = authErrorResponse(error);
     if (response) return response;
@@ -22,7 +23,8 @@ export async function POST(request: Request) {
     const user = await requireCurrentUser();
     const body = await request.json();
     const preferences = RootPreferencesSchema.parse(body);
-    const rootMemory = getRepository().saveRootMemory(user.id, preferences);
+    const repository = await getRepository();
+    const rootMemory = await repository.saveRootMemory(user.id, preferences);
     return NextResponse.json({ rootMemory });
   } catch (error) {
     const response = authErrorResponse(error);

@@ -16,7 +16,8 @@ export async function POST(request: Request) {
     await requireAdminUser();
     const body = ImportSkillsBodySchema.parse(await request.json());
     const installed = await installSkillFromGitHub(body.sourceUrl);
-    const skills = getRepository().importSkills(installed.skills);
+    const repository = await getRepository();
+    const skills = await repository.importSkills(installed.skills);
     return NextResponse.json({ installPath: installed.installPath, installPaths: installed.installPaths, skills });
   } catch (error) {
     const response = authErrorResponse(error);

@@ -32,8 +32,8 @@ function publicOidcIdentity(identity: unknown) {
 export async function GET() {
   try {
     await requireAdminUser();
-    const repository = getRepository();
-    const users = repository.listUsersWithOidcIdentities().map(publicUser);
+    const repository = await getRepository();
+    const users = (await repository.listUsersWithOidcIdentities()).map(publicUser);
 
     return NextResponse.json({ users });
   } catch (error) {
@@ -47,7 +47,8 @@ export async function POST(request: Request) {
   try {
     await requireAdminUser();
     const body = CreateAdminUserBodySchema.parse(await request.json());
-    const user = await getRepository().createUser({
+    const repository = await getRepository();
+    const user = await repository.createUser({
       username: body.username,
       displayName: body.displayName,
       password: body.password,

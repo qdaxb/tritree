@@ -2,8 +2,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
-import { createDatabase, defaultDbPath } from "./client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createDatabase, defaultDbPath, resolveDatabaseConfig } from "./client";
 
 const originalEnv = { ...process.env };
 
@@ -19,26 +19,46 @@ describe("defaultDbPath", () => {
     expect(defaultDbPath()).toMatch(/\.tritree\/tritree\.sqlite$/);
   });
 
-  it("prefers TRITREE_DB_PATH while keeping TREEABLE_DB_PATH as a legacy fallback", () => {
+  it("prefers TRITREE_DB_PATH and ignores legacy database path variables", () => {
     process.env.TRITREE_DB_PATH = "/tmp/new-tritree.sqlite";
     process.env.TREEABLE_DB_PATH = "/tmp/old-tritree.sqlite";
 
     expect(defaultDbPath()).toBe("/tmp/new-tritree.sqlite");
 
     delete process.env.TRITREE_DB_PATH;
-    expect(defaultDbPath()).toBe("/tmp/old-tritree.sqlite");
+    expect(defaultDbPath()).toMatch(/\.tritree\/tritree\.sqlite$/);
+  });
+});
+
+describe("resolveDatabaseConfig", () => {
+  it("uses sqlite by default", () => {
+    delete process.env.TRITREE_DATABASE_URL;
+    delete process.env.TRITREE_DB_DRIVER;
+    delete process.env.TRITREE_DB_PATH;
+    delete process.env.TREEABLE_DB_PATH;
+
+    expect(resolveDatabaseConfig()).toEqual({ provider: "sqlite", path: defaultDbPath() });
+  });
+
+  it("uses mysql when TRITREE_DATABASE_URL is a mysql URL", () => {
+    process.env.TRITREE_DATABASE_URL = "mysql://tritree:secret@localhost:3306/tritree";
+
+    expect(resolveDatabaseConfig()).toEqual({
+      provider: "mysql",
+      url: "mysql://tritree:secret@localhost:3306/tritree"
+    });
   });
 });
 
 describe("database schema", () => {
-  it("creates artifact storage in the active schema", () => {
-    const db = createDatabase(":memory:");
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>;
+  it("creates artifact storage in the active sqlite schema", async () => {
+    const db = await createDatabase({ provider: "sqlite", path: ":memory:" });
+    const tables = await db.queryAll<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'");
     const names = tables.map((table) => table.name);
 
     expect(names).toContain("artifacts");
 
-    const artifactColumns = db.prepare("PRAGMA table_info(artifacts)").all() as Array<{ name: string }>;
+    const artifactColumns = await db.queryAll<{ name: string }>("PRAGMA table_info(artifacts)");
     expect(artifactColumns.map((column) => column.name)).toEqual([
       "id",
       "session_id",
@@ -51,13 +71,44 @@ describe("database schema", () => {
       "updated_at"
     ]);
 
-    const treeNodeColumns = db.prepare("PRAGMA table_info(tree_nodes)").all() as Array<{ name: string }>;
+    const treeNodeColumns = await db.queryAll<{ name: string }>("PRAGMA table_info(tree_nodes)");
     expect(treeNodeColumns.map((column) => column.name)).toContain("updated_at");
 
-    db.close();
+    await db.close();
   });
 
-  it("migrates legacy tree nodes without using a non-constant column default", () => {
+  it("creates the schema through the mysql provider", async () => {
+    const queries: Array<{ sql: string; params: unknown[] }> = [];
+    const queryText = (query: string | { sql: string }) => (typeof query === "string" ? query : query.sql);
+    const pool = {
+      query: vi.fn(async (query: string | { sql: string }, params: unknown[] = []) => {
+        const sql = queryText(query);
+        queries.push({ sql, params });
+        if (sql.includes("information_schema.tables")) return [[{ name: "users" }], []];
+        if (sql.includes("tritree_schema_version")) return [[{ version: 0 }], []];
+        return [{ affectedRows: 0 }, []];
+      }),
+      end: vi.fn(async () => undefined)
+    };
+
+    const db = await createDatabase(
+      { provider: "mysql", url: "mysql://tritree:secret@localhost:3306/tritree" },
+      { createMysqlPool: () => pool as never }
+    );
+
+    expect(db.provider).toBe("mysql");
+    expect(pool.query.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ sql: expect.any(String) }));
+    expect(queries.map((query) => query.sql).join("\n")).toContain("CREATE TABLE IF NOT EXISTS users");
+    expect(queries.map((query) => query.sql).join("\n")).toContain("CREATE TABLE IF NOT EXISTS artifacts");
+    expect(queries.map((query) => query.sql).join("\n")).toContain("information_schema.statistics");
+    expect(queries.map((query) => query.sql).join("\n")).toContain("CREATE INDEX artifacts_session_type_idx");
+    expect(queries.map((query) => query.sql).join("\n")).not.toContain("CREATE INDEX IF NOT EXISTS");
+
+    await db.close();
+    expect(pool.end).toHaveBeenCalled();
+  });
+
+  it("migrates legacy tree nodes without using a non-constant column default", async () => {
     const dbPath = path.join(mkdtempSync(path.join(tmpdir(), "tritree-client-")), "legacy.sqlite");
     const legacy = new DatabaseSync(dbPath);
     legacy.exec(`
@@ -92,13 +143,13 @@ describe("database schema", () => {
     `);
     legacy.close();
 
-    const migrated = createDatabase(dbPath);
-    const row = migrated.prepare("SELECT created_at, updated_at FROM tree_nodes WHERE id = 'node-1'").get() as {
+    const migrated = await createDatabase({ provider: "sqlite", path: dbPath });
+    const row = await migrated.queryGet<{
       created_at: string;
       updated_at: string;
-    };
+    }>("SELECT created_at, updated_at FROM tree_nodes WHERE id = 'node-1'");
 
-    expect(row.updated_at).toBe(row.created_at);
-    migrated.close();
+    expect(row?.updated_at).toBe(row?.created_at);
+    await migrated.close();
   });
 });

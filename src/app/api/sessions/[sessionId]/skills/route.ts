@@ -14,7 +14,8 @@ export async function GET(_request: Request, context: { params: Promise<{ sessio
   const { sessionId } = await context.params;
   try {
     const user = await requireCurrentUser();
-    const state = getRepository().getSessionState(user.id, sessionId);
+    const repository = await getRepository();
+    const state = await repository.getSessionState(user.id, sessionId);
     if (!state) return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
     return NextResponse.json({
       enabledSkillIds: state.enabledSkillIds,
@@ -33,7 +34,8 @@ export async function PUT(request: Request, context: { params: Promise<{ session
   try {
     const user = await requireCurrentUser();
     const body = SessionSkillsBodySchema.parse(await request.json());
-    const state = getRepository().replaceSessionEnabledSkills(user.id, sessionId, body.enabledSkillIds);
+    const repository = await getRepository();
+    const state = await repository.replaceSessionEnabledSkills(user.id, sessionId, body.enabledSkillIds);
     if (!state) return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
     return NextResponse.json({
       enabledSkillIds: state.enabledSkillIds,

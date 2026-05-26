@@ -7,7 +7,8 @@ export const runtime = "nodejs";
 export async function POST() {
   try {
     const user = await requireCurrentUser();
-    const options = getRepository().resetCreationRequestOptions(user.id);
+    const repository = await getRepository();
+    const options = await repository.resetCreationRequestOptions(user.id);
     return NextResponse.json({ options });
   } catch (error) {
     const response = authErrorResponse(error);

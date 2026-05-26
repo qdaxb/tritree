@@ -36,8 +36,8 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "请求内容格式不正确。" }, { status: 400 });
   }
 
-  const repository = getRepository();
-  const state = repository.getSessionState(user.id, sessionId);
+  const repository = await getRepository();
+  const state = await repository.getSessionState(user.id, sessionId);
 
   if (!state?.currentNode) {
     return NextResponse.json({ error: "没有找到当前创作方向。" }, { status: 404 });
@@ -57,7 +57,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   }
 
   try {
-    const nextState = repository.createArtifactChild({
+    const nextState = await repository.createArtifactChild({
       artifact: null,
       userId: user.id,
       customOption: body.customOption,

@@ -19,7 +19,8 @@ export async function POST(request: Request, context: { params: Promise<{ userId
   try {
     await requireAdminUser();
     const body = BindOidcIdentityBodySchema.parse(await request.json());
-    const identity = getRepository().bindOidcIdentity(userId, body);
+    const repository = await getRepository();
+    const identity = await repository.bindOidcIdentity(userId, body);
     return NextResponse.json({ identity });
   } catch (error) {
     const response = authErrorResponse(error);

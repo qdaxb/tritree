@@ -15,12 +15,12 @@ function firstParam(value: string | string[] | undefined) {
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
-  const repository = getRepository();
-  if (!repository.hasUsers()) redirect("/setup-admin");
+  const repository = await getRepository();
+  if (!(await repository.hasUsers())) redirect("/setup-admin");
 
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const user = repository.getUser(session.user.id);
+  const user = await repository.getUser(session.user.id);
   if (!user?.isActive) redirect("/login");
   const params = await searchParams;
   const initialSessionId = firstParam(params.sessionId);

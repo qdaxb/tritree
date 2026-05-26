@@ -17,15 +17,16 @@ export async function GET(request: Request) {
     const user = await requireCurrentUser();
     const searchParams = new URL(request.url).searchParams;
     const view = searchParams.get("view");
+    const repository = await getRepository();
     if (view === "active" || view === "archived") {
       return NextResponse.json({
-        works: getRepository().listSessionSummaries(user.id, { archived: view === "archived" })
+        works: await repository.listSessionSummaries(user.id, { archived: view === "archived" })
       });
     }
     if (searchParams.has("view")) {
       return NextResponse.json({ error: "不支持的作品视图。" }, { status: 400 });
     }
-    return NextResponse.json({ state: getRepository().getLatestSessionState(user.id) });
+    return NextResponse.json({ state: await repository.getLatestSessionState(user.id) });
   } catch (error) {
     const response = authErrorResponse(error);
     if (response) return response;
@@ -51,14 +52,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求内容格式不正确。" }, { status: 400 });
   }
 
-  const repository = getRepository();
-  const rootMemory = repository.getRootMemory(user.id);
+  const repository = await getRepository();
+  const rootMemory = await repository.getRootMemory(user.id);
   if (!rootMemory?.preferences.seed.trim()) {
     return NextResponse.json({ error: "还没有输入创作 seed。" }, { status: 400 });
   }
 
   try {
-    const state = repository.createSession({
+    const state = await repository.createSession({
       userId: user.id,
       rootMemoryId: rootMemory.id,
       ...(body.enabledSkillIds ? { enabledSkillIds: body.enabledSkillIds } : {})

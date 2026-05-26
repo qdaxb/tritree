@@ -15,7 +15,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ skill
   try {
     const user = await requireCurrentUser();
     const body = SkillPatchSchema.parse(await request.json());
-    const skill = getRepository().updateSkill(user.id, skillId, body);
+    const repository = await getRepository();
+    const skill = await repository.updateSkill(user.id, skillId, body);
     return NextResponse.json({ skill });
   } catch (error) {
     const response = authErrorResponse(error);

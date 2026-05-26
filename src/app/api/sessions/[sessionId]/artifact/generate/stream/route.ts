@@ -60,8 +60,8 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "请求内容格式不正确。" }, { status: 400 });
   }
 
-  const repository = getRepository();
-  const state = repository.getSessionState(user.id, sessionId);
+  const repository = await getRepository();
+  const state = await repository.getSessionState(user.id, sessionId);
   if (!state) {
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
   }
@@ -126,7 +126,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         });
 
         if (output.action === "options") {
-          const nextState = repository.updateNodeOptions({
+          const nextState = await repository.updateNodeOptions({
             userId: user.id,
             sessionId,
             nodeId: targetNode.id,
@@ -147,7 +147,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         }
 
         if (output.action === "complete") {
-          const nextState = repository.completeNode({
+          const nextState = await repository.completeNode({
             userId: user.id,
             sessionId,
             nodeId: targetNode.id,
@@ -160,7 +160,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
           return;
         }
 
-        const latestState = repository.getSessionState(user.id, sessionId);
+        const latestState = await repository.getSessionState(user.id, sessionId);
         if (!latestState) {
           throw new Error("Session disappeared before generated artifact could be saved.");
         }
@@ -171,7 +171,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         }
 
         if (!output.artifact) {
-          const nextState = repository.completeNode({
+          const nextState = await repository.completeNode({
             userId: user.id,
             sessionId,
             nodeId: targetNode.id,
@@ -186,7 +186,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
 
         const artifact = validateGeneratedArtifact(output.artifact);
         const nextState = output.isTerminal
-          ? repository.completeNode({
+          ? await repository.completeNode({
               userId: user.id,
               sessionId,
               nodeId: targetNode.id,
@@ -196,7 +196,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
               artifact,
               ...(output.agentMessages?.length ? { agentMessages: output.agentMessages } : {})
             })
-          : repository.updateNodeArtifact({
+          : await repository.updateNodeArtifact({
               userId: user.id,
               sessionId,
               nodeId: targetNode.id,

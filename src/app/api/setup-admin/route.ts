@@ -21,9 +21,9 @@ const SetupAdminBodySchema = z
 export async function POST(request: Request) {
   try {
     const body = SetupAdminBodySchema.parse(await request.json());
-    const repository = getRepository();
+    const repository = await getRepository();
 
-    if (repository.hasUsers()) {
+    if (await repository.hasUsers()) {
       return NextResponse.json({ error: "管理员已经初始化。" }, { status: 409 });
     }
 

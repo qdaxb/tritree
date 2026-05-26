@@ -15,7 +15,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ optio
   try {
     const user = await requireCurrentUser();
     const body = CreationRequestOptionPatchSchema.parse(await request.json());
-    const option = getRepository().updateCreationRequestOption(user.id, optionId, body);
+    const repository = await getRepository();
+    const option = await repository.updateCreationRequestOption(user.id, optionId, body);
     return NextResponse.json({ option });
   } catch (error) {
     const response = authErrorResponse(error);
@@ -33,7 +34,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ opt
 
   try {
     const user = await requireCurrentUser();
-    getRepository().deleteCreationRequestOption(user.id, optionId);
+    const repository = await getRepository();
+    await repository.deleteCreationRequestOption(user.id, optionId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     const response = authErrorResponse(error);

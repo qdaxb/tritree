@@ -53,6 +53,8 @@ ANTHROPIC_AUTH_TOKEN=your_api_key_here
 ANTHROPIC_MODEL=your_model_name
 
 TRITREE_DB_PATH=.tritree/tritree.sqlite
+# 可选：配置后会使用 MySQL，而不是本地 SQLite 文件
+# TRITREE_DATABASE_URL=mysql://user:password@localhost:3306/tritree
 ```
 
 复制默认内容配置：
@@ -114,7 +116,7 @@ TRITREE_ARTIFACT_TYPES=social-post,prd
 | 应用框架 | Next.js 16 App Router + React 19 |
 | AI 执行 | Mastra Agent + AI SDK Anthropic-compatible provider |
 | 认证 | NextAuth v4 Credentials / OIDC |
-| 数据 | SQLite `node:sqlite`，Drizzle schema 作为表结构镜像 |
+| 数据 | Drizzle ORM；默认 SQLite，配置 `TRITREE_DATABASE_URL` 后使用 MySQL |
 | 编辑与可视化 | CodeMirror diff/merge、D3.js、lucide-react |
 | 校验与测试 | TypeScript、Zod、Vitest、Testing Library |
 
@@ -130,7 +132,7 @@ npm run typecheck    # TypeScript 类型检查
 
 ## 自托管提示
 
-数据默认存储在项目根目录 `.tritree/tritree.sqlite`，可通过 `TRITREE_DB_PATH` 修改；旧变量 `TREEABLE_DB_PATH` 仍兼容。生产环境请显式配置 `NEXTAUTH_SECRET`，并定期备份 `.tritree/`。子路径部署、OIDC、外部 MCP 工具、外部风格生成和 Skill 执行隔离都支持按需开启，相关变量可参考 `.env.example`。
+数据默认存储在项目根目录 `.tritree/tritree.sqlite`，可通过 `TRITREE_DB_PATH` 修改。设置 `TRITREE_DATABASE_URL=mysql://...` 后会改用 MySQL。生产环境请显式配置 `NEXTAUTH_SECRET`，并定期备份 SQLite 文件或 MySQL 数据库。子路径部署、OIDC、外部 MCP 工具、外部风格生成和 Skill 执行隔离都支持按需开启，相关变量可参考 `.env.example`。
 
 系统默认 Skills、创作要求快捷按钮和默认灵感都来自默认内容配置。默认读取 `.tritree/defaults.json`；也可以用 `TRITREE_DEFAULTS_CONFIG_PATH=/absolute/path/to/defaults.json` 指向其他 JSON 文件。配置缺失、JSON 无效、`systemSkills` 为空或任一字段不合法时，应用会直接报错，不回退到代码里的旧默认值。
 

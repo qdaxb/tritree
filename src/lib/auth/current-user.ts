@@ -26,7 +26,8 @@ export async function getCurrentUser(): Promise<User | null> {
   const userId = session?.user?.id;
   if (!userId) return null;
 
-  const user = getRepository().getUser(userId);
+  const repository = await getRepository();
+  const user = await repository.getUser(userId);
   if (!user?.isActive) return null;
 
   return user;

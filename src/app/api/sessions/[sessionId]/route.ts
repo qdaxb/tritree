@@ -15,7 +15,8 @@ export async function GET(_request: Request, context: { params: Promise<{ sessio
 
   try {
     const user = await requireCurrentUser();
-    const state = getRepository().getSessionState(user.id, sessionId);
+    const repository = await getRepository();
+    const state = await repository.getSessionState(user.id, sessionId);
     if (!state) return NextResponse.json({ error: "没有找到这件作品。" }, { status: 404 });
     return NextResponse.json({ state });
   } catch (error) {
@@ -31,7 +32,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ sessi
   try {
     const user = await requireCurrentUser();
     const body = RenameSessionBodySchema.parse(await request.json());
-    const work = getRepository().renameSession(user.id, sessionId, body.title);
+    const repository = await getRepository();
+    const work = await repository.renameSession(user.id, sessionId, body.title);
     if (!work) return NextResponse.json({ error: "没有找到这件作品。" }, { status: 404 });
     return NextResponse.json({ work });
   } catch (error) {
@@ -48,7 +50,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ ses
 
   try {
     const user = await requireCurrentUser();
-    const work = getRepository().archiveSession(user.id, sessionId);
+    const repository = await getRepository();
+    const work = await repository.archiveSession(user.id, sessionId);
     if (!work) return NextResponse.json({ error: "没有找到这件作品。" }, { status: 404 });
     return NextResponse.json({ work });
   } catch (error) {

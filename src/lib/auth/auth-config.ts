@@ -9,7 +9,7 @@ import { getRepository } from "@/lib/db/repository";
 import { getOidcConfig } from "./env";
 
 type AuthEnv = NonNullable<Parameters<typeof getOidcConfig>[0]>;
-type Repository = Pick<ReturnType<typeof getRepository>, "verifyPasswordLogin" | "findUserByOidcIdentity">;
+type Repository = Pick<Awaited<ReturnType<typeof getRepository>>, "verifyPasswordLogin" | "findUserByOidcIdentity">;
 
 type AuthUser = NextAuthUser & {
   id: string;
@@ -63,7 +63,7 @@ export async function resolveOidcUser(
   const subject = oidcAccount?.providerAccountId ?? oidcProfile?.sub ?? "";
   if (!issuer || !subject) return null;
 
-  const user = repository.findUserByOidcIdentity(issuer, subject);
+  const user = await repository.findUserByOidcIdentity(issuer, subject);
   return user ? toAuthUser(user) : null;
 }
 
@@ -88,7 +88,7 @@ export function buildAuthConfig({
   repository
 }: { env?: AuthEnv; repository?: Repository } = {}): NextAuthOptions {
   const oidcConfig = getOidcConfig(env);
-  const resolveRepository = () => repository ?? getRepository();
+  const resolveRepository = async () => repository ?? (await getRepository());
   const providers: NextAuthOptions["providers"] = [
     CredentialsProvider({
       name: "Credentials",
@@ -96,7 +96,7 @@ export function buildAuthConfig({
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" }
       },
-      authorize: (credentials) => authorizeCredentials(credentials, resolveRepository())
+      authorize: async (credentials) => authorizeCredentials(credentials, await resolveRepository())
     })
   ];
 
@@ -134,7 +134,7 @@ export function buildAuthConfig({
             account: { ...account, issuer: (account as OidcAccount).issuer ?? oidcConfig?.issuer },
             profile
           },
-          resolveRepository()
+          await resolveRepository()
         );
         if (!localUser) return false;
 

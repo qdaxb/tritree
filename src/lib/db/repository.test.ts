@@ -73,7 +73,7 @@ function writeDefaultsConfig({
   return configPath;
 }
 
-type Repository = ReturnType<typeof createTritreeRepository>;
+type Repository = Awaited<ReturnType<typeof createTritreeRepository>>;
 
 const nextOptions: BranchOption[] = [
   { id: "a", label: "扩展案例", description: "补充一个真实情境。", impact: "内容更具体。", kind: "explore" },
@@ -86,7 +86,7 @@ function socialPostPayload(title = "协作片刻", body = "AI 协作不是替代
 }
 
 async function createTestUser(repo: Repository, username: string, role: "admin" | "member" = "member") {
-  if (!repo.hasUsers()) {
+  if (!(await repo.hasUsers())) {
     return repo.createInitialAdmin({ username, displayName: username, password: "password-123" });
   }
   return repo.createUser({ username, displayName: username, password: "password-123", role });
@@ -94,7 +94,7 @@ async function createTestUser(repo: Repository, username: string, role: "admin" 
 
 async function createRepositoryHarness() {
   const dbPath = path.join(tmpdir(), `tritree-artifacts-${nanoid()}.sqlite`);
-  const repo = createTritreeRepository(dbPath, { skillInstallRoot: path.join(tmpdir(), `skills-${nanoid()}`) });
+  const repo = await createTritreeRepository(dbPath, { skillInstallRoot: path.join(tmpdir(), `skills-${nanoid()}`) });
   const user = await repo.createUser({
     username: `user-${nanoid()}`,
     displayName: "Test User",
@@ -106,7 +106,7 @@ async function createRepositoryHarness() {
 
 async function createArtifactSessionHarness() {
   const harness = await createRepositoryHarness();
-  const root = harness.repo.saveRootMemory(harness.user.id, {
+  const root = await harness.repo.saveRootMemory(harness.user.id, {
     artifactTypeId: "social-post",
     seed: "写一条关于 AI 协作的短内容",
     creationRequest: "",
@@ -115,12 +115,12 @@ async function createArtifactSessionHarness() {
     styles: ["Opinion-driven"],
     personas: ["Practitioner"]
   });
-  const state = harness.repo.createSession({ userId: harness.user.id, rootMemoryId: root.id, enabledSkillIds: [] });
+  const state = await harness.repo.createSession({ userId: harness.user.id, rootMemoryId: root.id, enabledSkillIds: [] });
   return { ...harness, root, state };
 }
 
 async function createSessionWithOptions(repo: Repository, userId: string, enabledSkillIds?: string[]) {
-  const root = repo.saveRootMemory(userId, {
+  const root = await repo.saveRootMemory(userId, {
     artifactTypeId: "social-post",
     seed: "写一条关于 AI 协作的短内容",
     creationRequest: "",
@@ -129,7 +129,7 @@ async function createSessionWithOptions(repo: Repository, userId: string, enable
     styles: ["Opinion-driven"],
     personas: ["Practitioner"]
   });
-  const state = repo.createSession({ userId, rootMemoryId: root.id, enabledSkillIds });
+  const state = await repo.createSession({ userId, rootMemoryId: root.id, enabledSkillIds });
   return repo.updateNodeOptions({
     userId,
     sessionId: state.session.id,
@@ -148,9 +148,9 @@ describe("Tritree repository", () => {
   });
 
   it("creates the first local user as the initial administrator", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
 
-    expect(repo.hasUsers()).toBe(false);
+    expect(await repo.hasUsers()).toBe(false);
 
     const admin = await repo.createInitialAdmin({
       username: "awei",
@@ -158,17 +158,17 @@ describe("Tritree repository", () => {
       password: "correct horse battery staple"
     });
 
-    expect(repo.hasUsers()).toBe(true);
+    expect(await repo.hasUsers()).toBe(true);
     expect(admin).toEqual(expect.objectContaining({ username: "awei", role: "admin", isActive: true }));
     expect(admin).not.toHaveProperty("passwordHash");
     await expect(repo.createInitialAdmin({ username: "second", displayName: "Second", password: "password-123" })).rejects.toThrow(
       "Initial administrator already exists."
     );
-    expect(() => repo.setUserActive(admin.id, false)).toThrow("Cannot deactivate the final active administrator.");
+    await expect(repo.setUserActive(admin.id, false)).rejects.toThrow("Cannot deactivate the final active administrator.");
   });
 
   it("verifies local password login without exposing inactive users", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "correct horse battery staple" });
     const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
 
@@ -178,54 +178,54 @@ describe("Tritree repository", () => {
     await expect(repo.verifyPasswordLogin("writer", "password-456")).resolves.toEqual(
       expect.objectContaining({ id: member.id, username: "writer", role: "member" })
     );
-    repo.setUserActive(member.id, false);
+    await repo.setUserActive(member.id, false);
     await expect(repo.verifyPasswordLogin("writer", "password-456")).resolves.toBeNull();
   });
 
   it("manages users and protects the final active administrator", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
     const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
 
-    expect(repo.listUsers().map((user) => user.username)).toEqual(["awei", "writer"]);
-    expect(repo.updateUserDisplayName(member.id, "Updated Writer")).toEqual(expect.objectContaining({ displayName: "Updated Writer" }));
-    expect(repo.setUserRole(member.id, "admin")).toEqual(expect.objectContaining({ role: "admin" }));
-    expect(repo.setUserRole(admin.id, "member")).toEqual(expect.objectContaining({ role: "member" }));
-    expect(() => repo.setUserActive(member.id, false)).toThrow("Cannot deactivate the final active administrator.");
+    expect((await repo.listUsers()).map((user) => user.username)).toEqual(["awei", "writer"]);
+    expect(await repo.updateUserDisplayName(member.id, "Updated Writer")).toEqual(expect.objectContaining({ displayName: "Updated Writer" }));
+    expect(await repo.setUserRole(member.id, "admin")).toEqual(expect.objectContaining({ role: "admin" }));
+    expect(await repo.setUserRole(admin.id, "member")).toEqual(expect.objectContaining({ role: "member" }));
+    await expect(repo.setUserActive(member.id, false)).rejects.toThrow("Cannot deactivate the final active administrator.");
   });
 
   it("binds and deletes OIDC identities through the owning user", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const admin = await repo.createInitialAdmin({ username: "awei", displayName: "Awei", password: "password-123" });
     const member = await repo.createUser({ username: "writer", displayName: "Writer", password: "password-456", role: "member" });
-    const identity = repo.bindOidcIdentity(admin.id, {
+    const identity = await repo.bindOidcIdentity(admin.id, {
       issuer: "https://issuer.example.com",
       subject: "oidc-subject-1",
       email: "awei@example.com",
       name: "Awei OIDC"
     });
 
-    expect(repo.findUserByOidcIdentity("https://issuer.example.com", "oidc-subject-1")).toEqual(expect.objectContaining({ id: admin.id }));
-    expect(repo.listUsersWithOidcIdentities()[0].oidcIdentities).toEqual([expect.objectContaining({ id: identity.id })]);
-    expect(() => repo.deleteOidcIdentityForUser(member.id, identity.id)).toThrow("OIDC identity was not found.");
+    expect(await repo.findUserByOidcIdentity("https://issuer.example.com", "oidc-subject-1")).toEqual(expect.objectContaining({ id: admin.id }));
+    expect((await repo.listUsersWithOidcIdentities())[0].oidcIdentities).toEqual([expect.objectContaining({ id: identity.id })]);
+    await expect(repo.deleteOidcIdentityForUser(member.id, identity.id)).rejects.toThrow("OIDC identity was not found.");
 
-    repo.deleteOidcIdentityForUser(admin.id, identity.id);
+    await repo.deleteOidcIdentityForUser(admin.id, identity.id);
 
-    expect(repo.findUserByOidcIdentity("https://issuer.example.com", "oidc-subject-1")).toBeNull();
+    expect(await repo.findUserByOidcIdentity("https://issuer.example.com", "oidc-subject-1")).toBeNull();
   });
 
   it("isolates root memory and latest sessions by user", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const first = await createTestUser(repo, "first");
     const second = await createTestUser(repo, "second");
-    const firstRoot = repo.saveRootMemory(first.id, {
+    const firstRoot = await repo.saveRootMemory(first.id, {
       seed: "first seed",
       domains: ["创作"],
       tones: ["平静"],
       styles: ["观点型"],
       personas: ["实践者"]
     });
-    const secondRoot = repo.saveRootMemory(second.id, {
+    const secondRoot = await repo.saveRootMemory(second.id, {
       seed: "second seed",
       domains: ["工作"],
       tones: ["真诚"],
@@ -233,19 +233,19 @@ describe("Tritree repository", () => {
       personas: ["观察者"]
     });
 
-    const firstState = repo.createSession({ userId: first.id, rootMemoryId: firstRoot.id, enabledSkillIds: [] });
-    const secondState = repo.createSession({ userId: second.id, rootMemoryId: secondRoot.id, enabledSkillIds: [] });
+    const firstState = await repo.createSession({ userId: first.id, rootMemoryId: firstRoot.id, enabledSkillIds: [] });
+    const secondState = await repo.createSession({ userId: second.id, rootMemoryId: secondRoot.id, enabledSkillIds: [] });
 
-    expect(repo.getRootMemory(first.id)?.preferences.seed).toBe("first seed");
-    expect(repo.getRootMemory(second.id)?.preferences.seed).toBe("second seed");
-    expect(repo.getLatestSessionState(first.id)?.session.id).toBe(firstState.session.id);
-    expect(repo.getLatestSessionState(second.id)?.session.id).toBe(secondState.session.id);
-    expect(repo.getSessionState(first.id, secondState.session.id)).toBeNull();
+    expect((await repo.getRootMemory(first.id))?.preferences.seed).toBe("first seed");
+    expect((await repo.getRootMemory(second.id))?.preferences.seed).toBe("second seed");
+    expect((await repo.getLatestSessionState(first.id))?.session.id).toBe(firstState.session.id);
+    expect((await repo.getLatestSessionState(second.id))?.session.id).toBe(secondState.session.id);
+    expect(await repo.getSessionState(first.id, secondState.session.id)).toBeNull();
   });
 
   it("creates a session with a plugin artifact when seed payload exists", async () => {
     const { repo, user } = await createRepositoryHarness();
-    const root = repo.saveRootMemory(user.id, {
+    const root = await repo.saveRootMemory(user.id, {
       artifactTypeId: "social-post",
       seed: "写一条关于 AI 协作的短内容",
       creationRequest: "",
@@ -255,10 +255,10 @@ describe("Tritree repository", () => {
       personas: ["Practitioner"]
     });
 
-    const state = repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
+    const state = await repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
 
     expect(state.session.title).toBe("写一条关于 AI 协作的短内容");
-    expect(repo.getSessionState(user.id, state.session.id)?.session.title).toBe("写一条关于 AI 协作的短内容");
+    expect((await repo.getSessionState(user.id, state.session.id))?.session.title).toBe("写一条关于 AI 协作的短内容");
     expect(state.currentArtifact?.type).toBe("social-post");
     expect(state.currentArtifact?.payload).toEqual({
       title: "种子念头",
@@ -276,7 +276,7 @@ describe("Tritree repository", () => {
     const { dbPath, repo, user } = await createRepositoryHarness();
     const longSeed = Array.from({ length: 100 }, (_, index) => `想法${index % 10}`).join("");
     const expectedTitle = Array.from(longSeed).slice(0, 80).join("");
-    const root = repo.saveRootMemory(user.id, {
+    const root = await repo.saveRootMemory(user.id, {
       artifactTypeId: "social-post",
       seed: longSeed,
       creationRequest: "",
@@ -286,7 +286,7 @@ describe("Tritree repository", () => {
       personas: ["Practitioner"]
     });
 
-    const state = repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
+    const state = await repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
     const sqlite = new DatabaseSync(dbPath);
     const row = sqlite.prepare("SELECT title FROM sessions WHERE id = ?").get(state.session.id) as { title: string };
     sqlite.close();
@@ -298,7 +298,7 @@ describe("Tritree repository", () => {
 
   it("creates a no-artifact seed session when the plugin has no seed payload", async () => {
     const { repo, user } = await createRepositoryHarness();
-    const root = repo.saveRootMemory(user.id, {
+    const root = await repo.saveRootMemory(user.id, {
       artifactTypeId: "social-post",
       seed: "",
       creationRequest: "",
@@ -308,7 +308,7 @@ describe("Tritree repository", () => {
       personas: ["Practitioner"]
     });
 
-    const state = repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
+    const state = await repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
 
     expect(state.currentArtifact).toBeNull();
     expect(state.artifacts).toEqual([]);
@@ -318,7 +318,7 @@ describe("Tritree repository", () => {
 
   it("persists the selected artifact type on the session", async () => {
     const { repo, user } = await createRepositoryHarness();
-    const root = repo.saveRootMemory(user.id, {
+    const root = await repo.saveRootMemory(user.id, {
       artifactTypeId: "prd",
       seed: "移动端作品管理",
       domains: ["Work"],
@@ -327,16 +327,16 @@ describe("Tritree repository", () => {
       personas: ["product manager"]
     });
 
-    const state = repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
+    const state = await repo.createSession({ userId: user.id, rootMemoryId: root.id, enabledSkillIds: [] });
 
     expect(state.session.artifactTypeId).toBe("prd");
     expect(state.currentArtifact?.type).toBe("prd");
-    expect(repo.getSessionState(user.id, state.session.id)?.session.artifactTypeId).toBe("prd");
+    expect((await repo.getSessionState(user.id, state.session.id))?.session.artifactTypeId).toBe("prd");
   });
 
   it("updates options and appends agent messages on the current node", async () => {
     const { repo, user, state } = await createArtifactSessionHarness();
-    const updated = repo.updateNodeOptions({
+    const updated = await repo.updateNodeOptions({
       userId: user.id,
       sessionId: state.session.id,
       nodeId: state.currentNode!.id,
@@ -354,7 +354,7 @@ describe("Tritree repository", () => {
   it("creates a child node with a plugin artifact", async () => {
     const { repo, user } = await createRepositoryHarness();
     const first = await createSessionWithOptions(repo, user.id);
-    const next = repo.createArtifactChild({
+    const next = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -381,7 +381,7 @@ describe("Tritree repository", () => {
   it("allows a workflow node to complete without producing an artifact", async () => {
     const { repo, user } = await createRepositoryHarness();
     const first = await createSessionWithOptions(repo, user.id);
-    const child = repo.createArtifactChild({
+    const child = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -398,7 +398,7 @@ describe("Tritree repository", () => {
   it("completeNode can finish a workflow node without producing an artifact", async () => {
     const { repo, user } = await createRepositoryHarness();
     const first = await createSessionWithOptions(repo, user.id);
-    const child = repo.createArtifactChild({
+    const child = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -407,7 +407,7 @@ describe("Tritree repository", () => {
       artifact: null
     });
 
-    const completed = repo.completeNode({
+    const completed = await repo.completeNode({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: child.currentNode!.id,
@@ -425,7 +425,7 @@ describe("Tritree repository", () => {
   it("completeNode clears the current artifact when completing an artifact node without one", async () => {
     const { repo, user } = await createRepositoryHarness();
     const first = await createSessionWithOptions(repo, user.id);
-    const child = repo.createArtifactChild({
+    const child = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -438,7 +438,7 @@ describe("Tritree repository", () => {
       }
     });
 
-    const completed = repo.completeNode({
+    const completed = await repo.completeNode({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: child.currentNode!.id,
@@ -456,7 +456,7 @@ describe("Tritree repository", () => {
   it("summaries ignore stale current-node artifact rows after updateNodeArtifact clears the link", async () => {
     const { repo, user } = await createRepositoryHarness();
     const first = await createSessionWithOptions(repo, user.id);
-    const child = repo.createArtifactChild({
+    const child = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -469,7 +469,7 @@ describe("Tritree repository", () => {
       }
     });
 
-    repo.updateNodeArtifact({
+    await repo.updateNodeArtifact({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: child.currentNode!.id,
@@ -477,7 +477,7 @@ describe("Tritree repository", () => {
       artifact: null
     });
 
-    const [summary] = repo.listSessionSummaries(user.id);
+    const [summary] = await repo.listSessionSummaries(user.id);
 
     expect(summary.currentNodeId).toBe(child.currentNode!.id);
     expect(summary.artifactExcerpt).toBe("种子念头");
@@ -487,7 +487,7 @@ describe("Tritree repository", () => {
   it("summaries ignore stale current-node artifact rows after completeNode clears the link", async () => {
     const { repo, user } = await createRepositoryHarness();
     const first = await createSessionWithOptions(repo, user.id);
-    const child = repo.createArtifactChild({
+    const child = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -500,7 +500,7 @@ describe("Tritree repository", () => {
       }
     });
 
-    repo.completeNode({
+    await repo.completeNode({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: child.currentNode!.id,
@@ -508,7 +508,7 @@ describe("Tritree repository", () => {
       artifact: null
     });
 
-    const [summary] = repo.listSessionSummaries(user.id);
+    const [summary] = await repo.listSessionSummaries(user.id);
 
     expect(summary.currentNodeId).toBe(child.currentNode!.id);
     expect(summary.artifactExcerpt).toBe("种子念头");
@@ -518,7 +518,7 @@ describe("Tritree repository", () => {
   it("completeNode can finish a workflow node while storing an artifact", async () => {
     const { repo, user } = await createRepositoryHarness();
     const first = await createSessionWithOptions(repo, user.id);
-    const child = repo.createArtifactChild({
+    const child = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -527,7 +527,7 @@ describe("Tritree repository", () => {
       artifact: null
     });
 
-    const completed = repo.completeNode({
+    const completed = await repo.completeNode({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: child.currentNode!.id,
@@ -551,7 +551,7 @@ describe("Tritree repository", () => {
   it("updates an existing node with an artifact or analysis-only result", async () => {
     const { repo, user } = await createRepositoryHarness();
     const first = await createSessionWithOptions(repo, user.id);
-    const child = repo.createArtifactChild({
+    const child = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -560,14 +560,14 @@ describe("Tritree repository", () => {
       artifact: null
     });
 
-    const withArtifact = repo.updateNodeArtifact({
+    const withArtifact = await repo.updateNodeArtifact({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: child.currentNode!.id,
       roundIntent: "写出版本",
       artifact: { type: "social-post", payload: socialPostPayload("写出版本"), sourceArtifactIds: [first.currentArtifact!.id] }
     });
-    const withoutArtifact = repo.updateNodeArtifact({
+    const withoutArtifact = await repo.updateNodeArtifact({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: child.currentNode!.id,
@@ -586,16 +586,16 @@ describe("Tritree repository", () => {
   });
 
   it("lists, renames, and archives artifact sessions by user", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
     const otherUser = await createTestUser(repo, "other-writer");
     const older = await createSessionWithOptions(repo, user.id);
     const latest = await createSessionWithOptions(repo, user.id);
     await createSessionWithOptions(repo, otherUser.id);
 
-    expect(repo.renameSession(otherUser.id, older.session.id, "Not mine")).toBeNull();
+    expect(await repo.renameSession(otherUser.id, older.session.id, "Not mine")).toBeNull();
 
-    const renamed = repo.renameSession(user.id, older.session.id, "Renamed artifact");
+    const renamed = await repo.renameSession(user.id, older.session.id, "Renamed artifact");
     expect(renamed).toEqual(
       expect.objectContaining({
         id: older.session.id,
@@ -607,33 +607,33 @@ describe("Tritree repository", () => {
       })
     );
 
-    expect(repo.archiveSession(otherUser.id, latest.session.id)).toBeNull();
-    const archived = repo.archiveSession(user.id, latest.session.id);
+    expect(await repo.archiveSession(otherUser.id, latest.session.id)).toBeNull();
+    const archived = await repo.archiveSession(user.id, latest.session.id);
     expect(archived).toEqual(expect.objectContaining({ id: latest.session.id, isArchived: true }));
-    expect(repo.listSessionSummaries(user.id, { archived: false }).map((summary) => summary.id)).toEqual([older.session.id]);
-    expect(repo.listSessionSummaries(user.id, { archived: true }).map((summary) => summary.id)).toEqual([latest.session.id]);
-    expect(repo.getSessionState(user.id, latest.session.id)).toBeNull();
+    expect((await repo.listSessionSummaries(user.id, { archived: false })).map((summary) => summary.id)).toEqual([older.session.id]);
+    expect((await repo.listSessionSummaries(user.id, { archived: true })).map((summary) => summary.id)).toEqual([latest.session.id]);
+    expect(await repo.getSessionState(user.id, latest.session.id)).toBeNull();
   });
 
   it("preserves finished status in artifact summaries", async () => {
     const dbPath = testDbPath();
-    const repo = createTritreeRepository(dbPath);
+    const repo = await createTritreeRepository(dbPath);
     const user = await createTestUser(repo, "writer");
     const state = await createSessionWithOptions(repo, user.id);
     const sqlite = new DatabaseSync(dbPath);
     sqlite.prepare("UPDATE sessions SET status = 'finished' WHERE id = ?").run(state.session.id);
     sqlite.close();
 
-    expect(repo.listSessionSummaries(user.id)[0].status).toBe("finished");
-    expect(repo.getSessionState(user.id, state.session.id)?.session.status).toBe("active");
+    expect((await repo.listSessionSummaries(user.id))[0].status).toBe("finished");
+    expect((await repo.getSessionState(user.id, state.session.id))?.session.status).toBe("active");
   });
 
   it("rejects archived artifact mutations without changing persisted rows", async () => {
     const dbPath = testDbPath();
-    const repo = createTritreeRepository(dbPath);
+    const repo = await createTritreeRepository(dbPath);
     const user = await createTestUser(repo, "writer");
     const state = await createSessionWithOptions(repo, user.id, []);
-    repo.archiveSession(user.id, state.session.id);
+    await repo.archiveSession(user.id, state.session.id);
 
     const snapshot = () => {
       const sqlite = new DatabaseSync(dbPath);
@@ -645,8 +645,8 @@ describe("Tritree repository", () => {
     };
 
     const before = snapshot();
-    expect(() => repo.replaceSessionEnabledSkills(user.id, state.session.id, ["system-writer"])).toThrow("Session was not found.");
-    expect(() =>
+    await expect(repo.replaceSessionEnabledSkills(user.id, state.session.id, ["system-writer"])).rejects.toThrow("Session was not found.");
+    await expect(
       repo.createArtifactChild({
         userId: user.id,
         sessionId: state.session.id,
@@ -654,8 +654,8 @@ describe("Tritree repository", () => {
         selectedOptionId: "a",
         artifact: null
       })
-    ).toThrow("Session was not found.");
-    expect(() =>
+    ).rejects.toThrow("Session was not found.");
+    await expect(
       repo.updateNodeArtifact({
         userId: user.id,
         sessionId: state.session.id,
@@ -663,8 +663,8 @@ describe("Tritree repository", () => {
         roundIntent: "Archived update",
         artifact: null
       })
-    ).toThrow("Session was not found.");
-    expect(() =>
+    ).rejects.toThrow("Session was not found.");
+    await expect(
       repo.completeNode({
         userId: user.id,
         sessionId: state.session.id,
@@ -672,23 +672,23 @@ describe("Tritree repository", () => {
         output: { roundIntent: "Archived complete" },
         artifact: null
       })
-    ).toThrow("Session was not found.");
+    ).rejects.toThrow("Session was not found.");
 
     expect(snapshot()).toEqual(before);
   });
 
   it("activates an existing historical artifact branch without creating another child", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
     const first = await createSessionWithOptions(repo, user.id);
-    const oldRoute = repo.createArtifactChild({
+    const oldRoute = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "b",
       artifact: { type: "social-post", payload: socialPostPayload("旧路线") }
     });
-    repo.createArtifactChild({
+    await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -696,7 +696,7 @@ describe("Tritree repository", () => {
       artifact: { type: "social-post", payload: socialPostPayload("新路线") }
     });
 
-    const switched = repo.activateHistoricalBranch({
+    const switched = await repo.activateHistoricalBranch({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -709,24 +709,24 @@ describe("Tritree repository", () => {
   });
 
   it("reactivating an analysis branch does not title the session from stale artifact rows", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
     const first = await createSessionWithOptions(repo, user.id);
-    const oldRoute = repo.createArtifactChild({
+    const oldRoute = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
       selectedOptionId: "b",
       artifact: { type: "social-post", payload: socialPostPayload("旧路线") }
     });
-    repo.updateNodeArtifact({
+    await repo.updateNodeArtifact({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: oldRoute.currentNode!.id,
       roundIntent: "旧路线仅保留分析",
       artifact: null
     });
-    const newRoute = repo.createArtifactChild({
+    const newRoute = await repo.createArtifactChild({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -734,7 +734,7 @@ describe("Tritree repository", () => {
       artifact: { type: "social-post", payload: socialPostPayload("新路线") }
     });
 
-    const switched = repo.activateHistoricalBranch({
+    const switched = await repo.activateHistoricalBranch({
       userId: user.id,
       sessionId: first.session.id,
       nodeId: first.currentNode!.id,
@@ -750,7 +750,7 @@ describe("Tritree repository", () => {
   });
 
   it("creates sessions with default enabled skills and replaces them", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
     const state = await createSessionWithOptions(repo, user.id);
 
@@ -764,18 +764,18 @@ describe("Tritree repository", () => {
       expect(state.enabledSkills.find((skill) => skill.id === skillId)?.parentSkillId).toBe("system-creator");
     }
 
-    const updated = repo.replaceSessionEnabledSkills(user.id, state.session.id, ["system-writer"]);
+    const updated = await repo.replaceSessionEnabledSkills(user.id, state.session.id, ["system-writer"]);
 
     expect(updated?.enabledSkillIds).toEqual(["system-writer"]);
     expect(updated?.enabledSkills.map((skill) => skill.title)).toEqual(["写手"]);
   });
 
   it("isolates custom skills while keeping system skills global", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const first = await createTestUser(repo, "first");
     const second = await createTestUser(repo, "second");
 
-    const custom = repo.createSkill(first.id, {
+    const custom = await repo.createSkill(first.id, {
       title: "第一用户技能",
       category: "风格",
       description: "只属于第一个用户。",
@@ -783,10 +783,10 @@ describe("Tritree repository", () => {
       appliesTo: "writer"
     });
 
-    expect(repo.listSkills(first.id).map((skill) => skill.id)).toContain(custom.id);
-    expect(repo.listSkills(second.id).map((skill) => skill.id)).not.toContain(custom.id);
-    expect(repo.resolveSkillsByIds([custom.id], second.id)).toEqual([]);
-    expect(repo.listSkills(second.id).filter((skill) => skill.isSystem).map((skill) => skill.id)).toEqual(
+    expect((await repo.listSkills(first.id)).map((skill) => skill.id)).toContain(custom.id);
+    expect((await repo.listSkills(second.id)).map((skill) => skill.id)).not.toContain(custom.id);
+    expect(await repo.resolveSkillsByIds([custom.id], second.id)).toEqual([]);
+    expect((await repo.listSkills(second.id)).filter((skill) => skill.isSystem).map((skill) => skill.id)).toEqual(
       defaultSystemSkillIds
     );
   });
@@ -794,10 +794,10 @@ describe("Tritree repository", () => {
   it("updates configured system skills when the config file changes", async () => {
     const dbPath = testDbPath();
     const configPath = writeDefaultsConfig({ systemSkills: repositorySystemSkills });
-    const first = createTritreeRepository(dbPath, { defaultsConfigPath: configPath });
+    const first = await createTritreeRepository(dbPath, { defaultsConfigPath: configPath });
     const user = await createTestUser(first, "writer");
 
-    expect(first.listSkills(user.id).find((skill) => skill.id === "system-writer")?.prompt).toContain("seed");
+    expect((await first.listSkills(user.id)).find((skill) => skill.id === "system-writer")?.prompt).toContain("seed");
 
     writeFileSync(
       configPath,
@@ -815,11 +815,11 @@ describe("Tritree repository", () => {
       )
     );
 
-    const reopened = createTritreeRepository(dbPath, { defaultsConfigPath: configPath });
-    const updated = reopened.listSkills(user.id).find((skill) => skill.id === "system-writer");
+    const reopened = await createTritreeRepository(dbPath, { defaultsConfigPath: configPath });
+    const updated = (await reopened.listSkills(user.id)).find((skill) => skill.id === "system-writer");
 
     expect(updated).toEqual(expect.objectContaining({ title: "配置写作者", prompt: "配置文件里的新版写作者提示词。" }));
-    expect(reopened.defaultEnabledSkillIds()).toEqual(["system-reviewer"]);
+    expect(await reopened.defaultEnabledSkillIds()).toEqual(["system-reviewer"]);
   });
 
   it("discovers installed skills directly from the skill folder", async () => {
@@ -829,34 +829,34 @@ describe("Tritree repository", () => {
     mkdirSync(path.join(skillDir, "skills", "research"), { recursive: true });
     writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: local-travel\ndescription: 本地主题写作 Skill。\n---\n\n# Local Travel");
     writeFileSync(path.join(skillDir, "skills", "research", "SKILL.md"), "---\nname: research\ndescription: 查询目的地参考资料。\n---\n\n# Research");
-    const repo = createTritreeRepository(testDbPath(), { skillInstallRoot: installRoot });
+    const repo = await createTritreeRepository(testDbPath(), { skillInstallRoot: installRoot });
     const user = await createTestUser(repo, "writer");
 
-    const discovered = repo.listSkills(user.id).find((skill) => skill.id === "local-travel");
+    const discovered = (await repo.listSkills(user.id)).find((skill) => skill.id === "local-travel");
     expect(discovered).toMatchObject({ description: "本地主题写作 Skill。", isSystem: false, title: "local-travel" });
     expect(discovered?.prompt).toContain("skills/research/SKILL.md");
     expect(discovered?.prompt).not.toContain(installRoot);
-    expect(repo.resolveSkillsByIds(["local-travel"], user.id).map((skill) => skill.id)).toEqual(["local-travel"]);
+    expect((await repo.resolveSkillsByIds(["local-travel"], user.id)).map((skill) => skill.id)).toEqual(["local-travel"]);
   });
 
   it("copies and manages creation request options per user", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const first = await createTestUser(repo, "first");
     const second = await createTestUser(repo, "second");
 
-    const firstOptions = repo.listCreationRequestOptions(first.id);
-    const secondOptions = repo.listCreationRequestOptions(second.id);
+    const firstOptions = await repo.listCreationRequestOptions(first.id);
+    const secondOptions = await repo.listCreationRequestOptions(second.id);
 
     expect(firstOptions.map((option) => option.label)).toEqual(secondOptions.map((option) => option.label));
     expect(firstOptions[0].id).not.toBe(secondOptions[0].id);
 
-    repo.updateCreationRequestOption(first.id, firstOptions[0].id, { label: "第一用户改过" });
-    repo.deleteCreationRequestOption(first.id, firstOptions[1].id);
-    repo.createCreationRequestOption(first.id, { label: "用户新增项" });
+    await repo.updateCreationRequestOption(first.id, firstOptions[0].id, { label: "第一用户改过" });
+    await repo.deleteCreationRequestOption(first.id, firstOptions[1].id);
+    await repo.createCreationRequestOption(first.id, { label: "用户新增项" });
 
-    expect(repo.listCreationRequestOptions(first.id).map((option) => option.label)).toContain("第一用户改过");
-    expect(repo.listCreationRequestOptions(second.id).map((option) => option.label)).not.toContain("第一用户改过");
-    expect(repo.resetCreationRequestOptions(first.id).map((option) => option.label)).toEqual(repositoryCreationRequestOptions.map((option) => option.label));
+    expect((await repo.listCreationRequestOptions(first.id)).map((option) => option.label)).toContain("第一用户改过");
+    expect((await repo.listCreationRequestOptions(second.id)).map((option) => option.label)).not.toContain("第一用户改过");
+    expect((await repo.resetCreationRequestOptions(first.id)).map((option) => option.label)).toEqual(repositoryCreationRequestOptions.map((option) => option.label));
   });
 
   it("adds required columns to legacy user tables while resetting content tables", async () => {
@@ -894,7 +894,7 @@ describe("Tritree repository", () => {
     `);
     sqlite.close();
 
-    createTritreeRepository(dbPath);
+    await createTritreeRepository(dbPath);
     const migrated = new DatabaseSync(dbPath);
     const sessionColumns = migrated.prepare("PRAGMA table_info(sessions);").all() as Array<{ name: string }>;
     const rootColumns = migrated.prepare("PRAGMA table_info(root_memory);").all() as Array<{ name: string }>;
@@ -908,30 +908,36 @@ describe("Tritree repository", () => {
   });
 
   it("rejects sessions for missing root memory", async () => {
-    const repo = createTritreeRepository(testDbPath());
+    const repo = await createTritreeRepository(testDbPath());
     const user = await createTestUser(repo, "writer");
 
-    expect(() => repo.createSession({ userId: user.id, rootMemoryId: "missing-root", enabledSkillIds: [] })).toThrow(
+    await expect(repo.createSession({ userId: user.id, rootMemoryId: "missing-root", enabledSkillIds: [] })).rejects.toThrow(
       "Root memory was not found."
     );
   });
 
-  it("rejects configured system skill ids that collide with non-system skills", () => {
+  it("rejects configured system skill ids that collide with non-system skills", async () => {
     const dbPath = testDbPath();
-    const sqlite = createDatabase(dbPath);
-    sqlite
-      .prepare(
-        `
-          INSERT INTO skills (id, user_id, title, category, description, prompt, applies_to, is_system, default_enabled, is_archived, created_at, updated_at)
-          VALUES (?, NULL, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?)
-        `
-      )
-      .run("system-writer", "Imported writer", "风格", "Imported non-system skill.", "Do not promote me.", "writer", "2026-05-01T00:00:00.000Z", "2026-05-01T00:00:00.000Z");
-    sqlite.close();
+    const sqlite = await createDatabase({ provider: "sqlite", path: dbPath });
+    await sqlite.execute(
+      `
+        INSERT INTO skills (id, user_id, title, category, description, prompt, applies_to, is_system, default_enabled, is_archived, created_at, updated_at)
+        VALUES (?, NULL, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?)
+      `,
+      "system-writer",
+      "Imported writer",
+      "风格",
+      "Imported non-system skill.",
+      "Do not promote me.",
+      "writer",
+      "2026-05-01T00:00:00.000Z",
+      "2026-05-01T00:00:00.000Z"
+    );
+    await sqlite.close();
 
     const configPath = writeDefaultsConfig({ systemSkills: repositorySystemSkills });
 
-    expect(() => createTritreeRepository(dbPath, { defaultsConfigPath: configPath })).toThrow(
+    await expect(createTritreeRepository(dbPath, { defaultsConfigPath: configPath })).rejects.toThrow(
       "System skill config id system-writer conflicts with an existing non-system skill."
     );
   });

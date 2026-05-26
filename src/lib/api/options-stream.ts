@@ -4,7 +4,7 @@ import { summarizeCurrentArtifactOptionsForDirector } from "@/lib/app-state";
 import type { getRepository } from "@/lib/db/repository";
 import type { OptionGenerationMode, SessionState } from "@/lib/domain";
 
-type OptionsRepository = Pick<ReturnType<typeof getRepository>, "updateNodeOptions">;
+type OptionsRepository = Pick<Awaited<ReturnType<typeof getRepository>>, "updateNodeOptions">;
 
 export async function streamOptionsForNode({
   logTarget,
@@ -62,7 +62,7 @@ export async function streamOptionsForNode({
     optionLabels: output.options.map((option) => option.label)
   });
 
-  const nextState = repository.updateNodeOptions({
+  const nextState = await repository.updateNodeOptions({
     userId,
     sessionId,
     nodeId,

@@ -33,7 +33,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ userI
   try {
     await requireAdminUser();
     const body = UpdateAdminUserBodySchema.parse(await request.json());
-    const user = getRepository().updateUser(userId, body);
+    const repository = await getRepository();
+    const user = await repository.updateUser(userId, body);
     return NextResponse.json({ user: publicUser(user) });
   } catch (error) {
     const response = authErrorResponse(error);

@@ -44,8 +44,8 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     return NextResponse.json({ error: "请求内容格式不正确。" }, { status: 400 });
   }
 
-  const repository = getRepository();
-  const state = repository.getSessionState(user.id, sessionId);
+  const repository = await getRepository();
+  const state = await repository.getSessionState(user.id, sessionId);
 
   if (!state) {
     return NextResponse.json({ error: "没有找到这次创作。" }, { status: 404 });
